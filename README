@@ -1,0 +1,30 @@
+# L2G
+
+## Introduction
+
+L2G modules is a suit for running FLT (FieldLine Tracing). It is an application
+that gives functionality to prepare FLT cases, run it and post-process it. For
+it's kernel it uses the L2G_cpp C++ library, wrapped with Cython. L2G_cpp is a
+C++ library that follows magnetic fieldlines in a tokamak. The library solves
+the FL equation in a cylindrical coordinate system and for FLT it uses the
+Embree3 RT kernel to test if FL intersect any loaded shadowing geometry.
+
+## Installation
+
+The module has been tested and built on MS Windows 10, using Visual Studio 2019
+and on linux (CentOS, Debian) using GCC (8.3.0). Before building the module,
+you require the dependency L2G_cpp and Embree3 installed.
+
+To invoke the build command on Linux:
+
+```shell
+EMBREE_ROOT_DIR=/path/to/embree L2G_CPP_ROOT_DIR=/path/to/L2G_cpp \
+python setup.py build
+```
+In order to build on Windows:
+
+```shell
+set EMBREE_ROOT_DIR=c:\path\to\embree
+set L2G_CPP_ROOT_DIR=c:\path\to\L2G_cpp
+python setup.py build
+```
