@@ -1,0 +1,246 @@
+#!/usr/bin/env python3
+print("Starting up...")
+import time
+class MeasureTime(object):
+    def __init__(self, msg: str = ''):
+        self.msg = msg
+        self.t = None
+
+    def __enter__(self):
+        print()
+        print(self.msg)
+        self.t = time.perf_counter()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.t = time.perf_counter() - self.t
+        if exc_value:
+            return False
+        print(f"\tDone in {self.t:.2f} seconds.")
+        print()
+
+import argparse
+
+parser = argparse.ArgumentParser(description='Create EQDSK from IDS time slice')
+
+parser.add_argument('-i', '--input', type=str,
+                    required=True, metavar="Input Json file")
+parser.add_argument('-v', '--verbose', metavar="Verbosity",
+                    default=0, type=int)
+
+args = parser.parse_args()
+
+import os
+import sys
+json_input = args.input
+if not os.access(json_input, mode=os.R_OK):
+    print(f"Could not read: '{json_input}'!")
+    sys.exit(-1)
+
+import L2G
+import L2G.geom_utils
+import medcoupling as mc
+import MEDLoader as ml
+from L2G.core import PyEmbreeAccell
+if args.verbose:
+    L2G.enableLogging()
+import json
+import glob
+import numpy as np
+
+# Load json file
+inp = {}
+try:
+    # Comments with // are not allowed in a json file, so first we filter
+    # those out and remove empty lines.
+    text = open(json_input, 'r').read().splitlines()
+    no_comments_text = []
+    for line in text:
+        if line.lstrip().startswith('//'):
+            continue
+        if line.strip() == "":
+            continue
+        comment_index = line.find('//')
+        if comment_index == -1:
+            no_comments_text.append(line)
+        else:
+            no_comments_text.append(line[:comment_index])
+    # print('\n'.join(no_comments_text))
+    inp = json.loads('\n'.join(no_comments_text))
+except Exception as e:
+    print("Failed to read JSON file:")
+    print(e)
+
+# Create L2G case
+case = L2G.FieldLineTracer()
+case.name = inp["name"]
+
+with MeasureTime("Loading shadowed mesh.") as t:
+    # Load the target mesh
+    if not os.access(inp["target_mesh"], os.R_OK):
+        print(f"Failed to read target mesh {inp['target_mesh']}!")
+        print("Check the validity of the path.")
+        sys.exit(-1)
+    print(f"\tLoading {inp['target_mesh']}")
+    v, t = L2G.geom_utils.readMesh(inp["target_mesh"])
+    case.setTargetData(v, t)
+
+with MeasureTime("Loading shadowing meshes.") as t:
+    # Create Embree
+    embree = PyEmbreeAccell()
+
+    # Use glob if it is necessary
+    shadowMeshFiles = []
+
+    # Gather the file names
+    for fileName in inp["shadow_meshes"]:
+        if '*' in fileName:
+            shadowMeshFiles += glob.glob(fileName)
+        else:
+            shadowMeshFiles.append(fileName)
+
+    # Now load it
+    c = 0
+    N = len(shadowMeshFiles)
+    for fileName in shadowMeshFiles:
+        sys.stdout.write(f"\r\tLoading {N} meshes: {c / N:.2f}%!")
+        v, t = L2G.geom_utils.readMesh(fileName)
+        c+=100
+        sys.stdout.write(f"\r\tLoading {N} meshes: {c / N:.2f}%!")
+        embree.commitMesh(v * 1e-3, t)
+    case.setEmbreeObj(embree)
+
+with MeasureTime("Setting parameters and options") as t:
+    case.name = inp['name']
+
+    # Set the parameters
+    for parameter in inp['parameters']:
+        if not hasattr(case.parameters, parameter):
+            print(f"Illegal parameter: {parameter}. Ignored")
+        else:
+            setattr(case.parameters, parameter, inp['parameters'][parameter])
+
+    # Set the options
+    for option in inp['options']:
+        if not hasattr(case.options, option):
+            print(f"Illegal option: {option}. Ignored")
+        else:
+            setattr(case.options, option, inp['options'][option])
+
+# Figure out what kind of equilibriums do we have
+if inp['eq_type'] == "imas":
+
+    import L2G.imas_utils
+
+    shot = inp['imas']['shot']
+    run = inp['imas']['run']
+
+    if 'user' not in inp['imas']:
+        user = 'public'
+    else:
+        user = inp['imas']['user']
+
+    if 'device' not in inp['imas']:
+        device = 'iter'
+    else:
+        device = inp['imas']['device']
+
+    if 'version' not in inp['imas']:
+        version = '3'
+    else:
+        version = inp['imas']['version']
+
+    if "times" in inp['imas']:
+        time_slices = inp['imas']['times']
+    else:
+        # Construct the time_slices
+        n_steps = int((inp['imas']['time_end'] - inp['imas']['time_start']) / inp['imas']['time_step'])
+        time_slices = np.linspace(inp['imas']['time_start'],
+                                  inp['imas']['time_end'],
+                                  n_steps)
+else:
+    # In case of EQDSK we might have globs!
+    eqdsk_files = []
+    for file in inp['eqdsk_files']:
+        eqdsk_files += glob.glob(file)
+
+    eqdsk_files.sort()
+
+
+resultMesh = mc.ReadMeshFromFile(inp["target_mesh"])
+resultFileName = os.path.join(os.path.dirname(os.path.abspath(args.input)),
+                case.name + '.med')
+
+if os.path.exists(resultFileName):
+    print("Warning result file already exists! Overwriting in 10 seconds!")
+    time.sleep(10)
+
+ml.WriteMesh(resultFileName, resultMesh, True)
+
+# Get the number of cases to run
+if inp['eq_type'] == "imas":
+    N = len(time_slices)
+elif inp['eq_type'] == "eqdsk":
+    N = len(eqdsk_files)
+
+def numpyArrayToField(arr, fieldName, mesh, associatedTime, iteration):
+    mcArray = ml.DataArrayDouble(np.asarray(arr, dtype=np.float))
+
+    field = ml.MEDCouplingFieldDouble.New(ml.ON_CELLS, ml.ONE_TIME)
+    field.setMesh(mesh)
+    field.setTime(associatedTime, iteration, -1)
+    field.setTimeUnit("s")
+    field.setName(fieldName)
+    field.setArray(mcArray)
+    return field
+
+def writeFieldToAlreadyExistingMesh(field, meshName):
+    fMEDFile=ml.MEDFileField1TS.New()
+    fMEDFile.setFieldNoProfileSBT(field)
+    fMEDFile.write(meshName,0)
+    # ml.WriteFieldUsingAlreadyWrittenMesh(meshName, field)
+
+# Now doing the main thing
+_c = 0 # In case of EQDSK, the associated time
+for i in range(N):
+    with MeasureTime(f'Running case {i+1} out of {N}.') as f:
+        # Get EQDSKIO
+        if inp['eq_type'] == 'imas':
+            # Get IMAS data
+            case.eqdskio = L2G.imas_utils.imas2eqdsk(shot, run, time_slices[i],
+                user, device, version)
+            case.eq.setEqdsk(case.eqdskio)
+            associated_time = time_slices[i]
+        else:
+            # Read the EQDSK file
+            case.loadEqdsk(eqdsk_files[i])
+            associated_time = _c
+            _c += 1
+
+        case.applyParameters()
+        case.loadEq()
+
+        case.processDataOnMesh()
+        case.runFltOnMesh()
+
+
+        # Write fields to mesh result
+        for key in case.mesh_results.__dict__:
+            array = case.mesh_results.__dict__[key]
+            if array is None:
+                continue
+
+
+            if key == "angle":
+                # Transform the angle
+                array = np.rad2deg(array)
+                array = np.where(array > 90.0, array - 90.0, 90.0 - array)
+
+            if key in ["drsep", "conlen"]:
+                # Scale to mm from m
+                array *= 1000
+
+            field = numpyArrayToField(array, key, resultMesh,
+                associatedTime=associated_time, iteration=i)
+
+            writeFieldToAlreadyExistingMesh(field, resultFileName)
