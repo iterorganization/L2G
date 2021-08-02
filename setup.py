@@ -122,7 +122,7 @@ cython_module = cythonize(cython_ext_module, annotate=True)
 
 setup(
     name="L2G",
-    version="dev",
+    version="1.0.0",
     description="Python module for running FLT",
     long_description=getLongDescription(),
     long_description_content_type="text/markdown",
@@ -137,5 +137,6 @@ setup(
     ],
     packages = ["L2G"],
     data_files = [('', getDataFiles())],
-    python_requires=">=3.6"
+    python_requires=">=3.6",
+    scripts = ['bin/runL2G']
 )
