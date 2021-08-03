@@ -75,6 +75,25 @@ except Exception as e:
 case = L2G.FieldLineTracer()
 case.name = inp["name"]
 
+flip_psirz = False
+with MeasureTime("Setting parameters and options") as t:
+    if "eq_flip_psi" in inp:
+        flip_psirz = inp["eq_flip_psi"]
+    case.name = inp['name']
+    # Set the parameters
+    for parameter in inp['parameters']:
+        if not hasattr(case.parameters, parameter):
+            print(f"Illegal parameter: {parameter}. Ignored")
+        else:
+            setattr(case.parameters, parameter, inp['parameters'][parameter])
+
+    # Set the options
+    for option in inp['options']:
+        if not hasattr(case.options, option):
+            print(f"Illegal option: {option}. Ignored")
+        else:
+            setattr(case.options, option, inp['options'][option])
+
 with MeasureTime("Loading shadowed mesh.") as t:
     # Load the target mesh
     if not os.access(inp["target_mesh"], os.R_OK):
@@ -82,8 +101,8 @@ with MeasureTime("Loading shadowed mesh.") as t:
         print("Check the validity of the path.")
         sys.exit(-1)
     print(f"\tLoading {inp['target_mesh']}")
-    v, t = L2G.geom_utils.readMesh(inp["target_mesh"])
-    case.setTargetData(v, t)
+    verticesTarget, trianglesTarget = L2G.geom_utils.readMesh(inp["target_mesh"])
+    case.setTargetData(verticesTarget, trianglesTarget)
 
 with MeasureTime("Loading shadowing meshes.") as t:
     # Create Embree
@@ -99,33 +118,37 @@ with MeasureTime("Loading shadowing meshes.") as t:
         else:
             shadowMeshFiles.append(fileName)
 
+    # Exclude any meshes if exclude_meshes is inside
+    if "exclude_meshes" in inp:
+        mesh_to_remove = []
+        # Since files are actual paths it is the easiest to just loop the list
+        # and accumulate which meshes to remove
+        for filePath in shadowMeshFiles:
+            fileName = os.path.basename(filePath)
+            if fileName in inp["exclude_meshes"]:
+                mesh_to_remove.append(filePath)
+        #
+        for m in mesh_to_remove:
+            shadowMeshFiles.remove(m)
+
     # Now load it
     c = 0
     N = len(shadowMeshFiles)
+    if "include_target_in_shadow" in inp:
+        if inp["include_target_in_shadow"]:
+            print("\tLoading target mesh also to Embree")
+            # v, t comes from before block. Do not delete it!!!
+            embree.commitMesh(verticesTarget * case.parameters.target_dim_mul,
+                              trianglesTarget)
+
     for fileName in shadowMeshFiles:
         sys.stdout.write(f"\r\tLoading {N} meshes: {c / N:.2f}%!")
         v, t = L2G.geom_utils.readMesh(fileName)
         c+=100
         sys.stdout.write(f"\r\tLoading {N} meshes: {c / N:.2f}%!")
         embree.commitMesh(v * 1e-3, t)
+    print()
     case.setEmbreeObj(embree)
-
-with MeasureTime("Setting parameters and options") as t:
-    case.name = inp['name']
-
-    # Set the parameters
-    for parameter in inp['parameters']:
-        if not hasattr(case.parameters, parameter):
-            print(f"Illegal parameter: {parameter}. Ignored")
-        else:
-            setattr(case.parameters, parameter, inp['parameters'][parameter])
-
-    # Set the options
-    for option in inp['options']:
-        if not hasattr(case.options, option):
-            print(f"Illegal option: {option}. Ignored")
-        else:
-            setattr(case.options, option, inp['options'][option])
 
 # Figure out what kind of equilibriums do we have
 if inp['eq_type'] == "imas":
@@ -172,8 +195,8 @@ resultFileName = os.path.join(os.path.dirname(os.path.abspath(args.input)),
                 case.name + '.med')
 
 if os.path.exists(resultFileName):
-    print("Warning result file already exists! Overwriting in 10 seconds!")
-    time.sleep(10)
+    print("Warning result file already exists! Overwriting!")
+    # time.sleep(10)
 
 ml.WriteMesh(resultFileName, resultMesh, True)
 
@@ -209,11 +232,21 @@ for i in range(N):
             # Get IMAS data
             case.eqdskio = L2G.imas_utils.imas2eqdsk(shot, run, time_slices[i],
                 user, device, version)
+
+            if flip_psirz:
+                psirz = np.asarray(case.eqdskio.getPSIRZ())
+                psirz *= -1
+                case.eqdskio.setPSIRZ(psirz)
             case.eq.setEqdsk(case.eqdskio)
             associated_time = time_slices[i]
         else:
             # Read the EQDSK file
             case.loadEqdsk(eqdsk_files[i])
+            if flip_psirz:
+                psirz = np.asarray(case.eqdskio.getPSIRZ())
+                psirz *= -1
+                case.eqdskio.setPSIRZ(psirz)
+                case.eq.setEqdsk(case.eqdskio)
             associated_time = _c
             _c += 1
 
@@ -222,6 +255,11 @@ for i in range(N):
 
         case.processDataOnMesh()
         case.runFltOnMesh()
+
+        # Run on these IDs
+        case.fl_ids = [865695, 875996, 878071, 887040, 887382, 1877831, 1895186, 1908506, 1942617, 1945828, 1946555,]
+        case.getFL()
+        case.saveFlToVTK('fls.vtk')
 
 
         # Write fields to mesh result
