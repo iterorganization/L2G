@@ -138,5 +138,5 @@ setup(
     packages = ["L2G"],
     data_files = [('', getDataFiles())],
     python_requires=">=3.6",
-    scripts = ['bin/runL2G']
+    scripts = ['bin/runL2G', 'bin/submitL2G', 'bin/L2G.sbatch']
 )

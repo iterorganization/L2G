@@ -1,13 +1,14 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3 -u
 print("Starting up...")
 import time
+
 class MeasureTime(object):
     def __init__(self, msg: str = ''):
         self.msg = msg
         self.t = None
 
     def __enter__(self):
-        print()
+        print('')
         print(self.msg)
         self.t = time.perf_counter()
         return self
@@ -17,20 +18,36 @@ class MeasureTime(object):
         if exc_value:
             return False
         print(f"\tDone in {self.t:.2f} seconds.")
-        print()
+        print('')
 
 import argparse
 
 parser = argparse.ArgumentParser(description='Create EQDSK from IDS time slice')
 
 parser.add_argument('-i', '--input', type=str,
-                    required=True, metavar="Input Json file")
-parser.add_argument('-v', '--verbose', metavar="Verbosity",
+                    required=True, metavar='Input Json file')
+parser.add_argument('-v', '--verbose', metavar='Verbosity',
                     default=0, type=int)
 
+parser.add_argument('-p', '--progress', metavar='Progress bar. Enable/Disable return carriage',
+                    default=1, type=int)
+parser.add_argument('-e', '--generate_eqdsks', metavar='Output eqdsks if IMAS is used',
+                    default=0, type=int)
+parser.add_argument('-r', '--run_flt', metavar='Run FLT tracing',
+                    default=1, type=int)
 args = parser.parse_args()
 
+RETURN_CARRIAGE = "\r\t"
+if not args.progress:
+    RETURN_CARRIAGE = "\n\t"
+
+
+
 import os
+if args.generate_eqdsks:
+    eqdskDir = os.path.join(os.getcwd(), 'EQDSKS')
+    if not os.path.exists(eqdskDir):
+        os.mkdir(eqdskDir)
 import sys
 json_input = args.input
 if not os.access(json_input, mode=os.R_OK):
@@ -137,17 +154,19 @@ with MeasureTime("Loading shadowing meshes.") as t:
     if "include_target_in_shadow" in inp:
         if inp["include_target_in_shadow"]:
             print("\tLoading target mesh also to Embree")
+            print("")
             # v, t comes from before block. Do not delete it!!!
             embree.commitMesh(verticesTarget * case.parameters.target_dim_mul,
                               trianglesTarget)
-
-    for fileName in shadowMeshFiles:
-        sys.stdout.write(f"\r\tLoading {N} meshes: {c / N:.2f}%!")
-        v, t = L2G.geom_utils.readMesh(fileName)
+    print(f"Loading {N} meshes")
+    for filePath in shadowMeshFiles:
+        fileName = os.path.basename(filePath)
+        sys.stdout.write(f"{RETURN_CARRIAGE}Loading {fileName}: {c / N:.2f}%!")
+        v, t = L2G.geom_utils.readMesh(filePath)
         c+=100
-        sys.stdout.write(f"\r\tLoading {N} meshes: {c / N:.2f}%!")
+        sys.stdout.write(f"{RETURN_CARRIAGE}Loaded {fileName}: {c / N:.2f}%!")
         embree.commitMesh(v * 1e-3, t)
-    print()
+    print('')
     case.setEmbreeObj(embree)
 
 # Figure out what kind of equilibriums do we have
@@ -177,7 +196,7 @@ if inp['eq_type'] == "imas":
         time_slices = inp['imas']['times']
     else:
         # Construct the time_slices
-        n_steps = int((inp['imas']['time_end'] - inp['imas']['time_start']) / inp['imas']['time_step'])
+        n_steps = int((inp['imas']['time_end'] - inp['imas']['time_start']) / inp['imas']['time_step']) + 1
         time_slices = np.linspace(inp['imas']['time_start'],
                                   inp['imas']['time_end'],
                                   n_steps)
@@ -206,8 +225,34 @@ if inp['eq_type'] == "imas":
 elif inp['eq_type'] == "eqdsk":
     N = len(eqdsk_files)
 
-def numpyArrayToField(arr, fieldName, mesh, associatedTime, iteration):
+def numpyArrayToField(arr, fieldName, mesh, associatedTime, iteration,
+        infoOnComponent=None):
+    """Converts a numpy array to field. Currently the arrays in the L2G results
+    are all 1D, even for 3D vectors. Therefore this function checks the size
+    of these arrays to check if it is a multiple of number of cells.
+
+    infoOnComponent are basically labels for multi component arrays, i.e.,
+
+     * BVec is a magnetic field vector written in X, Y, Z (Cartesion).
+     * baryCent is the barycenter of the triangles in cylindrical (R, Z, Phi)
+       system
+    """
+    # Get shape for Array component! Meaning if it is a vector then the array
+    # needs to know that
+
+    # Find out how many values per cells there are
+    N_cells = mesh.getNumberOfCells()
+    ratio = int(len(arr) / N_cells)
+    if ratio > 1:
+        # Usually the ratio is either 1 for 1D arrays. But in case we have
+        # vector fields (which are still written as 1D array in the L2G
+        # library) we need to reshape it correctly, otherwise we will have
+        # seemingly random values written in the MED file.
+        arr = arr.reshape((N_cells, ratio))
+
     mcArray = ml.DataArrayDouble(np.asarray(arr, dtype=np.float))
+    if infoOnComponent is not None:
+        mcArray.setInfoOnComponents(infoOnComponent)
 
     field = ml.MEDCouplingFieldDouble.New(ml.ON_CELLS, ml.ONE_TIME)
     field.setMesh(mesh)
@@ -239,6 +284,9 @@ for i in range(N):
                 case.eqdskio.setPSIRZ(psirz)
             case.eq.setEqdsk(case.eqdskio)
             associated_time = time_slices[i]
+            if args.generate_eqdsks:
+                with open(os.path.join(eqdskDir,case.eqdskio.getName()), 'w') as f:
+                    f.write(case.eqdskio.generateText())
         else:
             # Read the EQDSK file
             case.loadEqdsk(eqdsk_files[i])
@@ -250,35 +298,43 @@ for i in range(N):
             associated_time = _c
             _c += 1
 
-        case.applyParameters()
-        case.loadEq()
+        if args.run_flt:
+            case.applyParameters()
+            case.loadEq()
 
-        case.processDataOnMesh()
-        case.runFltOnMesh()
+            case.processDataOnMesh()
+            case.runFltOnMesh()
 
-        # Run on these IDs
-        case.fl_ids = [865695, 875996, 878071, 887040, 887382, 1877831, 1895186, 1908506, 1942617, 1945828, 1946555,]
-        case.getFL()
-        case.saveFlToVTK('fls.vtk')
-
-
-        # Write fields to mesh result
-        for key in case.mesh_results.__dict__:
-            array = case.mesh_results.__dict__[key]
-            if array is None:
-                continue
+            # Write fields to mesh result
+            for key in case.mesh_results.__dict__:
+                print(f'\t\tWriting array "{key}"')
+                array = case.mesh_results.__dict__[key]
+                if array is None:
+                    continue
 
 
-            if key == "angle":
-                # Transform the angle
-                array = np.rad2deg(array)
-                array = np.where(array > 90.0, array - 90.0, 90.0 - array)
+                if key == "angle":
+                    # Transform the angle
+                    array = np.rad2deg(array)
+                    array = np.where(array > 90.0, array - 90.0, 90.0 - array)
 
-            if key in ["drsep", "conlen"]:
-                # Scale to mm from m
-                array *= 1000
+                if key in ["drsep", "conlen"]:
+                    # Scale to mm from m
+                    array *= 1000
 
-            field = numpyArrayToField(array, key, resultMesh,
-                associatedTime=associated_time, iteration=i)
+                infoOnComponent = None
+                if key == 'BVec':
+                    # Write the Magnetic field vector properly. That is it is a
+                    # 3 component array in Cartesian!
+                    infoOnComponent = ['x', 'y', 'z']
+                elif key == 'baryCent':
+                    # Again, write the baryCent properly. In this case the
+                    # infoOnComponent will basically tell the user that the vector
+                    # is in Cylindrical system.
+                    infoOnComponent=['r', 'z', 'phi']
 
-            writeFieldToAlreadyExistingMesh(field, resultFileName)
+                field = numpyArrayToField(arr=array, fieldName=key,
+                        mesh=resultMesh, associatedTime=associated_time,
+                        iteration=i, infoOnComponent=infoOnComponent)
+
+                writeFieldToAlreadyExistingMesh(field, resultFileName)

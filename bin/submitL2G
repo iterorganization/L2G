@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+
+while [[ $# -gt 0 ]]; do
+    key="$1"
+
+    case $key in
+        -h|--help)
+            echo "This script submits an L2G case to the ITER HPC."
+            echo "Example:"
+            echo "submitL2G l2g_case.json"
+            exit
+            ;;
+        *.json) # L2G case file
+            L2G_JSON=$1
+            shift
+            ;;
+        *) # Unknown option
+            shift
+            ;;
+    esac
+done
+
+SCRIPTPATH="$( cd -- "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
+
+sbatch ${SCRIPTPATH}/L2G.sbatch "${L2G_JSON}"
