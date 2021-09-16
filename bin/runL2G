@@ -327,6 +327,10 @@ for i in range(N):
                     # Write the Magnetic field vector properly. That is it is a
                     # 3 component array in Cartesian!
                     infoOnComponent = ['x', 'y', 'z']
+                elif key == 'BVecCyln':
+                    # Write the Magnetic field poloidal and toroidal component
+                    # properly. A 2 component array in Cylindrical
+                    infoOnComponent = ['Pol', 'Tor']
                 elif key == 'baryCent':
                     # Again, write the baryCent properly. In this case the
                     # infoOnComponent will basically tell the user that the vector
