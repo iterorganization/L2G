@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import L2G.core
-from L2G import EQDSKIO, EQ, geom_utils
+import L2G.meshio_utils
+from L2G.eq import EQDSKIO, EQ
 import numpy as np
 from time import time
 import os
@@ -43,13 +44,13 @@ radialDisplacement = -0.006
 # eqdsk.setRLIM(RLIM)
 eq = EQ(eqdsk, rDispl=radialDisplacement)
 
-tg_vertices, tg_cells = geom_utils.readVtkMesh(targetFile)
+tg_vertices, tg_cells = L2G.meshio_utils.readVtkMesh(targetFile)
 N_vertices = len(tg_vertices) // 3
 N_cells = len(tg_cells) // 3
 print(f'Vertices #: {N_vertices}')
 print(f'Cells #: {N_cells}')
 
-sh_vertices, sh_cells = geom_utils.readVtkMesh(shadowFile)
+sh_vertices, sh_cells = L2G.meshio_utils.readVtkMesh(shadowFile)
 
 x = L2G.core.PyFLT()
 x.setNDIM(eqdsk.getNW(), eqdsk.getNH())

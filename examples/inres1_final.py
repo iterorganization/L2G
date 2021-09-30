@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-from L2G import FieldLineTracer, geom_utils
+from L2G import FieldLineTracer
+import L2G.meshio_utils
 import L2G.core
 import numpy as np
 import os
@@ -8,8 +9,8 @@ targetFile = os.path.expanduser('~/smiter-aux/Data/VTK/inres1.vtk')
 shadowFile = os.path.expanduser('~/smiter-aux/Data/VTK/inrshad1.vtk')
 eqdskFile = os.path.expanduser('~/smiter-aux/Data/Equilibrium/EQ3.eqdsk')
 
-tg_vertices, tg_cells = geom_utils.readVtkMesh(targetFile)
-sh_vertices, sh_cells = geom_utils.readVtkMesh(shadowFile)
+tg_vertices, tg_cells = L2G.meshio_utils.readVtkMesh(targetFile)
+sh_vertices, sh_cells = L2G.meshio_utils.readVtkMesh(shadowFile)
 
 embreeObj = L2G.core.PyEmbreeAccell()
 # Convert the units of the mesh from mm to m

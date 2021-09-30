@@ -125,7 +125,8 @@ sh_points, sh_tri = createShadow()
 # plt.show()
 
 from L2G.core import PyEmbreeAccell
-from L2G import FieldLineTracer, enableLogging, EQDSKIO
+from L2G import FieldLineTracer, enableLogging
+from L2G.eq import EQDSKIO
 enableLogging()
 
 # Construct fake EQDSK

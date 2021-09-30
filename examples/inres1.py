@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import L2G.core
-from L2G import EQDSKIO, EQ, geom_utils
+from L2G.eq import EQDSKIO, EQ
+import L2G.meshio_utils
+import L2G.geom_utils
 import numpy as np
 from time import time
 import os
@@ -12,13 +14,13 @@ eqdskFile = os.path.expanduser('~/smiter-aux/Data/Equilibrium/EQ3.eqdsk')
 eqdsk = EQDSKIO(eqdskFile)
 eq = EQ(eqdsk, rDispl=0.006)
 
-tg_vertices, tg_cells = geom_utils.readVtkMesh(targetFile)
+tg_vertices, tg_cells = L2G.meshio_utils.readVtkMesh(targetFile)
 N_vertices = len(tg_vertices) // 3
 N_cells = len(tg_cells) // 3
 print(f'Vertices #: {N_vertices}')
 print(f'Cells #: {N_cells}')
 
-sh_vertices, sh_cells = geom_utils.readVtkMesh(shadowFile)
+sh_vertices, sh_cells = L2G.meshio_utils.readVtkMesh(shadowFile)
 
 x = L2G.core.PyFLT()
 x.setNDIM(eqdsk.getNW(), eqdsk.getNH())
@@ -59,9 +61,9 @@ for ID in range(N_cells):
     trianglePoints[3:6] = tg_vertices[p2: p2 + 3]
     trianglePoints[6:] = tg_vertices[p3: p3 + 3]
     # Get starting position or barycenter
-    elementBary = geom_utils.getBaryCenter(trianglePoints, coord='cyl', mul=1e-3)
+    elementBary = L2G.geom_utils.getBaryCenter(trianglePoints, coord='cyl', mul=1e-3)
     # Get normal for direction guess
-    elementNorm = geom_utils.getTriangleNormal(trianglePoints)
+    elementNorm = L2G.geom_utils.getTriangleNormal(trianglePoints)
     elementFlux = eq._psiSpl.ev(elementBary[1], elementBary[0])
     elementBVec = eq.getBCart(*elementBary)
     elementBdot = np.dot(elementNorm, elementBVec)
