@@ -25,15 +25,15 @@ import argparse
 parser = argparse.ArgumentParser(description='Create EQDSK from IDS time slice')
 
 parser.add_argument('-i', '--input', type=str,
-                    required=True, metavar='Input Json file')
-parser.add_argument('-v', '--verbose', metavar='Verbosity',
+                    required=True, help='Input Json file')
+parser.add_argument('-v', '--verbose', help='Verbosity',
                     default=0, type=int)
 
-parser.add_argument('-p', '--progress', metavar='Progress bar. Enable/Disable return carriage',
+parser.add_argument('-p', '--progress', help='Progress bar. Enable/Disable return carriage',
                     default=1, type=int)
-parser.add_argument('-e', '--generate_eqdsks', metavar='Output eqdsks if IMAS is used',
+parser.add_argument('-e', '--generate_eqdsks', help='Output eqdsks if IMAS is used',
                     default=0, type=int)
-parser.add_argument('-r', '--run_flt', metavar='Run FLT tracing',
+parser.add_argument('-r', '--run_flt', help='Run FLT tracing',
                     default=1, type=int)
 args = parser.parse_args()
 
@@ -55,7 +55,7 @@ if not os.access(json_input, mode=os.R_OK):
     sys.exit(-1)
 
 import L2G
-import L2G.geom_utils
+import L2G.meshio_utils
 import medcoupling as mc
 import MEDLoader as ml
 from L2G.core import PyEmbreeAccell
@@ -111,6 +111,27 @@ with MeasureTime("Setting parameters and options") as t:
         else:
             setattr(case.options, option, inp['options'][option])
 
+    # Let's see if we run in a HPC job. Currently only slurm based.
+    slurm_job = False
+    if "SLURM_JOBID" in os.environ:
+        job_id = os.environ['SLURM_JOBID']
+        print(f"SLURM JOB ID: {job_id}")
+        print("Setting the number of OpenMP threads equal to the number of "
+              + "allocated CPUs")
+        slurm_job = True
+
+    if slurm_job:
+        # In this case assign the number of threads equal to the number of
+        # CPUs per task.
+        # We only have 1 distributed task.
+        if "SLURM_CPUS_PER_TASK" in os.environ:
+            try:
+                cpus_per_task = int(os.environ["SLURM_CPUS_PER_TASK"])
+                case.parameters.num_of_threads = cpus_per_task
+                print(f"case.parameters.num_of_threads={cpus_per_task}")
+            except:
+                print("Failed to obtain a number from SLURM_CPUS_PER_TASK")
+
 with MeasureTime("Loading shadowed mesh.") as t:
     # Load the target mesh
     if not os.access(inp["target_mesh"], os.R_OK):
@@ -118,7 +139,7 @@ with MeasureTime("Loading shadowed mesh.") as t:
         print("Check the validity of the path.")
         sys.exit(-1)
     print(f"\tLoading {inp['target_mesh']}")
-    verticesTarget, trianglesTarget = L2G.geom_utils.readMesh(inp["target_mesh"])
+    verticesTarget, trianglesTarget = L2G.meshio_utils.readMesh(inp["target_mesh"])
     case.setTargetData(verticesTarget, trianglesTarget)
 
 with MeasureTime("Loading shadowing meshes.") as t:
@@ -145,7 +166,7 @@ with MeasureTime("Loading shadowing meshes.") as t:
             if fileName in inp["exclude_meshes"]:
                 mesh_to_remove.append(filePath)
         #
-        for m in mesh_to_remove:
+        for m in set(mesh_to_remove):
             shadowMeshFiles.remove(m)
 
     # Now load it
@@ -162,7 +183,7 @@ with MeasureTime("Loading shadowing meshes.") as t:
     for filePath in shadowMeshFiles:
         fileName = os.path.basename(filePath)
         sys.stdout.write(f"{RETURN_CARRIAGE}Loading {fileName}: {c / N:.2f}%!")
-        v, t = L2G.geom_utils.readMesh(filePath)
+        v, t = L2G.meshio_utils.readMesh(filePath)
         c+=100
         sys.stdout.write(f"{RETURN_CARRIAGE}Loaded {fileName}: {c / N:.2f}%!")
         embree.commitMesh(v * 1e-3, t)

@@ -1,19 +1,7 @@
 #!/bin/bash
 
-# Example SLURM batch script for running on ITER hpc. It takes one command line
-# argument, which is the L2G json case file.
-
-#SBATCH --job-name="L2G job"    # Job name
-#SBATCH --partition=gen10_ib
-#SBATCH --nodes=1                       # Run on one Node
-#SBATCH --tasks-per-node=36
-#SBATCH --output=l2g.log      # Standard output and error log
-
-# Optional options.
-##SBATCH --mail-type=END,FAIL                 # Mail events (NONE, BEGIN, END, FAIL, ALL)
-##SBATCH --mail-user=%USER_ITER_EMAIL%        # Where to send mail
-##SBATCH --mem-per-cpu=2gb                        # Job memory request
-##SBATCH --time=02:00:00                  # Time limit hrs:min:sec
+# Example run script for SLURM for submitting on ITER hpc.
+# Missing SLURM directives intended!
 
 pwd; hostname; date
 
