@@ -138,5 +138,6 @@ setup(
     packages = ["L2G"],
     data_files = [('', getDataFiles())],
     python_requires=">=3.6",
-    scripts = ['bin/runL2G', 'bin/submitL2G', 'bin/L2G.sbatch']
+    scripts = ['bin/runL2G', 'bin/submitL2G', 'bin/L2G.sbatch',
+               'bin/get_elm_data', 'bin/get_owl_conlen_graph']
 )

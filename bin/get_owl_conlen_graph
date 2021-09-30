@@ -1,0 +1,137 @@
+#!/usr/bin/env python3 -u
+
+import argparse
+
+description = """Obtain an Outer WalL midplane connection length graph. Used
+usually as input for ELM PLM model (only the OWL-Downward-Divertor part of the
+data is used, or owl-owl).
+
+This is obtained by running FLT on points which lie on the outer midplane. The
+points are laid on a radial and toroidal plane and then averaged on the radial
+axis.
+
+FLs are followed up to 1000 meters.
+
+To be used **ONLY** on diverted equilibriums.
+
+Arguments:
+    eq: Path to EQDSK G file, which holds the equilibrium.
+    sh: Path to MED file, which is the shadowing geometry. Preferably the whole
+        tokamak (Blanket + Divertor).
+    nc: Number of cores used for the trace. If not specified, the maximum
+        number of available cores used (when submitting as HPC job).
+
+Outputs:
+    conlen_data_{DRSEP/10:.2f}.dat: CSV like file that contains 4 columns:
+        * drsep (physical),
+        * drsep (derived from flux surfaces),
+        * connection length up (OWL-IWL)
+        * connection length down (OWL - OWL). <- Used as ELM PLM input data
+
+"""
+
+parser = argparse.ArgumentParser(description=description,
+    formatter_class=argparse.RawTextHelpFormatter)
+parser.add_argument('-eq', '--eqdsk', type=str, required=True,
+    help="Input EQDSK G equilibrium data.", metavar="file.eqdsk")
+parser.add_argument('-sh', '--shadow', type=str, required=True,
+    help="Shadowing geometry, preferably the whole tokamak in MED format.",
+    metavar="shadow.med")
+parser.add_argument('-nc', '--cores', type=int,
+    help="Number of OpenMP threads. Default: max", default=-1, metavar="X")
+
+args = parser.parse_args()
+
+import L2G
+# L2G.enableLogging()
+import L2G.meshio_utils
+import L2G.core
+import numpy as np
+case = L2G.FieldLineTracer()
+
+#Load full tokamak
+embreeObj = L2G.core.PyEmbreeAccell()
+
+shadowMesh = args.shadow
+
+v, t = L2G.meshio_utils.readMesh(shadowMesh)
+embreeObj.commitMesh(v * 1e-3, t)
+case.setEmbreeObj(embreeObj)
+
+# Load EQDSK
+
+eqdskFile = args.eqdsk
+
+case.loadEqdsk(eqdskFile)
+case.eq.evaluate()
+DRSEP=case.eq.drsep
+case.name = f"drsep{DRSEP}cm_midplane_connection_length"
+
+# Midplane points
+points = case.createMidplanePoints()
+
+# case.setTargetData(points, [])
+case.target_points = points
+
+# Get the radial position of the points
+R_points = points[:3*2000:3]
+
+# case.options.switch_runFLT = 1
+# Set parameters
+# Some are default but all are to be present just to show.
+# Those that are marked default can be removed and will not cause a change
+case.parameters.time_step = 0.01 # toroidal angle resolution
+case.parameters.time_end = 2*np.pi # in radians, toroidal angle one full 360
+                                   # degree revolution
+case.parameters.max_connection_length = 1000 # meters
+case.options.switch_runFLT = 1 # Run until maximum connection length.
+
+case.parameters.target_dim_mul = 1 # points are in meters
+
+cores = args.cores
+if cores == -1:
+    import multiprocessing
+    cores = multiprocessing.cpu_count()
+case.parameters.num_of_threads = cores # Number of OMP threads for run in parallel
+
+
+case.applyParameters()
+case.loadEq()
+case.runFltOnPoints()
+
+# Calculate the averages
+# Points in midplane
+radial_points = 2000
+toroidal_points = 360
+
+# Boundary values at midplane
+PsiLCFS = case.eq.psiLCFS
+Rb, Z, Btot, Bpm = case.eq.get_midplane_info()
+flux = case.point_results.flux[:2000] # In all cases the flux values are the
+                                      # same, as the points are on the same
+                                      # magnetic surfaces, just toroidally shifted
+
+
+# Calculate drsep
+drsep = np.abs((flux - PsiLCFS) / (Rb * Bpm))
+
+# Actual drsep. take from R_points
+drsep_r = R_points - R_points[0]
+
+
+
+conlenUp = case.point_results.conlenUp.reshape((toroidal_points, radial_points))
+conlenDown = case.point_results.conlenDown.reshape((toroidal_points, radial_points))
+
+out = np.empty((radial_points, 4), np.float64)
+
+# Columns are the points, laid in the poloidal direction.
+conlenUp_mean = np.mean(conlenUp, 0)
+conlenDown_mean = np.mean(conlenDown, 0)
+
+out[:, 0] = drsep
+out[:, 1] = drsep_r
+out[:, 2] = conlenUp_mean
+out[:, 3] = conlenDown_mean
+
+np.savetxt(f'conlen_data_{DRSEP/10:.2f}.dat', out, header="drsep(Flux)[m],drsep(R)[m],conlenUp[m],conlenDown[m]")
