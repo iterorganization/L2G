@@ -35,6 +35,10 @@ parser.add_argument('-e', '--generate_eqdsks', help='Output eqdsks if IMAS is us
                     default=0, type=int)
 parser.add_argument('-r', '--run_flt', help='Run FLT tracing',
                     default=1, type=int)
+parser.add_argument('-fl', '--get_fls', help="Obtain fieldlines",
+                    default=1, type=int)
+parser.add_argument('-cd', '--calculate_drsep', help="Calculate drsep",
+                    default=1, type=int)
 args = parser.parse_args()
 
 RETURN_CARRIAGE = "\r\t"
@@ -55,45 +59,24 @@ if not os.access(json_input, mode=os.R_OK):
     sys.exit(-1)
 
 import L2G
+import L2G.utils
 import L2G.meshio_utils
 import medcoupling as mc
 import MEDLoader as ml
 from L2G.core import PyEmbreeAccell
 if args.verbose:
     L2G.enableLogging()
-import json
 import glob
 import numpy as np
 
 # Load json file
-inp = {}
-try:
-    # Comments with // are not allowed in a json file, so first we filter
-    # those out and remove empty lines.
-    text = open(json_input, 'r').read().splitlines()
-    no_comments_text = []
-    for line in text:
-        if line.lstrip().startswith('//'):
-            continue
-        if line.strip() == "":
-            continue
-        comment_index = line.find('//')
-        if comment_index == -1:
-            no_comments_text.append(line)
-        else:
-            no_comments_text.append(line[:comment_index])
-    # print('\n'.join(no_comments_text))
-    inp = json.loads('\n'.join(no_comments_text))
-except Exception as e:
-    print("Failed to read JSON file:")
-    print(e)
-
+inp = L2G.utils.load_l2g_json(json_input)
 # Create L2G case
 case = L2G.FieldLineTracer()
 case.name = inp["name"]
 
 flip_psirz = False
-with MeasureTime("Setting parameters and options") as t:
+with MeasureTime("Setting parameters and options") as time_keeper:
     if "eq_flip_psi" in inp:
         flip_psirz = inp["eq_flip_psi"]
     case.name = inp['name']
@@ -110,6 +93,10 @@ with MeasureTime("Setting parameters and options") as t:
             print(f"Illegal option: {option}. Ignored")
         else:
             setattr(case.options, option, inp['options'][option])
+
+    # See if there are any FL ids to set
+    if "fl_ids" in inp:
+        case.fl_ids = inp["fl_ids"]
 
     # Let's see if we run in a HPC job. Currently only slurm based.
     slurm_job = False
@@ -131,8 +118,9 @@ with MeasureTime("Setting parameters and options") as t:
                 print(f"case.parameters.num_of_threads={cpus_per_task}")
             except:
                 print("Failed to obtain a number from SLURM_CPUS_PER_TASK")
+    TIME_LOADING_CASE = time_keeper.t
 
-with MeasureTime("Loading shadowed mesh.") as t:
+with MeasureTime("Loading shadowed mesh.") as time_keeper:
     # Load the target mesh
     if not os.access(inp["target_mesh"], os.R_OK):
         print(f"Failed to read target mesh {inp['target_mesh']}!")
@@ -141,8 +129,9 @@ with MeasureTime("Loading shadowed mesh.") as t:
     print(f"\tLoading {inp['target_mesh']}")
     verticesTarget, trianglesTarget = L2G.meshio_utils.readMesh(inp["target_mesh"])
     case.setTargetData(verticesTarget, trianglesTarget)
+    TIME_LOADING_TARGET_MESH = time_keeper.t
 
-with MeasureTime("Loading shadowing meshes.") as t:
+with MeasureTime("Loading shadowing meshes.") as time_keeper:
     # Create Embree
     embree = PyEmbreeAccell()
 
@@ -172,13 +161,19 @@ with MeasureTime("Loading shadowing meshes.") as t:
     # Now load it
     c = 0
     N = len(shadowMeshFiles)
+
+    # List of loaded geometry
+    geomIds = []
+
     if "include_target_in_shadow" in inp:
         if inp["include_target_in_shadow"]:
             print("\tLoading target mesh also to Embree")
             print("")
             # v, t comes from before block. Do not delete it!!!
-            embree.commitMesh(verticesTarget * case.parameters.target_dim_mul,
-                              trianglesTarget)
+            geomId = embree.commitMesh(
+                verticesTarget * case.parameters.target_dim_mul,
+                trianglesTarget)
+            geomIds.append((geomId, inp["target_mesh"]))
     print(f"Loading {N} meshes")
     for filePath in shadowMeshFiles:
         fileName = os.path.basename(filePath)
@@ -186,9 +181,15 @@ with MeasureTime("Loading shadowing meshes.") as t:
         v, t = L2G.meshio_utils.readMesh(filePath)
         c+=100
         sys.stdout.write(f"{RETURN_CARRIAGE}Loaded {fileName}: {c / N:.2f}%!")
-        embree.commitMesh(v * 1e-3, t)
+        geomId = embree.commitMesh(v * 1e-3, t)
+        geomIds.append((geomId, filePath))
     print('')
+    print(f"Writing list of loaded meshes to {case.name}_embree_meshes.txt")
+    with open(f"{case.name}_embree_meshes.txt", 'w') as f:
+        for pair in geomIds:
+            f.write(f'{pair[0]} {pair[1]}\n')
     case.setEmbreeObj(embree)
+    TIME_LOADING_SHADOW_MESHES = time_keeper.t
 
 # Figure out what kind of equilibriums do we have
 if inp['eq_type'] == "imas":
@@ -246,51 +247,9 @@ if inp['eq_type'] == "imas":
 elif inp['eq_type'] == "eqdsk":
     N = len(eqdsk_files)
 
-def numpyArrayToField(arr, fieldName, mesh, associatedTime, iteration,
-        infoOnComponent=None):
-    """Converts a numpy array to field. Currently the arrays in the L2G results
-    are all 1D, even for 3D vectors. Therefore this function checks the size
-    of these arrays to check if it is a multiple of number of cells.
-
-    infoOnComponent are basically labels for multi component arrays, i.e.,
-
-     * BVec is a magnetic field vector written in X, Y, Z (Cartesion).
-     * baryCent is the barycenter of the triangles in cylindrical (R, Z, Phi)
-       system
-    """
-    # Get shape for Array component! Meaning if it is a vector then the array
-    # needs to know that
-
-    # Find out how many values per cells there are
-    N_cells = mesh.getNumberOfCells()
-    ratio = int(len(arr) / N_cells)
-    if ratio > 1:
-        # Usually the ratio is either 1 for 1D arrays. But in case we have
-        # vector fields (which are still written as 1D array in the L2G
-        # library) we need to reshape it correctly, otherwise we will have
-        # seemingly random values written in the MED file.
-        arr = arr.reshape((N_cells, ratio))
-
-    mcArray = ml.DataArrayDouble(np.asarray(arr, dtype=np.float))
-    if infoOnComponent is not None:
-        mcArray.setInfoOnComponents(infoOnComponent)
-
-    field = ml.MEDCouplingFieldDouble.New(ml.ON_CELLS, ml.ONE_TIME)
-    field.setMesh(mesh)
-    field.setTime(associatedTime, iteration, -1)
-    field.setTimeUnit("s")
-    field.setName(fieldName)
-    field.setArray(mcArray)
-    return field
-
-def writeFieldToAlreadyExistingMesh(field, meshName):
-    fMEDFile=ml.MEDFileField1TS.New()
-    fMEDFile.setFieldNoProfileSBT(field)
-    fMEDFile.write(meshName,0)
-    # ml.WriteFieldUsingAlreadyWrittenMesh(meshName, field)
-
 # Now doing the main thing
 _c = 0 # In case of EQDSK, the associated time
+TIME_RUNNING_CASES = 0
 for i in range(N):
     with MeasureTime(f'Running case {i+1} out of {N}.') as f:
         # Get EQDSKIO
@@ -319,9 +278,11 @@ for i in range(N):
             associated_time = _c
             _c += 1
 
+        # Apply parameters and load Equilibrium. This is done everytime
+        case.applyParameters()
+        case.loadEq()
+
         if args.run_flt:
-            case.applyParameters()
-            case.loadEq()
 
             case.processDataOnMesh()
             case.runFltOnMesh()
@@ -345,7 +306,7 @@ for i in range(N):
 
                 infoOnComponent = None
                 if key == 'BVec':
-                    # Write the Magnetic field vector properly. That is it is a
+                    # Write the Magnetic field vector properly. That is a
                     # 3 component array in Cartesian!
                     infoOnComponent = ['x', 'y', 'z']
                 elif key == 'BVecCyln':
@@ -358,8 +319,47 @@ for i in range(N):
                     # is in Cylindrical system.
                     infoOnComponent=['r', 'z', 'phi']
 
-                field = numpyArrayToField(arr=array, fieldName=key,
+                field = L2G.meshio_utils.numpyArrayToField(arr=array, fieldName=key,
                         mesh=resultMesh, associatedTime=associated_time,
                         iteration=i, infoOnComponent=infoOnComponent)
 
-                writeFieldToAlreadyExistingMesh(field, resultFileName)
+                L2G.meshio_utils.writeFieldToAlreadyExistingMesh(field,
+                    resultFileName)
+        if args.get_fls and case.fl_ids:
+            # Obtain FLs and output them into a file.
+            case.getFL()
+            case.saveFlToVTK(f"{case.name}_{i}.vtk")
+
+        if args.calculate_drsep:
+            # Calculate the drsep. In this case the default midplane is the
+            # outer midplane.
+            case.eq.evaluate()
+            # Get OMP parameters
+            Rb, Z, Btotal, Bpm = case.eq.getOWL_midplane()
+
+            drsep = 1e3 * (case.mesh_results.flux - case.eq.psiLCFS) / (Rb * Bpm)
+            field = L2G.meshio_utils.numpyArrayToField(arr=drsep,
+                mesh=resultMesh, fieldName="drsep",
+                associatedTime=associated_time, iteration=i)
+            L2G.meshio_utils.writeFieldToAlreadyExistingMesh(field,
+                resultFileName)
+
+            if case.eq.type_ == 'div':
+                # Also write drsep for the secondary separatrix
+                Rb2, Z2, Btotal2, Bpm2 = case.eq.getOWL_midplane(lcfs=case.eq.psiLCFS2)
+                # Calculate the drsep from second separatrix
+                drsep2 = 1e3 * (case.mesh_results.flux - case.eq.psiLCFS2) / (Rb2 * Bpm2)
+                field = L2G.meshio_utils.numpyArrayToField(arr=drsep2,
+                    mesh=resultMesh, fieldName="drsep2",
+                    associatedTime=associated_time,
+                    iteration=i)
+                L2G.meshio_utils.writeFieldToAlreadyExistingMesh(field,
+                    resultFileName)
+
+        TIME_RUNNING_CASES += time_keeper.t
+
+print("Time summaries:")
+print("\tLoading case:".rjust(25) + f"{TIME_LOADING_CASE} s")
+print("\tLoading target mesh:".rjust(25) + f"{TIME_LOADING_TARGET_MESH} s")
+print("\tLoading shadow meshes:".rjust(25) + f"{TIME_LOADING_SHADOW_MESHES} s")
+print("\tRunning cases:".rjust(25) + f"{TIME_RUNNING_CASES} s")
