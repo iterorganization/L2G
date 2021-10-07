@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+
+description = """This script applies the Steady-State heat load profile on a
+given L2G result data.
+"""
+
+import argparse
+
+parser = argparse.ArgumentParser(description=description,
+    formatter_class=argparse.RawTextHelpFormatter)
+
+parser = argparse.ArgumentParser(description=description)
+parser.add_argument('-eq', '--input_eqdsk', help='Input EQDSK G format')
+parser.add_argument('-m', '--input_med', type=str,
+                    required=True, help='Input MED file result')
+parser.add_argument('-e', '--input_elm', type=str, default='',
+                    help='Input elm file for diverted scenarios (optional)')
+parser.add_argument('-c', '--cutoff', type=float, default=4.3e3,
+                    help='Input cutoff length of FLs.')
+
+args = parser.parse_args()
+import sys
+import os
+
+import numpy as np
+import L2G.eq
+import L2G.meshio_utils
+import L2G.utils
+import L2G.hlm_profiles
+import medcoupling as mc
+
+# Load ELM data
+elm_data = np.loadtxt(args.input_elm)
+
+result_mesh_data = mc.ReadMeshFromFile(args.input_med)
+CUTOFF = 4.3e3
+eq = L2G.eq.EQ()
+eqdsk = L2G.eq.EQDSKIO(args.input_eqdsk)
+eq.setEqdsk(eqdsk)
+eq.evaluate()
+
+drsep = L2G.meshio_utils.fieldToNumpy(args.input_med, "drsep") * 1e-3
+Bdot = np.abs(L2G.meshio_utils.fieldToNumpy(args.input_med, 'Bdot'))
+BVec = L2G.meshio_utils.fieldToNumpy(args.input_med, "BVec")
+flux = L2G.meshio_utils.fieldToNumpy(args.input_med, "flux")
+conlen = L2G.meshio_utils.fieldToNumpy(args.input_med, "conlen")
+bfield_mag = np.linalg.norm(BVec, axis=1)
+Rb, Z, Btotal, Bpm = eq.getOWL_midplane()
+# Point to ELM data slice
+elm_data_r = elm_data[0]
+elm_data_q = elm_data[1] * 1e6
+
+expansion = bfield_mag / Btotal
+
+expansionField = L2G.meshio_utils.numpyArrayToField(expansion,
+    "Total flux expansion", result_mesh_data, 0, -1)
+L2G.meshio_utils.writeFieldToAlreadyExistingMesh(expansionField,
+    args.input_med)
+
+interELM = L2G.hlm_profiles.inter_ELM(drsep, Rb, Btotal, Bpm)
+elm = L2G.hlm_profiles.ELM(drsep, elm_data_r, elm_data_q)
+
+elm_par_field = L2G.meshio_utils.numpyArrayToField(elm,
+    "Parallel ELM", result_mesh_data, 0, -1)
+L2G.meshio_utils.writeFieldToAlreadyExistingMesh(elm_par_field,
+    args.input_med)
+
+interElm_par_field = L2G.meshio_utils.numpyArrayToField(interELM,
+    "Parallel inter-ELM", result_mesh_data, 0, -1)
+L2G.meshio_utils.writeFieldToAlreadyExistingMesh(interElm_par_field,
+    args.input_med)
+
+q_parallel = interELM + elm
+q_parallel_field = L2G.meshio_utils.numpyArrayToField(q_parallel,
+    "Parallel ELM + inter-ELM", result_mesh_data, 0, -1)
+L2G.meshio_utils.writeFieldToAlreadyExistingMesh(q_parallel_field,
+    args.input_med)
+
+q_inc = elm * Bdot / Btotal + interELM * Bdot
+q_inc = np.where(conlen > CUTOFF, q_inc, 0)
+q_inc_field = L2G.meshio_utils.numpyArrayToField(q_inc,
+    "ELM + inter-ELM", result_mesh_data, 0, -1)
+L2G.meshio_utils.writeFieldToAlreadyExistingMesh(q_inc_field,
+    args.input_med)
