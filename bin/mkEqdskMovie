@@ -1,0 +1,40 @@
+#!/usr/bin/env python3
+import argparse
+description = """From a series of EQDSK files create a GIF movie, in which the
+LCFS or separatrixes of the equilibrium are plotted.
+"""
+
+parser = argparse.ArgumentParser(description='Create EQDSK from IDS time slice')
+
+parser.add_argument('-ef', '--eqdsk_files', metavar='EqF', type=str, nargs='+',
+                    help='List of EQDSK files to use in the movie',
+                    required=True)
+parser.add_argument('-o', '--output_name', metavar='movie_name', type=str,
+                    default='movie', help='Name of movie')
+parser.add_argument('-d', '--dpi', metavar='DPI', type=int, default=100,
+                    help='Image DPI or size control')
+parser.add_argument('-b', '--bitrate',
+                    metavar="BitRate", type=int, default=1000, help='Image bitrate')
+parser.add_argument('-t', '--output_type', metavar='gif|png', type=str,
+                    default='gif', help='Whether to create a snapshot of images or a single gif file.')
+
+args = parser.parse_args()
+eqdskFiles = args.eqdsk_files
+
+import L2G.eq_plot_utils
+from L2G.eq import EQDSKIO, getEquilibriumFromEQDSKG
+# eqdskFiles.sort()
+eqdsks = [EQDSKIO(_) for _ in eqdskFiles]
+labels = [_.getName() for _ in eqdsks]
+equilibriums = [L2G.eq.getEquilibriumFromEQDSKG(_) for _ in eqdsks]
+
+print('Making the movie... It can take a few minutes.')
+L2G.eq_plot_utils.createLcfsMovie(
+    equilibriums=equilibriums,
+    labels=labels,
+    legend_name="Time",
+    movieName=args.output_name,
+    dpi=args.dpi,
+    bitrate=args.bitrate,
+    type=args.output_type)
+print('Done!')

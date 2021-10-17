@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+
+# from eqdsk_utils import EQDSKIO
+#import matplotlib.pyplot as plt
+from L2G.eq import EQDSKIO
+import imas
+import L2G.imas_utils
+
+
+import argparse
+
+description="""Create an EQDSK G file from an ids.equilibrium.time_slice.
+
+The name of the generated file:
+
+shot_$_run_$_t_$s.eqdsk
+
+The file is outputted wherever the command is run.
+
+"""
+
+parser = argparse.ArgumentParser(description='Create EQDSK from IDS time slice')
+
+parser.add_argument('-t', '--time_slices',
+                    metavar='Ts',
+                    type=float,
+                    nargs='+',
+                    help='argument for time slices. Required',
+                    required=True)
+parser.add_argument('-u', '--user',
+                    metavar='user',
+                    type=str,
+                    help='argument for user. Default public',
+                    default='public')
+parser.add_argument('-d', '--device',
+                    metavar='device',
+                    type=str,
+                    help='argument for device. Default ITER',
+                    default="iter")
+parser.add_argument('-v', '--version',
+                    metavar='version',
+                    type=str,
+                    default='3',
+                    help='argument for version. Default 3')
+parser.add_argument('-s', '--shot',
+                    type=int,
+                    metavar='shot',
+                    help='argument for shot. Required',
+                    required=True)
+parser.add_argument('-r', '--run',
+                    type=int,
+                    metavar='run',
+                    help='argument for run. Required',
+                        required=True)
+
+args = parser.parse_args()
+
+user = args.user
+device = args.device
+shot = args.shot
+run = args.run
+version = args.version
+# t_s = 399.927598 # time slice
+DINA_SCENARIO_NAME="DT-DINA2020-04"
+
+imas_obj = imas.ids(shot, run)
+imas_obj.open_env(user, device, version)
+
+ids_equilibrium = imas_obj.equilibrium
+
+time_slices = args.time_slices[:]
+
+ids_wall = imas_obj.wall
+ids_wall.get()
+
+if time_slices == [-1]:
+    imas_obj.summary.get()
+    time_slices = imas_obj.summary.time
+
+for ts in time_slices:
+    HEADER_COMMENT=f"IDS shot={shot} run={run} t={ts}s"
+    ids_equilibrium.getSlice(ts, imas.imasdef.INTERPOLATION)
+    slice = ids_equilibrium.time_slice[0]
+
+    eqObj = L2G.imas_utils.createEqdskFromSlice(slice,
+                                                HEADER_COMMENT)
+    ids_wall = imas_obj.wall
+    ids_wall.get()
+    L2G.imas_utils.addWallDescriptionToEqdsk(eqObj, ids_wall)
+
+    # SuccessfullRead is needed to set to 1 as we manually populate the data
+    # and not read from an existing EQDSK G file. Without this, the
+    # generateText function would not return anything.
+    eqObj.successfullRead = True
+    text = eqObj.generateText()
+    f = open(f'shot_{shot}_run_{run}_t_{ts}s.eqdsk', 'w')
+    f.write(text)
+    f.close()

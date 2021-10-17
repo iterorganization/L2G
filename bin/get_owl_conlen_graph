@@ -47,6 +47,7 @@ import L2G
 import L2G.meshio_utils
 import L2G.core
 import numpy as np
+import L2G.eq
 case = L2G.FieldLineTracer()
 
 #Load full tokamak
@@ -62,7 +63,10 @@ case.setEmbreeObj(embreeObj)
 
 eqdskFile = args.eqdsk
 
-case.loadEqdsk(eqdskFile)
+eqdsk = L2G.eq.EQDSKIO(eqdskFile)
+equilibrium = L2G.eq.getEquilibriumFromEQDSKG(eqdsk)
+
+case.setEquilibrium(equilibrium)
 case.eq.evaluate()
 DRSEP=case.eq.drsep
 case.name = f"drsep{DRSEP}cm_midplane_connection_length"

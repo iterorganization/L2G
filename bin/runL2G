@@ -2,27 +2,12 @@
 print("Starting up...")
 import time
 
-class MeasureTime(object):
-    def __init__(self, msg: str = ''):
-        self.msg = msg
-        self.t = None
-
-    def __enter__(self):
-        print('')
-        print(self.msg)
-        self.t = time.perf_counter()
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.t = time.perf_counter() - self.t
-        if exc_value:
-            return False
-        print(f"\tDone in {self.t:.2f} seconds.")
-        print('')
-
 import argparse
 
-parser = argparse.ArgumentParser(description='Create EQDSK from IDS time slice')
+description = """Runs a L2G case, described within a L2G JSON file.
+"""
+
+parser = argparse.ArgumentParser(description=description)
 
 parser.add_argument('-i', '--input', type=str,
                     required=True, help='Input Json file')
@@ -45,7 +30,10 @@ RETURN_CARRIAGE = "\r\t"
 if not args.progress:
     RETURN_CARRIAGE = "\n\t"
 
-
+# Create EQDSKS directory for outputting the EQDSKS G files.
+# If we wish to generate EQDSK G files, i.e., when we have the IMAS database as
+# the source of the equilibrium data and we wish to have file records, in this
+# case EQDSK G, of the equilibrium data.
 
 import os
 if args.generate_eqdsks:
@@ -53,10 +41,15 @@ if args.generate_eqdsks:
     if not os.path.exists(eqdskDir):
         os.mkdir(eqdskDir)
 import sys
+
+# Check if the JSON file can be read.
 json_input = args.input
 if not os.access(json_input, mode=os.R_OK):
     print(f"Could not read: '{json_input}'!")
     sys.exit(-1)
+
+# Now that everything went okay start with the module loads. Putting these
+# module loads at the top of the file creates a time overhead.
 
 import L2G
 import L2G.utils
@@ -71,130 +64,152 @@ import numpy as np
 
 # Load json file
 inp = L2G.utils.load_l2g_json(json_input)
-# Create L2G case
+# Create an instance of the FieldLineTracer so that we start setting parameters
+# and input data.
 case = L2G.FieldLineTracer()
-case.name = inp["name"]
 
 flip_psirz = False
-with MeasureTime("Setting parameters and options") as time_keeper:
-    if "eq_flip_psi" in inp:
-        flip_psirz = inp["eq_flip_psi"]
-    case.name = inp['name']
-    # Set the parameters
-    for parameter in inp['parameters']:
-        if not hasattr(case.parameters, parameter):
-            print(f"Illegal parameter: {parameter}. Ignored")
-        else:
-            setattr(case.parameters, parameter, inp['parameters'][parameter])
 
-    # Set the options
-    for option in inp['options']:
-        if not hasattr(case.options, option):
-            print(f"Illegal option: {option}. Ignored")
-        else:
-            setattr(case.options, option, inp['options'][option])
+time_start = time.perf_counter()
+print()
+print('Loading case parameters.')
+if "eq_flip_psi" in inp:
+    # In most convention we wish to have the gradient of the poloidal
+    # magnetic flux showing out.
+    flip_psirz = inp["eq_flip_psi"]
 
-    # See if there are any FL ids to set
-    if "fl_ids" in inp:
-        case.fl_ids = inp["fl_ids"]
+case.name = inp['name']
+# Set the parameters. If unknown, just print and ignore
+for parameter in inp['parameters']:
+    if not hasattr(case.parameters, parameter):
+        print(f"Illegal parameter: {parameter}. Ignored")
+    else:
+        setattr(case.parameters, parameter, inp['parameters'][parameter])
 
-    # Let's see if we run in a HPC job. Currently only slurm based.
-    slurm_job = False
-    if "SLURM_JOBID" in os.environ:
-        job_id = os.environ['SLURM_JOBID']
-        print(f"SLURM JOB ID: {job_id}")
-        print("Setting the number of OpenMP threads equal to the number of "
-              + "allocated CPUs")
-        slurm_job = True
+# Set the options
+for option in inp['options']:
+    if not hasattr(case.options, option):
+        print(f"Illegal option: {option}. Ignored")
+    else:
+        setattr(case.options, option, inp['options'][option])
 
-    if slurm_job:
-        # In this case assign the number of threads equal to the number of
-        # CPUs per task.
-        # We only have 1 distributed task.
-        if "SLURM_CPUS_PER_TASK" in os.environ:
-            try:
-                cpus_per_task = int(os.environ["SLURM_CPUS_PER_TASK"])
-                case.parameters.num_of_threads = cpus_per_task
-                print(f"case.parameters.num_of_threads={cpus_per_task}")
-            except:
-                print("Failed to obtain a number from SLURM_CPUS_PER_TASK")
-    TIME_LOADING_CASE = time_keeper.t
+# See if there are any FL ids to set
+if "fl_ids" in inp:
+    case.fl_ids = inp["fl_ids"]
 
-with MeasureTime("Loading shadowed mesh.") as time_keeper:
-    # Load the target mesh
-    if not os.access(inp["target_mesh"], os.R_OK):
-        print(f"Failed to read target mesh {inp['target_mesh']}!")
-        print("Check the validity of the path.")
-        sys.exit(-1)
-    print(f"\tLoading {inp['target_mesh']}")
-    verticesTarget, trianglesTarget = L2G.meshio_utils.readMesh(inp["target_mesh"])
-    case.setTargetData(verticesTarget, trianglesTarget)
-    TIME_LOADING_TARGET_MESH = time_keeper.t
+# Let's see if we run in a HPC job. Currently only slurm based.
+slurm_job = False
+if "SLURM_JOBID" in os.environ:
+    print('Detected SLURM environment.')
+    job_id = os.environ['SLURM_JOBID']
+    print(f"SLURM JOB ID: {job_id}")
+    print("Setting the number of OpenMP threads equal to the number of "
+          + "allocated CPUs")
+    slurm_job = True
 
-with MeasureTime("Loading shadowing meshes.") as time_keeper:
-    # Create Embree
-    embree = PyEmbreeAccell()
+if slurm_job:
+    # In this case assign the number of threads equal to the number of
+    # CPUs per task.
+    # We only have 1 distributed task.
 
-    # Use glob if it is necessary
-    shadowMeshFiles = []
+    if "SLURM_CPUS_PER_TASK" in os.environ:
+        print('Trying to get maximum number of cpus assigned for this task.')
+        try:
+            cpus_per_task = int(os.environ["SLURM_CPUS_PER_TASK"])
+            case.parameters.num_of_threads = cpus_per_task
+            print(f"case.parameters.num_of_threads={cpus_per_task}")
+        except:
+            print("Failed to obtain a number from SLURM_CPUS_PER_TASK")
 
-    # Gather the file names
-    for fileName in inp["shadow_meshes"]:
-        if '*' in fileName:
-            shadowMeshFiles += glob.glob(fileName)
-        else:
-            shadowMeshFiles.append(fileName)
+TIME_LOADING_CASE = time.perf_counter() - time_start
+print(f"Loaded case in {TIME_LOADING_CASE} seconds.")
 
-    # Exclude any meshes if exclude_meshes is inside
-    if "exclude_meshes" in inp:
-        mesh_to_remove = []
-        # Since files are actual paths it is the easiest to just loop the list
-        # and accumulate which meshes to remove
-        for filePath in shadowMeshFiles:
-            fileName = os.path.basename(filePath)
-            if fileName in inp["exclude_meshes"]:
-                mesh_to_remove.append(filePath)
-        #
-        for m in set(mesh_to_remove):
-            shadowMeshFiles.remove(m)
+print()
 
-    # Now load it
-    c = 0
-    N = len(shadowMeshFiles)
+time_start = time.perf_counter()
 
-    # List of loaded geometry
-    geomIds = []
+# Load the target mesh
+if not os.access(inp["target_mesh"], os.R_OK):
+    print(f"Failed to read target mesh {inp['target_mesh']}!")
+    print("Check the validity of the path.")
+    sys.exit(-1)
+print(f"\tLoading {inp['target_mesh']}")
+verticesTarget, trianglesTarget = L2G.meshio_utils.readMesh(inp["target_mesh"])
+case.setTargetData(verticesTarget, trianglesTarget)
+TIME_LOADING_TARGET_MESH = time.perf_counter() - time_start
+print(f"Loaded target mesh in {TIME_LOADING_TARGET_MESH}")
 
-    if "include_target_in_shadow" in inp:
-        if inp["include_target_in_shadow"]:
-            print("\tLoading target mesh also to Embree")
-            print("")
-            # v, t comes from before block. Do not delete it!!!
-            geomId = embree.commitMesh(
-                verticesTarget * case.parameters.target_dim_mul,
-                trianglesTarget)
-            geomIds.append((geomId, inp["target_mesh"]))
-    print(f"Loading {N} meshes")
+time_start = time.perf_counter()
+# Create Embree
+embree = PyEmbreeAccell()
+
+# Use glob if it is necessary
+shadowMeshFiles = []
+
+# Gather the file names
+for fileName in inp["shadow_meshes"]:
+    if '*' in fileName:
+        shadowMeshFiles += glob.glob(fileName)
+    else:
+        shadowMeshFiles.append(fileName)
+
+# Exclude any meshes if exclude_meshes is inside
+if "exclude_meshes" in inp:
+    mesh_to_remove = []
+    # Since files are actual paths it is the easiest to just loop the list
+    # and accumulate which meshes to remove
     for filePath in shadowMeshFiles:
         fileName = os.path.basename(filePath)
-        sys.stdout.write(f"{RETURN_CARRIAGE}Loading {fileName}: {c / N:.2f}%!")
-        v, t = L2G.meshio_utils.readMesh(filePath)
-        c+=100
-        sys.stdout.write(f"{RETURN_CARRIAGE}Loaded {fileName}: {c / N:.2f}%!")
-        geomId = embree.commitMesh(v * 1e-3, t)
-        geomIds.append((geomId, filePath))
-    print('')
-    print(f"Writing list of loaded meshes to {case.name}_embree_meshes.txt")
-    with open(f"{case.name}_embree_meshes.txt", 'w') as f:
-        for pair in geomIds:
-            f.write(f'{pair[0]} {pair[1]}\n')
-    case.setEmbreeObj(embree)
-    TIME_LOADING_SHADOW_MESHES = time_keeper.t
+        if fileName in inp["exclude_meshes"]:
+            mesh_to_remove.append(filePath)
+    #
+    for m in set(mesh_to_remove):
+        shadowMeshFiles.remove(m)
+
+# Now load it
+c = 0
+N = len(shadowMeshFiles)
+
+# List of loaded geometry. Th egeomIDs list is used to generate a text
+# file so that the user can check in the results to which geometry does the
+# geometry Id belongs to.
+geomIds = []
+
+# Include the target mesh into the shadow object. Usually, the first mesh
+# gets the geometry ID 0 when loading to Embree.
+if "include_target_in_shadow" in inp:
+    if inp["include_target_in_shadow"]:
+        print("\tLoading target mesh also to Embree")
+        print("")
+        # v, t comes from before block. Do not delete it!!!
+        geomId = embree.commitMesh(
+            verticesTarget * case.parameters.target_dim_mul,
+            trianglesTarget)
+        geomIds.append((geomId, inp["target_mesh"]))
+print(f"Loading {N} meshes")
+
+# Load the shadow meshes. v, t corresponds to vertices, triangles.
+for filePath in shadowMeshFiles:
+    fileName = os.path.basename(filePath)
+    sys.stdout.write(f"{RETURN_CARRIAGE}Loading {fileName}: {c / N:.2f}%!")
+    v, t = L2G.meshio_utils.readMesh(filePath)
+    c+=100
+    sys.stdout.write(f"{RETURN_CARRIAGE}Loaded {fileName}: {c / N:.2f}%!")
+    geomId = embree.commitMesh(v * 1e-3, t)
+    geomIds.append((geomId, filePath))
+print('')
+print(f"Writing list of loaded meshes to {case.name}_embree_meshes.txt")
+with open(f"{case.name}_embree_meshes.txt", 'w') as f:
+    for pair in geomIds:
+        f.write(f'{pair[0]} {pair[1]}\n')
+case.setEmbreeObj(embree)
+TIME_LOADING_SHADOW_MESHES = time.perf_counter() - time_start
 
 # Figure out what kind of equilibriums do we have
 if inp['eq_type'] == "imas":
 
     import L2G.imas_utils
+    import imas
 
     shot = inp['imas']['shot']
     run = inp['imas']['run']
@@ -222,6 +237,18 @@ if inp['eq_type'] == "imas":
         time_slices = np.linspace(inp['imas']['time_start'],
                                   inp['imas']['time_end'],
                                   n_steps)
+    # Open an IDS instance
+    ids = imas.ids(shot, run)
+    ids.open_env(user, device, version)
+
+    ids_equilibrium = ids.equilibrium
+    ids_wall = ids.wall
+    ids_wall.get()
+
+    N = len(time_slices)
+
+
+
 else:
     # In case of EQDSK we might have globs!
     eqdsk_files = []
@@ -229,7 +256,11 @@ else:
         eqdsk_files += glob.glob(file)
 
     eqdsk_files.sort()
+    N = len(eqdsk_files)
 
+
+
+# Create the result MED file.
 
 resultMesh = mc.ReadMeshFromFile(inp["target_mesh"])
 resultFileName = os.path.join(os.path.dirname(os.path.abspath(args.input)),
@@ -241,125 +272,127 @@ if os.path.exists(resultFileName):
 
 ml.WriteMesh(resultFileName, resultMesh, True)
 
-# Get the number of cases to run
-if inp['eq_type'] == "imas":
-    N = len(time_slices)
-elif inp['eq_type'] == "eqdsk":
-    N = len(eqdsk_files)
 
 # Now doing the main thing
-_c = 0 # In case of EQDSK, the associated time
+_c = 0 # In case of EQDSK, the associated time to write to MED field. In case
+       # of multiple EQDSK G files.
+
 TIME_RUNNING_CASES = 0
 for i in range(N):
-    with MeasureTime(f'Running case {i+1} out of {N}.') as f:
-        # Get EQDSKIO
-        if inp['eq_type'] == 'imas':
-            # Get IMAS data
-            case.eqdskio = L2G.imas_utils.imas2eqdsk(shot, run, time_slices[i],
-                user, device, version)
+    time_start = time.perf_counter()
+    print(f"Running {i} of {N}")
+    # Get EQDSKIO
 
-            if flip_psirz:
-                psirz = np.asarray(case.eqdskio.getPSIRZ())
-                psirz *= -1
-                case.eqdskio.setPSIRZ(psirz)
-            case.eq.setEqdsk(case.eqdskio)
-            associated_time = time_slices[i]
-            if args.generate_eqdsks:
-                with open(os.path.join(eqdskDir,case.eqdskio.getName()), 'w') as f:
-                    f.write(case.eqdskio.generateText())
-        else:
-            # Read the EQDSK file
-            case.loadEqdsk(eqdsk_files[i])
-            if flip_psirz:
-                psirz = np.asarray(case.eqdskio.getPSIRZ())
-                psirz *= -1
-                case.eqdskio.setPSIRZ(psirz)
-                case.eq.setEqdsk(case.eqdskio)
-            associated_time = _c
-            _c += 1
+    equilibrium = None
 
-        # Apply parameters and load Equilibrium. This is done everytime
-        case.applyParameters()
-        case.loadEq()
+    if inp['eq_type'] == 'imas':
+        # Get IMAS data
+        ids_equilibrium.getSlice(time_slices[i],
+                                 imas.imasdef.INTERPOLATION)
+        slice = ids_equilibrium.time_slice[0]
+        equilibrium = L2G.eq.getEquilibriumFromIMAS(slice, wall_ids)
 
-        if args.run_flt:
+        if flip_psirz:
+            equilibrium.psi *= -1
 
-            case.processDataOnMesh()
-            case.runFltOnMesh()
+        associated_time = time_slices[i]
+    else:
+        # Read the EQDSK file
+        eqdsk = L2G.eq.EQDSKIO(eqdsk_files[i])
+        equilibrium = L2G.eq.getEquilibriumFromEQDSKG(eqdsk)
 
-            # Write fields to mesh result
-            for key in case.mesh_results.__dict__:
-                print(f'\t\tWriting array "{key}"')
-                array = case.mesh_results.__dict__[key]
-                if array is None:
-                    continue
+        if flip_psirz:
+            equilibrium.psi *= -1
+
+        associated_time = _c
+        _c += 1
+
+    case.setEquilibrium(equilibrium)
+
+    # Apply parameters and load Equilibrium. This is done everytime
+    case.applyParameters()
+    case.loadEq()
+
+    if args.run_flt:
+
+        case.processDataOnMesh()
+        case.runFltOnMesh()
+
+        # Write fields to mesh result
+        for key in case.mesh_results.__dict__:
+            print(f'\t\tWriting array "{key}"')
+            array = case.mesh_results.__dict__[key]
+            if array is None:
+                continue
 
 
-                if key == "angle":
-                    # Transform the angle
-                    array = np.rad2deg(array)
-                    array = np.where(array > 90.0, array - 90.0, 90.0 - array)
+            if key == "angle":
+                # Transform the angle
+                array = np.rad2deg(array)
+                array = np.where(array > 90.0, array - 90.0, 90.0 - array)
 
-                if key in ["drsep", "conlen"]:
-                    # Scale to mm from m
-                    array *= 1000
+            if key in ["drsep", "conlen"]:
+                # Scale to mm from m
+                array *= 1000
 
-                infoOnComponent = None
-                if key == 'BVec':
-                    # Write the Magnetic field vector properly. That is a
-                    # 3 component array in Cartesian!
-                    infoOnComponent = ['x', 'y', 'z']
-                elif key == 'BVecCyln':
-                    # Write the Magnetic field poloidal and toroidal component
-                    # properly. A 2 component array in Cylindrical
-                    infoOnComponent = ['Pol', 'Tor']
-                elif key == 'baryCent':
-                    # Again, write the baryCent properly. In this case the
-                    # infoOnComponent will basically tell the user that the vector
-                    # is in Cylindrical system.
-                    infoOnComponent=['r', 'z', 'phi']
+            infoOnComponent = None
+            if key == 'BVec':
+                # Write the Magnetic field vector properly. That is a
+                # 3 component array in Cartesian!
+                infoOnComponent = ['x', 'y', 'z']
+            elif key == 'BVecCyln':
+                # Write the Magnetic field poloidal and toroidal component
+                # properly. A 2 component array in Cylindrical
+                infoOnComponent = ['Pol', 'Tor']
+            elif key == 'baryCent':
+                # Again, write the baryCent properly. In this case the
+                # infoOnComponent will basically tell the user that the vector
+                # is in Cylindrical system.
+                infoOnComponent=['r', 'z', 'phi']
 
-                field = L2G.meshio_utils.numpyArrayToField(arr=array, fieldName=key,
-                        mesh=resultMesh, associatedTime=associated_time,
-                        iteration=i, infoOnComponent=infoOnComponent)
+            field = L2G.meshio_utils.numpyArrayToField(arr=array, fieldName=key,
+                    mesh=resultMesh, associatedTime=associated_time,
+                    iteration=i, infoOnComponent=infoOnComponent)
 
-                L2G.meshio_utils.writeFieldToAlreadyExistingMesh(field,
-                    resultFileName)
-        if args.get_fls and case.fl_ids:
-            # Obtain FLs and output them into a file.
-            case.getFL()
-            case.saveFlToVTK(f"{case.name}_{i}.vtk")
+            L2G.meshio_utils.writeFieldToAlreadyExistingMesh(field,
+                resultFileName)
+    if args.get_fls and case.fl_ids:
+        # Obtain FLs and output them into a file.
+        case.getFL()
+        case.saveFlToVTK(f"{case.name}_{i}.vtk")
 
-        if args.calculate_drsep:
-            # Calculate the drsep. In this case the default midplane is the
-            # outer midplane.
-            case.eq.evaluate()
-            # Get OMP parameters
-            Rb, Z, Btotal, Bpm = case.eq.getOWL_midplane()
+    if args.calculate_drsep:
+        # Calculate the drsep. In this case the default midplane is the
+        # outer midplane.
+        case.eq.evaluate()
+        # Get OMP parameters
+        Rb, Z, Btotal, Bpm = case.eq.getOWL_midplane()
 
-            drsep = 1e3 * (case.mesh_results.flux - case.eq.psiLCFS) / (Rb * Bpm)
-            field = L2G.meshio_utils.numpyArrayToField(arr=drsep,
-                mesh=resultMesh, fieldName="drsep",
-                associatedTime=associated_time, iteration=i)
+        drsep = 1e3 * (case.mesh_results.flux - case.eq.psiLCFS) / (Rb * Bpm)
+        field = L2G.meshio_utils.numpyArrayToField(arr=drsep,
+            mesh=resultMesh, fieldName="drsep",
+            associatedTime=associated_time, iteration=i)
+        L2G.meshio_utils.writeFieldToAlreadyExistingMesh(field,
+            resultFileName)
+
+        if case.eq.type_ == 'div':
+            # Also write drsep for the secondary separatrix
+            Rb2, Z2, Btotal2, Bpm2 = case.eq.getOWL_midplane(lcfs=case.eq.psiLCFS2)
+            # Calculate the drsep from second separatrix
+            drsep2 = 1e3 * (case.mesh_results.flux - case.eq.psiLCFS2) / (Rb2 * Bpm2)
+            field = L2G.meshio_utils.numpyArrayToField(arr=drsep2,
+                mesh=resultMesh, fieldName="drsep2",
+                associatedTime=associated_time,
+                iteration=i)
             L2G.meshio_utils.writeFieldToAlreadyExistingMesh(field,
                 resultFileName)
 
-            if case.eq.type_ == 'div':
-                # Also write drsep for the secondary separatrix
-                Rb2, Z2, Btotal2, Bpm2 = case.eq.getOWL_midplane(lcfs=case.eq.psiLCFS2)
-                # Calculate the drsep from second separatrix
-                drsep2 = 1e3 * (case.mesh_results.flux - case.eq.psiLCFS2) / (Rb2 * Bpm2)
-                field = L2G.meshio_utils.numpyArrayToField(arr=drsep2,
-                    mesh=resultMesh, fieldName="drsep2",
-                    associatedTime=associated_time,
-                    iteration=i)
-                L2G.meshio_utils.writeFieldToAlreadyExistingMesh(field,
-                    resultFileName)
-
-        TIME_RUNNING_CASES += time_keeper.t
+    TIME_RUNNING_CASES += time.perf_counter() - time_start
 
 print("Time summaries:")
-print("\tLoading case:".rjust(25) + f"{TIME_LOADING_CASE} s")
-print("\tLoading target mesh:".rjust(25) + f"{TIME_LOADING_TARGET_MESH} s")
-print("\tLoading shadow meshes:".rjust(25) + f"{TIME_LOADING_SHADOW_MESHES} s")
-print("\tRunning cases:".rjust(25) + f"{TIME_RUNNING_CASES} s")
+print("\tLoading case:".rjust(25) + f"{TIME_LOADING_CASE:.2f} s")
+print("\tLoading target mesh:".rjust(25) + f"{TIME_LOADING_TARGET_MESH:.2f} s")
+print("\tLoading shadow meshes:".rjust(25) + f"{TIME_LOADING_SHADOW_MESHES:.2f} s")
+print("\tRunning cases:".rjust(25) + f"{TIME_RUNNING_CASES:.2f} s")
+print()
+print(f"Total: {TIME_LOADING_CASE + TIME_LOADING_TARGET_MESH + TIME_LOADING_SHADOW_MESHES + TIME_RUNNING_CASES:.2f}s")

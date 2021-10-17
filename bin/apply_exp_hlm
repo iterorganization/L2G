@@ -27,6 +27,7 @@ if not os.access(json_input, mode=os.R_OK):
 import L2G.utils
 import L2G.meshio_utils
 import L2G.imas_utils
+import imas
 import L2G.eq
 import L2G.hlm_profiles
 import medcoupling as mc
@@ -49,25 +50,27 @@ if "function_exp" not in inp["hlm"]:
     print("No defition on which exponential function to use! Check hlm for 'function_exp'")
     sys.exit(-1)
 function_exp = inp['hlm']['function_exp']
-if function_exp not in ["single", "double"]:
+if function_exp not in ["single", "double", 'ramp_down']:
     print(f"Wrong setting for function_exp: {function_exp}")
 
 function_q_par = None
 if "function_q_par" not in inp["hlm"]:
     print("No defition on which exponential function to use! Check hlm for 'function_q_par'")
-    sys.exit(-1)
-
-function_q_par = inp['hlm']['function_q_par']
-if function_q_par not in ["P_sol", "q_par"]:
-    print(f"Wrong setting for function_q_par: {function_q_par}")
-
-if function_q_par == "P_sol":
-    P_sol = inp['hlm']['P_sol']
-    F = inp['hlm']['F']
+    # sys.exit(-1)
 else:
-    Q_parallel = inp['hlm']['q_par']
+    function_q_par = inp['hlm']['function_q_par']
 
-lambda_q = inp['hlm']['lambda_q']
+    if function_q_par not in ["P_sol", "q_par"]:
+        print(f"Wrong setting for function_q_par: {function_q_par}")
+
+    if function_q_par == "P_sol":
+        P_sol = inp['hlm']['P_sol']
+        F = inp['hlm']['F']
+    else:
+        Q_parallel = inp['hlm']['q_par']
+
+if 'lambda_q' in inp['hlm']:
+    lambda_q = inp['hlm']['lambda_q']
 cutoff_conlen = inp['hlm']['cutoff_conlen']
 
 # Obtain the equilibriums
@@ -125,6 +128,16 @@ field_iterations = ml.GetAllFieldIterations(args.input_med, 'drsep')
 
 N = len(field_iterations)
 
+# If we use IMAS, then open the IDS before the loop. No reason to constantly
+# open it over and over
+if inp['eq_type'] == 'imas':
+    ids = imas.ids(shot, run)
+    ids.open_env(user, device, version)
+    ids_equilibrium = ids.equilibrium
+    # ids_wall is used for retrieving the wall silhouette.
+    ids_wall = ids.wall
+    ids_wall.get()
+
 for i in range(N):
     print(f"Processing {i+1} of {N} slices.")
     index, order, time = field_iterations[i]
@@ -132,13 +145,17 @@ for i in range(N):
 
     # Obtain the EQDSK
     if inp['eq_type'] == 'imas':
-        eqdsk = L2G.imas_utils.imas2eqdsk(shot, run, time,
-                user, device, version)
+        # Open the IMAS ids
+        ids_equilibrium.getSlice(time, imas.imasdef.INTERPOLATION)
+        slice = ids_equilibrium.time_slice[0]
+        equilibrium = L2G.eq.getEquilibriumFromIMAS(slice, wall_ids)
     else:
-        eqdsk = L2G.eq.EQDSK(eqdsk_files[i])
+        eqdsk = L2G.eq.EQDSKIO(eqdsk_files[i])
+        equilibrium = L2G.eq.getEquilibriumFromEQDSKG(eqdsk)
 
     # Load the Equilibrium
-    eq = L2G.eq.EQ(eqdsk)
+    # eq = L2G.eq.EQ(eqdsk)
+    eq.setEquilibrium(equilibrium)
 
     # Obtain the midplane boundary values
     eq.evaluate()
@@ -163,16 +180,40 @@ for i in range(N):
                 F)
         else: # q_par
             q = L2G.hlm_profiles.single_exponential_qpar(drsep, Bpm, Rb, lambda_q, q_par)
-    else: # double
+    elif function_exp == "double": # double
         if function_q_par == "P_sol":
             raise NotImplementedError
         else: # q_par
             raise NotImplementedError
+    elif function_exp == "ramp_down":
+        # First check if the eqdsk_type is imas. If it is not we cannot gather
+        # the necessary
+        if inp["eq_type"] != 'imas':
+            print('Cannot apply Ramp Down function as key information is ' +
+                  'required, which is not available in EQDSK G file.!')
+            sys.exit(-1)
+
+        # Obtain information from IMAS equilibrium IDS
+        a = slice.boundary.minor_radius
+        R = slice.global_quantities.magnetic_axis.r
+        Ip = abs(slice.global_quantities.ip) # Also used as P_sol
+        Area = slice.global_quantities.area
+        if Ip < 10e6:
+            # Lambda_q is in millimeters.
+            lambda_q = L2G.hlm_profiles.decay_length_L_mode_diverted(a, R,
+                Ip, Area)
+
+            print(f'RAMP_DOWN: {i} {time} {lambda_q} {Ip}')
+            q = L2G.hlm_profiles.single_exponential_psol(drsep, Bpm, Rb,
+                    lambda_q * 1e-3, Ip)
+        else:
+            lambda_q = 'NaN'
+            q = np.zeros(drsep.shape)
 
     # Now we have our parallel q. We have to apply the total expansion factor!
 
     # Total flux expansion and incident angle!
-    if function_q_par == "P_sol":
+    if function_q_par == "P_sol" or function_exp == "ramp_down":
         # In the single_exponential_psol, a B_toroidal (we take total) is
         # missing from the expression, since when we apply the total flux
         # expansion term, it destroys itself.
@@ -191,11 +232,9 @@ for i in range(N):
 
     # Convert to field
     q_field = L2G.meshio_utils.numpyArrayToField(arr=q,
-        fieldName=f"q @ lambda_q={lambda_q}",
+        fieldName=f"q",
         mesh=result_mesh_data,
         iteration=index, associatedTime=time)
     L2G.meshio_utils.writeFieldToAlreadyExistingMesh(q_field,
         result_file_name)
-
-
 

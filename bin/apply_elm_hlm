@@ -76,7 +76,8 @@ q_parallel_field = L2G.meshio_utils.numpyArrayToField(q_parallel,
 L2G.meshio_utils.writeFieldToAlreadyExistingMesh(q_parallel_field,
     args.input_med)
 
-q_inc = elm * Bdot / Btotal + interELM * Bdot
+q_inc = (elm + interELM) * Bdot / Btotal # Bdot applies the incident angle and the total
+                          # flux expansion
 q_inc = np.where(conlen > CUTOFF, q_inc, 0)
 q_inc_field = L2G.meshio_utils.numpyArrayToField(q_inc,
     "ELM + inter-ELM", result_mesh_data, 0, -1)
