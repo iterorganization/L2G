@@ -119,7 +119,7 @@ print('Finished calculating ELM_profile')
 np.savetxt(os.path.join(os.getcwd(), outputFileName), data_jnme[:2])
 
 if args.create_graphics:
-    from L2G.eq import EQDSKIO, EQ
+    from L2G.eq import EQDSKIO, EQ, getEquilibriumFromEQDSKG
     import matplotlib.pyplot as plt
 
     eqdsk = EQDSKIO(args.eqdsk)
@@ -129,7 +129,9 @@ if args.create_graphics:
               "the inter-ELM profile.")
         sys.exit(1)
 
-    eq = EQ(eqdsk)
+    equilibrium = getEquilibriumFromEQDSKG(eqdsk)
+
+    eq = EQ(equilibrium)
     eq.evaluate()
     Rb, Z, Btot, Bpm = eq.getOWL_midplane()
 

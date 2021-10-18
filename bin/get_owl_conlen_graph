@@ -110,7 +110,7 @@ toroidal_points = 360
 
 # Boundary values at midplane
 PsiLCFS = case.eq.psiLCFS
-Rb, Z, Btot, Bpm = case.eq.get_midplane_info()
+Rb, Z, Btot, Bpm = case.eq.getOWL_midplane()
 flux = case.point_results.flux[:2000] # In all cases the flux values are the
                                       # same, as the points are on the same
                                       # magnetic surfaces, just toroidally shifted

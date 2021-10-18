@@ -36,7 +36,8 @@ result_mesh_data = mc.ReadMeshFromFile(args.input_med)
 CUTOFF = 4.3e3
 eq = L2G.eq.EQ()
 eqdsk = L2G.eq.EQDSKIO(args.input_eqdsk)
-eq.setEqdsk(eqdsk)
+equilibrium = L2G.eq.getEquilibriumFromEQDSKG(eqdsk)
+eq.setEquilibrium(equilibrium)
 eq.evaluate()
 
 drsep = L2G.meshio_utils.fieldToNumpy(args.input_med, "drsep") * 1e-3
