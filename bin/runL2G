@@ -290,10 +290,13 @@ for i in range(N):
         ids_equilibrium.getSlice(time_slices[i],
                                  imas.imasdef.INTERPOLATION)
         slice = ids_equilibrium.time_slice[0]
-        equilibrium = L2G.eq.getEquilibriumFromIMAS(slice, wall_ids)
+        equilibrium = L2G.eq.getEquilibriumFromIMAS(slice, ids_wall)
 
+        # Take PSI boundary from IMAS ids
+        psiLCFS = slice.global_quantities.psi_boundary / (2 * np.pi)
         if flip_psirz:
             equilibrium.psi *= -1
+            psiLCFS *= -1
 
         associated_time = time_slices[i]
     else:

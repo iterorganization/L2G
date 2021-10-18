@@ -138,6 +138,8 @@ if inp['eq_type'] == 'imas':
     ids_wall = ids.wall
     ids_wall.get()
 
+eq = L2G.eq.EQ()
+
 for i in range(N):
     print(f"Processing {i+1} of {N} slices.")
     index, order, time = field_iterations[i]
@@ -148,7 +150,7 @@ for i in range(N):
         # Open the IMAS ids
         ids_equilibrium.getSlice(time, imas.imasdef.INTERPOLATION)
         slice = ids_equilibrium.time_slice[0]
-        equilibrium = L2G.eq.getEquilibriumFromIMAS(slice, wall_ids)
+        equilibrium = L2G.eq.getEquilibriumFromIMAS(slice, ids_wall)
     else:
         eqdsk = L2G.eq.EQDSKIO(eqdsk_files[i])
         equilibrium = L2G.eq.getEquilibriumFromEQDSKG(eqdsk)
