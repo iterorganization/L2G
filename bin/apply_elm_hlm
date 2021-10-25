@@ -16,7 +16,7 @@ parser.add_argument('-m', '--input_med', type=str,
 parser.add_argument('-e', '--input_elm', type=str, default='',
                     help='Input elm file for diverted scenarios (optional)')
 parser.add_argument('-c', '--cutoff', type=float, default=4.3e3,
-                    help='Input cutoff length of FLs.')
+                    help='Input cutoff length of FLs. In millimeters')
 
 args = parser.parse_args()
 import sys
@@ -29,11 +29,14 @@ import L2G.utils
 import L2G.hlm_profiles
 import medcoupling as mc
 
+print("Applying ELM PLM profile...")
+
 # Load ELM data
 elm_data = np.loadtxt(args.input_elm)
 
 result_mesh_data = mc.ReadMeshFromFile(args.input_med)
-CUTOFF = 4.3e3
+CUTOFF = args.cutoff
+print(f"Cut-off for connection lengths is {CUTOFF*1e-3} m.")
 eq = L2G.eq.EQ()
 eqdsk = L2G.eq.EQDSKIO(args.input_eqdsk)
 equilibrium = L2G.eq.getEquilibriumFromEQDSKG(eqdsk)
@@ -84,3 +87,5 @@ q_inc_field = L2G.meshio_utils.numpyArrayToField(q_inc,
     "ELM + inter-ELM", result_mesh_data, 0, -1)
 L2G.meshio_utils.writeFieldToAlreadyExistingMesh(q_inc_field,
     args.input_med)
+
+print("Done.")

@@ -36,6 +36,8 @@ from L2G.core import PyEmbreeAccell
 import glob
 import numpy as np
 
+print("Starting...")
+
 # Load json file
 inp = L2G.utils.load_l2g_json(json_input)
 
@@ -72,6 +74,8 @@ else:
 if 'lambda_q' in inp['hlm']:
     lambda_q = inp['hlm']['lambda_q']
 cutoff_conlen = inp['hlm']['cutoff_conlen']
+
+print("Loading equilibriums...", end=" ")
 
 # Obtain the equilibriums
 # Figure out what kind of equilibriums do we have
@@ -113,6 +117,9 @@ else:
 
     eqdsk_files.sort()
 
+print("Done.")
+
+print("Applying heat load map...", end=" ")
 result_file_name = args.input_med
 # Load mesh for creation of fields
 result_mesh_data = mc.ReadMeshFromFile(result_file_name)
@@ -240,3 +247,4 @@ for i in range(N):
     L2G.meshio_utils.writeFieldToAlreadyExistingMesh(q_field,
         result_file_name)
 
+print("Done.")

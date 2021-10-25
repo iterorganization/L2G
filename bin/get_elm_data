@@ -58,6 +58,8 @@ parser.add_argument('-eq', '--eqdsk', type=str,
 
 args = parser.parse_args()
 
+print("Starting.")
+
 import os
 import sys
 import numpy as np
@@ -119,6 +121,7 @@ print('Finished calculating ELM_profile')
 np.savetxt(os.path.join(os.getcwd(), outputFileName), data_jnme[:2])
 
 if args.create_graphics:
+    print('Creating graphics')
     from L2G.eq import EQDSKIO, EQ, getEquilibriumFromEQDSKG
     import matplotlib.pyplot as plt
 
@@ -234,3 +237,4 @@ if args.create_graphics:
     ax.set_ylim((0.001, 1000.0))
 
     f.savefig(f"{os.path.splitext(os.path.basename(inputFile))[0]}_qpar.pdf")
+    print("Done.")

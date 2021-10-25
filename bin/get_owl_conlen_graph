@@ -42,12 +42,15 @@ parser.add_argument('-nc', '--cores', type=int,
 
 args = parser.parse_args()
 
+print("Starting...")
+
 import L2G
 # L2G.enableLogging()
 import L2G.meshio_utils
 import L2G.core
 import numpy as np
 import L2G.eq
+import time
 case = L2G.FieldLineTracer()
 
 #Load full tokamak
@@ -72,7 +75,9 @@ DRSEP=case.eq.drsep
 case.name = f"drsep{DRSEP}cm_midplane_connection_length"
 
 # Midplane points
+print("Creating midplane points for tracing FLs.")
 points = case.createMidplanePoints()
+print("Done.")
 
 # case.setTargetData(points, [])
 case.target_points = points
@@ -101,8 +106,13 @@ case.parameters.num_of_threads = cores # Number of OMP threads for run in parall
 
 case.applyParameters()
 case.loadEq()
-case.runFltOnPoints()
 
+print("Running FLT on midplane points (both directions).")
+start = time.time()
+case.runFltOnPoints()
+print(f"Done in {time.time() - start} seconds.")
+
+print("Averaging the data to single toroidal angle.")
 # Calculate the averages
 # Points in midplane
 radial_points = 2000
@@ -111,6 +121,11 @@ toroidal_points = 360
 # Boundary values at midplane
 PsiLCFS = case.eq.psiLCFS
 Rb, Z, Btot, Bpm = case.eq.getOWL_midplane()
+print("Boundary values:")
+print(f"R_boundary [m]: {Rb}")
+print(f"Midplane height [m]: {Z}")
+print(f"Btotal at midplane [T]: {Btot}")
+print(f"Bpm at midplane [T]: {Bpm}")
 flux = case.point_results.flux[:2000] # In all cases the flux values are the
                                       # same, as the points are on the same
                                       # magnetic surfaces, just toroidally shifted
@@ -138,4 +153,6 @@ out[:, 1] = drsep_r
 out[:, 2] = conlenUp_mean
 out[:, 3] = conlenDown_mean
 
+print(f"Saving data to conlen_data_{DRSEP/10:.2f}.dat")
 np.savetxt(f'conlen_data_{DRSEP/10:.2f}.dat', out, header="drsep(Flux)[m],drsep(R)[m],conlenUp[m],conlenDown[m]")
+print("Done.")
