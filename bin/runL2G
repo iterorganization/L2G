@@ -97,6 +97,13 @@ for option in inp['options']:
 if "fl_ids" in inp:
     case.fl_ids = inp["fl_ids"]
 
+# See if there is a custom wall limiter
+if 'wall_limiter' in inp:
+    custom_wall_limiter = True
+    print("Custom wall limiter included")
+else:
+    custom_wall_limiter = False
+
 # Let's see if we run in a HPC job. Currently only slurm based.
 slurm_job = False
 if "SLURM_JOBID" in os.environ:
@@ -280,7 +287,7 @@ _c = 0 # In case of EQDSK, the associated time to write to MED field. In case
 TIME_RUNNING_CASES = 0
 for i in range(N):
     time_start = time.perf_counter()
-    print(f"Running {i} of {N}")
+    print(f"Running {i + 1} of {N}")
     # Get EQDSKIO
 
     equilibrium = None
@@ -293,22 +300,23 @@ for i in range(N):
         equilibrium = L2G.eq.getEquilibriumFromIMAS(slice, ids_wall)
 
         # Take PSI boundary from IMAS ids
-        psiLCFS = slice.global_quantities.psi_boundary / (2 * np.pi)
-        if flip_psirz:
-            equilibrium.psi *= -1
-            psiLCFS *= -1
-
+        equilibrium.psi_boundary = slice.global_quantities.psi_boundary / (2 * np.pi)
         associated_time = time_slices[i]
     else:
         # Read the EQDSK file
         eqdsk = L2G.eq.EQDSKIO(eqdsk_files[i])
         equilibrium = L2G.eq.getEquilibriumFromEQDSKG(eqdsk)
-
-        if flip_psirz:
-            equilibrium.psi *= -1
-
         associated_time = _c
         _c += 1
+
+    if flip_psirz:
+        equilibrium.psi *= -1
+        equilibrium.psi_boundary *= -1
+        equilibrium.psi_sign *= -1
+
+    if custom_wall_limiter:
+        equilibrium.wall_contour_r = np.array(inp['wall_limiter']['r'])
+        equilibrium.wall_contour_z = np.array(inp['wall_limiter']['z'])
 
     case.setEquilibrium(equilibrium)
 
@@ -316,79 +324,22 @@ for i in range(N):
     case.applyParameters()
     case.loadEq()
 
+    case.processDataOnMesh()
+    # Running FLT and saving FLT data on input mesh
     if args.run_flt:
-
-        case.processDataOnMesh()
         case.runFltOnMesh()
 
-        # Write fields to mesh result
-        for key in case.mesh_results.__dict__:
-            print(f'\t\tWriting array "{key}"')
-            array = case.mesh_results.__dict__[key]
-            if array is None:
-                continue
+    if args.calculate_drsep:
+        case.calculateDrsep()
 
-
-            if key == "angle":
-                # Transform the angle
-                array = np.rad2deg(array)
-                array = np.where(array > 90.0, array - 90.0, 90.0 - array)
-
-            if key in ["drsep", "conlen"]:
-                # Scale to mm from m
-                array *= 1000
-
-            infoOnComponent = None
-            if key == 'BVec':
-                # Write the Magnetic field vector properly. That is a
-                # 3 component array in Cartesian!
-                infoOnComponent = ['x', 'y', 'z']
-            elif key == 'BVecCyln':
-                # Write the Magnetic field poloidal and toroidal component
-                # properly. A 2 component array in Cylindrical
-                infoOnComponent = ['Pol', 'Tor']
-            elif key == 'baryCent':
-                # Again, write the baryCent properly. In this case the
-                # infoOnComponent will basically tell the user that the vector
-                # is in Cylindrical system.
-                infoOnComponent=['r', 'z', 'phi']
-
-            field = L2G.meshio_utils.numpyArrayToField(arr=array, fieldName=key,
-                    mesh=resultMesh, associatedTime=associated_time,
-                    iteration=i, infoOnComponent=infoOnComponent)
-
-            L2G.meshio_utils.writeFieldToAlreadyExistingMesh(field,
-                resultFileName)
+    case.saveMeshResultsToExistingMed(mesh_med=resultMesh,
+        output_med_file=resultFileName, iteration=i,
+        associated_time=associated_time)
+    # Running FLT to get FLs from selected ids.
     if args.get_fls and case.fl_ids:
         # Obtain FLs and output them into a file.
         case.getFL()
         case.saveFlToVTK(f"{case.name}_{i}.vtk")
-
-    if args.calculate_drsep:
-        # Calculate the drsep. In this case the default midplane is the
-        # outer midplane.
-        case.eq.evaluate()
-        # Get OMP parameters
-        Rb, Z, Btotal, Bpm = case.eq.getOWL_midplane()
-
-        drsep = 1e3 * (case.mesh_results.flux - case.eq.psiLCFS) / (Rb * Bpm)
-        field = L2G.meshio_utils.numpyArrayToField(arr=drsep,
-            mesh=resultMesh, fieldName="drsep",
-            associatedTime=associated_time, iteration=i)
-        L2G.meshio_utils.writeFieldToAlreadyExistingMesh(field,
-            resultFileName)
-
-        if case.eq.type_ == 'div':
-            # Also write drsep for the secondary separatrix
-            Rb2, Z2, Btotal2, Bpm2 = case.eq.getOWL_midplane(lcfs=case.eq.psiLCFS2)
-            # Calculate the drsep from second separatrix
-            drsep2 = 1e3 * (case.mesh_results.flux - case.eq.psiLCFS2) / (Rb2 * Bpm2)
-            field = L2G.meshio_utils.numpyArrayToField(arr=drsep2,
-                mesh=resultMesh, fieldName="drsep2",
-                associatedTime=associated_time,
-                iteration=i)
-            L2G.meshio_utils.writeFieldToAlreadyExistingMesh(field,
-                resultFileName)
 
     TIME_RUNNING_CASES += time.perf_counter() - time_start
 
