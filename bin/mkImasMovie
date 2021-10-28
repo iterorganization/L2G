@@ -1,0 +1,178 @@
+#!/usr/bin/env python3
+import argparse
+description = """From an IMAS IDS create a move of the LCFS or
+separatrixes.
+"""
+
+
+parser = argparse.ArgumentParser(description='Create EQDSK from IDS time slice')
+
+parser.add_argument('-s', '--shot', metavar='SHOT', type=int,
+                    help='Shot number',
+                    required=True)
+parser.add_argument('-r', '--run', metavar='RUN', type=int,
+                    help='Run number', required=True)
+parser.add_argument('-u', '--user', metavar='USER', type=str, default="public",
+                    help='Image DPI or size control')
+parser.add_argument('-d', '--device',
+                    metavar="DEVICE", type=str, default="ITER", help='Image bitrate')
+parser.add_argument('-ts', '--time_start', metavar='#time_start', type=float,
+                    default=0.0, help='Starting time')
+parser.add_argument('-te', '--time_end', type=float, default=999999)
+
+
+args = parser.parse_args()
+
+import imas
+
+ids = imas.ids(args.shot, args.run)
+ids.open_env(args.user, args.device, '3')
+
+wall_ids = ids.wall
+wall_ids.get()
+
+summary_ids = ids.summary
+summary_ids.get()
+
+equilibrium = ids.equilibrium
+
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation, PillowWriter
+from functools import partial
+
+figure = plt.figure()
+figure.set_tight_layout(True)
+ax = figure.add_subplot()
+ax.grid(True)
+ax.axis('equal')
+ax.set_xlabel('R [m]')
+ax.set_ylabel('Z [m]')
+
+wall_contour_r = wall_ids.description_2d[0].limiter.unit[0].outline.r
+wall_contour_z = wall_ids.description_2d[0].limiter.unit[0].outline.z
+Z_LIMITS = np.min(wall_contour_z) - 1, np.max(wall_contour_z) + 1
+R_LIMITS = np.min(wall_contour_r) - 1, np.max(wall_contour_r) + 1
+
+# Plot limiter
+ax.plot(wall_contour_r, wall_contour_z, 'r-')
+lines = [] # Holds plotting objects
+
+N = len(summary_ids.time)
+i = 0
+
+# First separatrix or LCFS
+lcfs_contour_r = []
+lcfs_contour_z = []
+
+# Optional secondary contour or LCFS
+secondary_contour_r = []
+secondary_contour_z = []
+
+# Labels
+times = []
+from time import sleep
+for time in summary_ids.time:
+
+    if time < args.time_start:
+        continue
+    if time > args.time_end:
+        continue
+
+    times.append(f"t={time:12.4f}s")
+    print(time)
+    equilibrium.getSlice(time, 1)
+
+    slice = equilibrium.time_slice[0]
+    if len(slice.boundary_separatrix.outline.r):
+        collection_r = []
+        collection_z = []
+        # Figure out the parts of the plot.
+        diff_r = np.abs(np.diff(slice.boundary_separatrix.outline.r))
+        indexes = [_ for _ in np.argwhere(diff_r > 0.5).flatten()]
+
+        diff_z = np.abs(np.diff(slice.boundary_separatrix.outline.z))
+        indexes += [_ for _ in np.argwhere(diff_z > 0.5).flatten()]
+        indexes = [_ + 1 for _ in set(indexes)]
+        indexes.sort()
+
+        # Make chunks based on these changes
+        prev_index = 0
+
+        if len(indexes) == 0:
+            collection_r.append(slice.boundary_separatrix.outline.r)
+            collection_z.append(slice.boundary_separatrix.outline.z)
+        else:
+            for index in indexes:
+                collection_r.append(slice.boundary_separatrix.outline.r[prev_index:index])
+                collection_z.append(slice.boundary_separatrix.outline.z[prev_index:index])
+                prev_index = index
+            collection_r.append(slice.boundary_separatrix.outline.r[indexes[-1]:])
+            collection_z.append(slice.boundary_separatrix.outline.z[indexes[-1]:])
+        lcfs_contour_r.append(collection_r)
+        lcfs_contour_z.append(collection_z)
+    else:
+        lcfs_contour_r.append([])
+        lcfs_contour_z.append([])
+
+    if len(slice.boundary_secondary_separatrix.outline.r):
+        collection_r = []
+        collection_z = []
+        # Figure out the parts of the plot.
+        diff_r = np.abs(np.diff(slice.boundary_secondary_separatrix.outline.r))
+        indexes = [_ for _ in np.argwhere(diff_r > 0.5).flatten()]
+
+        diff_z = np.abs(np.diff(slice.boundary_secondary_separatrix.outline.z))
+        indexes += [_ for _ in np.argwhere(diff_z > 0.5).flatten()]
+        indexes = [_ + 1 for _ in set(indexes)]
+        indexes.sort()
+
+        # Make chunks based on these changes
+        prev_index = 0
+        if len(indexes) == 0:
+            collection_r.append(slice.boundary_secondary_separatrix.outline.r)
+            collection_z.append(slice.boundary_secondary_separatrix.outline.z)
+        else:
+            for index in indexes:
+                collection_r.append(slice.boundary_secondary_separatrix.outline.r[prev_index:index])
+                collection_z.append(slice.boundary_secondary_separatrix.outline.z[prev_index:index])
+                prev_index = index
+            collection_r.append(slice.boundary_secondary_separatrix.outline.r[indexes[-1]:])
+            collection_z.append(slice.boundary_secondary_separatrix.outline.z[indexes[-1]:])
+        secondary_contour_r.append(collection_r)
+        secondary_contour_z.append(collection_z)
+
+    else:
+        secondary_contour_r.append([])
+        secondary_contour_z.append([])
+N = len(times)
+# Now make the animation
+
+def update(i, lr, lz, sr, sz, lines, labels):
+    print(f"Frame {i}")
+    while lines:
+        el = lines.pop(0)
+        el.remove()
+
+    if len(lr[i]):
+        for j in range(len(lr[i])):
+            lines += ax.plot(lr[i][j], lz[i][j], '-', c='b')
+
+    if len(sr[i]):
+        for j in range(len(sr[i])):
+            lines += ax.plot(sr[i][j], sz[i][j], '-', c='g')
+    ax.set_ylim(Z_LIMITS)
+    ax.set_xlim(R_LIMITS)
+
+    lines.append(ax.text(0.7, 0.9, labels[i], transform = ax.transAxes))
+
+frame_update = partial(update, lr=lcfs_contour_r, lz=lcfs_contour_z,
+                              sr=secondary_contour_r, sz=secondary_contour_z,
+                              lines=lines, labels=times)
+
+anim = FuncAnimation(figure, frame_update, frames=N, interval=250)
+anim.save("test.gif", writer=PillowWriter())
+
+
+
+
