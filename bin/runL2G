@@ -94,8 +94,9 @@ for option in inp['options']:
         setattr(case.options, option, inp['options'][option])
 
 # See if there are any FL ids to set
+fl_ids = []
 if "fl_ids" in inp:
-    case.fl_ids = inp["fl_ids"]
+    fl_ids = inp["fl_ids"]
 
 # See if there is a custom wall limiter
 if 'wall_limiter' in inp:
@@ -268,31 +269,35 @@ else:
 
 
 # Create the result MED file.
+if args.run_flt:
+    resultMesh = mc.ReadMeshFromFile(inp["target_mesh"])
+    resultFileName = os.path.join(os.path.dirname(os.path.abspath(args.input)),
+                    case.name + '.med')
 
-resultMesh = mc.ReadMeshFromFile(inp["target_mesh"])
-resultFileName = os.path.join(os.path.dirname(os.path.abspath(args.input)),
-                case.name + '.med')
+    if os.path.exists(resultFileName):
+        print("Warning result file already exists! Overwriting!")
+        # time.sleep(10)
 
-if os.path.exists(resultFileName):
-    print("Warning result file already exists! Overwriting!")
-    # time.sleep(10)
-
-ml.WriteMesh(resultFileName, resultMesh, True)
+    ml.WriteMesh(resultFileName, resultMesh, True)
 
 
 # Now doing the main thing
 _c = 0 # In case of EQDSK, the associated time to write to MED field. In case
        # of multiple EQDSK G files.
 
+# NOTE THAT THE INDEX "i" IS THE MAIN INDEX, SO SUBSEQUENT FOR LOOPS INSIDE
+# MUST NOT USE "i" AS INDEX!
+
 TIME_RUNNING_CASES = 0
 for i in range(N):
     time_start = time.perf_counter()
-    print(f"Running {i + 1} of {N}")
+    print(f"Getting results for {i + 1} of {N} equilibriums.")
     # Get EQDSKIO
 
     equilibrium = None
 
     if inp['eq_type'] == 'imas':
+        print("Obtaining equilibrium data from IMAS")
         # Get IMAS data
         ids_equilibrium.getSlice(time_slices[i],
                                  imas.imasdef.INTERPOLATION)
@@ -303,6 +308,7 @@ for i in range(N):
         equilibrium.psi_boundary = slice.global_quantities.psi_boundary / (2 * np.pi)
         associated_time = time_slices[i]
     else:
+        print("Obtaining equilibrium data from EQDSK G file")
         # Read the EQDSK file
         eqdsk = L2G.eq.EQDSKIO(eqdsk_files[i])
         equilibrium = L2G.eq.getEquilibriumFromEQDSKG(eqdsk)
@@ -327,19 +333,32 @@ for i in range(N):
     case.processDataOnMesh()
     # Running FLT and saving FLT data on input mesh
     if args.run_flt:
+        print("Running FLT...")
         case.runFltOnMesh()
 
     if args.calculate_drsep:
+        print("Calculating drsep...")
         case.calculateDrsep()
 
+    print("Saving results to MED file...")
     case.saveMeshResultsToExistingMed(mesh_med=resultMesh,
         output_med_file=resultFileName, iteration=i,
         associated_time=associated_time)
     # Running FLT to get FLs from selected ids.
-    if args.get_fls and case.fl_ids:
+    if args.get_fls and fl_ids:
+        print("Getting FLs...")
         # Obtain FLs and output them into a file.
-        case.getFL()
-        case.saveFlToVTK(f"{case.name}_{i}.vtk")
+        if all(isinstance(x, list) for x in fl_ids):
+            # We have a group of IDs.
+            for j, subset in enumerate(fl_ids):
+                case.fl_ids = subset
+                case.getFL()
+                case.saveFlToVTK(f"{case.name}_{i}_{j}.vtk")
+
+        else:
+            case.fl_ids = fl_ids
+            case.getFL()
+            case.saveFlToVTK(f"{case.name}_{i}.vtk")
 
     TIME_RUNNING_CASES += time.perf_counter() - time_start
 
