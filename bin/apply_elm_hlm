@@ -17,6 +17,8 @@ parser.add_argument('-e', '--input_elm', type=str, default='',
                     help='Input elm file for diverted scenarios (optional)')
 parser.add_argument('-c', '--cutoff', type=float, default=4.3e3,
                     help='Input cutoff length of FLs. In millimeters')
+parser.add_argument('-rb', '--r_break', type=float, default=0.025,
+                    help='Breakpoint. In meters.')
 
 args = parser.parse_args()
 import sys
@@ -61,7 +63,7 @@ expansionField = L2G.meshio_utils.numpyArrayToField(expansion,
 L2G.meshio_utils.writeFieldToAlreadyExistingMesh(expansionField,
     args.input_med)
 
-interELM = L2G.hlm_profiles.inter_ELM(drsep, Rb, Btotal, Bpm)
+interELM = L2G.hlm_profiles.inter_ELM(drsep, Rb, Btotal, Bpm, Rb=args.r_break)
 elm = L2G.hlm_profiles.ELM(drsep, elm_data_r, elm_data_q)
 
 elm_par_field = L2G.meshio_utils.numpyArrayToField(elm,

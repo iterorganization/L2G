@@ -55,7 +55,8 @@ parser.add_argument('-g', '--create_graphics', type=bool, default=False,
     help="Create additional graphics", metavar="True|False")
 parser.add_argument('-eq', '--eqdsk', type=str,
     help="Eqdsk file required for making the graphics", metavar="file.eqdsk")
-
+parser.add_argument('-rb', '--r_break', type=float, default=0.025,
+                    help='Breakpoint. In meters.')
 args = parser.parse_args()
 
 print("Starting.")
@@ -169,7 +170,7 @@ if args.create_graphics:
     def interELM_ICRH(R, Rb, Btot, Bpm, lambda_n=0.005, lambda_m=0.17):
         P_sol = 100 # MW
         F = 0.5
-        Rbreak=0.025
+        Rbreak=args.r_break
 
         q = np.zeros(R.shape)
         C = F * P_sol * Btot / (2 * np.pi * Rb * Bpm * lambda_n)
