@@ -192,12 +192,12 @@ if args.create_graphics:
     axs[3].set_ylim((0.001, 1000.0))
 
     # Steady-State profile
-    r = np.linspace(0, 0.3, 500)
+    DRSEP = eq.drsep * 1e-3 # We convert it back to meters
+    r = np.linspace(DRSEP, 0.3, 500)
     q = 5
     # 8.29 - 8.20
     lambda_q = 0.09
 
-    DRSEP = eq.drsep * 1e-3 # We convert it back to meters
     print(f"Evaluated drsep: {DRSEP}")
 
     q_elm = q * np.exp(-(r - DRSEP) / 0.09)

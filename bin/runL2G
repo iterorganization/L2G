@@ -16,8 +16,6 @@ parser.add_argument('-v', '--verbose', help='Verbosity',
 
 parser.add_argument('-p', '--progress', help='Progress bar. Enable/Disable return carriage',
                     default=1, type=int)
-parser.add_argument('-e', '--generate_eqdsks', help='Output eqdsks if IMAS is used',
-                    default=0, type=int)
 parser.add_argument('-r', '--run_flt', help='Run FLT tracing',
                     default=1, type=int)
 parser.add_argument('-fl', '--get_fls', help="Obtain fieldlines",
@@ -30,16 +28,8 @@ RETURN_CARRIAGE = "\r\t"
 if not args.progress:
     RETURN_CARRIAGE = "\n\t"
 
-# Create EQDSKS directory for outputting the EQDSKS G files.
-# If we wish to generate EQDSK G files, i.e., when we have the IMAS database as
-# the source of the equilibrium data and we wish to have file records, in this
-# case EQDSK G, of the equilibrium data.
 
 import os
-if args.generate_eqdsks:
-    eqdskDir = os.path.join(os.getcwd(), 'EQDSKS')
-    if not os.path.exists(eqdskDir):
-        os.mkdir(eqdskDir)
 import sys
 
 # Check if the JSON file can be read.
@@ -58,6 +48,7 @@ import medcoupling as mc
 import MEDLoader as ml
 from L2G.core import PyEmbreeAccell
 if args.verbose:
+    L2G.addStreamHandler()
     L2G.enableLogging()
 import glob
 import numpy as np
@@ -66,17 +57,11 @@ import numpy as np
 inp = L2G.utils.load_l2g_json(json_input)
 # Create an instance of the FieldLineTracer so that we start setting parameters
 # and input data.
-case = L2G.FieldLineTracer()
-
-flip_psirz = False
+case = L2G.utils.FieldLineTracer()
 
 time_start = time.perf_counter()
 print()
 print('Loading case parameters.')
-if "eq_flip_psi" in inp:
-    # In most convention we wish to have the gradient of the poloidal
-    # magnetic flux showing out.
-    flip_psirz = inp["eq_flip_psi"]
 
 case.name = inp['name']
 # Set the parameters. If unknown, just print and ignore
@@ -97,6 +82,10 @@ for option in inp['options']:
 fl_ids = []
 if "fl_ids" in inp:
     fl_ids = inp["fl_ids"]
+
+correct_helicity = True
+if "correct_helicity" in inp:
+    correct_helicity = inp["correct_helicity"]
 
 # See if there is a custom wall limiter
 if 'wall_limiter' in inp:
@@ -213,75 +202,27 @@ with open(f"{case.name}_embree_meshes.txt", 'w') as f:
 case.setEmbreeObj(embree)
 TIME_LOADING_SHADOW_MESHES = time.perf_counter() - time_start
 
+print(f"Loading {inp['eq_type']} equilibriums")
+
+equilIter = L2G.utils.EquilibriumIterator()
+
+equilIter.correctHelicity(correct_helicity)
 # Figure out what kind of equilibriums do we have
 if inp['eq_type'] == "imas":
-
-    import L2G.imas_utils
-    import imas
-
-    shot = inp['imas']['shot']
-    run = inp['imas']['run']
-
-    if 'user' not in inp['imas']:
-        user = 'public'
-    else:
-        user = inp['imas']['user']
-
-    if 'device' not in inp['imas']:
-        device = 'iter'
-    else:
-        device = inp['imas']['device']
-
-    if 'version' not in inp['imas']:
-        version = '3'
-    else:
-        version = inp['imas']['version']
-
-    if "times" in inp['imas']:
-        time_slices = inp['imas']['times']
-    else:
-        # Construct the time_slices
-        n_steps = int((inp['imas']['time_end'] - inp['imas']['time_start']) / inp['imas']['time_step']) + 1
-        time_slices = np.linspace(inp['imas']['time_start'],
-                                  inp['imas']['time_end'],
-                                  n_steps)
-    # Open an IDS instance
-    ids = imas.ids(shot, run)
-    ids.open_env(user, device, version)
-
-    ids_equilibrium = ids.equilibrium
-    ids_wall = ids.wall
-    ids_wall.get()
-
-    N = len(time_slices)
-
-
-
+    equilIter.loadIMASEquilibriums(inp['imas'])
 else:
-    # In case of EQDSK we might have globs!
-    eqdsk_files = []
-    for file in inp['eqdsk_files']:
-        if "*" in file:
-            eqdsk_files += glob.glob(file)
-        else:
-            eqdsk_files.append(file)
-
-    eqdsk_files.sort()
-    N = len(eqdsk_files)
-
-
+    equilIter.loadEqdskEquilibriums(inp['eqdsk_files'])
 
 # Create the result MED file.
-if args.run_flt:
-    resultMesh = mc.ReadMeshFromFile(inp["target_mesh"])
-    resultFileName = os.path.join(os.path.dirname(os.path.abspath(args.input)),
-                    case.name + '.med')
+resultMesh = mc.ReadMeshFromFile(inp["target_mesh"])
+resultFileName = os.path.join(os.path.dirname(os.path.abspath(args.input)),
+                case.name + '.med')
 
-    if os.path.exists(resultFileName):
-        print("Warning result file already exists! Overwriting!")
-        # time.sleep(10)
+if os.path.exists(resultFileName):
+    print("Warning result file already exists! Overwriting!")
+    # time.sleep(10)
 
-    ml.WriteMesh(resultFileName, resultMesh, True)
+ml.WriteMesh(resultFileName, resultMesh, True)
 
 
 # Now doing the main thing
@@ -292,36 +233,11 @@ _c = 0 # In case of EQDSK, the associated time to write to MED field. In case
 # MUST NOT USE "i" AS INDEX!
 
 TIME_RUNNING_CASES = 0
-for i in range(N):
+n_equils = len(equilIter)
+for i, associated_time, equilibrium in equilIter:
     time_start = time.perf_counter()
-    print(f"Getting results for {i + 1} of {N} equilibriums.")
+    print(f"Getting results for {i + 1} of {n_equils} equilibriums.")
     # Get EQDSKIO
-
-    equilibrium = None
-
-    if inp['eq_type'] == 'imas':
-        print("Obtaining equilibrium data from IMAS")
-        # Get IMAS data
-        ids_equilibrium.getSlice(time_slices[i],
-                                 imas.imasdef.INTERPOLATION)
-        slice = ids_equilibrium.time_slice[0]
-        equilibrium = L2G.eq.getEquilibriumFromIMAS(slice, ids_wall)
-
-        # Take PSI boundary from IMAS ids
-        equilibrium.psi_boundary = slice.global_quantities.psi_boundary / (2 * np.pi)
-        associated_time = time_slices[i]
-    else:
-        print("Obtaining equilibrium data from EQDSK G file")
-        # Read the EQDSK file
-        eqdsk = L2G.eq.EQDSKIO(eqdsk_files[i])
-        equilibrium = L2G.eq.getEquilibriumFromEQDSKG(eqdsk)
-        associated_time = _c
-        _c += 1
-
-    if flip_psirz:
-        equilibrium.psi *= -1
-        equilibrium.psi_boundary *= -1
-        equilibrium.psi_sign *= -1
 
     if custom_wall_limiter:
         equilibrium.wall_contour_r = np.array(inp['wall_limiter']['r'])
@@ -356,7 +272,7 @@ for i in range(N):
             for j, subset in enumerate(fl_ids):
                 case.fl_ids = subset
                 case.getFL()
-                case.saveFlToVTK(f"{case.name}_{i}_{j}.vtk")
+                case.saveFlToVTK(f"{case.name}_{j}_{i}.vtk")
 
         else:
             case.fl_ids = fl_ids

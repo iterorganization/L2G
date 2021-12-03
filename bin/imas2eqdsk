@@ -79,7 +79,7 @@ if time_slices == [-1]:
 
 for ts in time_slices:
     HEADER_COMMENT=f"IDS shot={shot} run={run} t={ts}s"
-    ids_equilibrium.getSlice(ts, imas.imasdef.INTERPOLATION)
+    ids_equilibrium.getSlice(ts, 1)
     slice = ids_equilibrium.time_slice[0]
 
     eqObj = L2G.imas_utils.createEqdskFromSlice(slice,

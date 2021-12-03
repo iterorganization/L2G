@@ -15,12 +15,9 @@ fi
 export PYTHONUNBUFFERED=1 # So that we continuously get python output
 # $1 is the json file
 
-# -e is for outputing the equilibrium slices as EQDSK files in the /current/dir/EQDSKS
-#    1 - generates
-#    0 - does nothing
 # -p is for disabling the use of carriage returns when loading meshes.
 #    1 - return carriage progress bar
 #    0 - normal print progress bar
-runL2G -e 1 -p 0 -i $1
+runL2G -p 0 -i $1
 
 date
