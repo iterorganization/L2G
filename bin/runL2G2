@@ -241,8 +241,8 @@ for index, associated_time, equilibrium in equilIter:
         elm_case.eq.evaluate()
         Rb, Z, Btotal, Bpm = elm_case.eq.getOWL_midplane()
 
-        elm_data_r = qelm_data[0]
-        elm_data_q = qelm_data[1] * 1e6
+        elm_data_r = qelm_data[:, 0]
+        elm_data_q = qelm_data[:, 1] * 1e6
 
         expansion = bfield_mag / Btotal
 
