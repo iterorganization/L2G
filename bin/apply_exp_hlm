@@ -2,7 +2,7 @@
 
 description = """This script calculates the drsep based on the provided results.
 """
-import L2G
+import l2g
 
 import argparse
 
@@ -22,49 +22,50 @@ import sys
 import sys
 json_input = args.input_json
 if not os.access(json_input, mode=os.R_OK):
-    L2G.log.info(f"Could not read: '{json_input}'!")
+    l2g.log.info(f"Could not read: '{json_input}'!")
     sys.exit(-1)
 
-import L2G.eq
+import l2g.equil
+
 import L2G.hlm_profiles
-import L2G.utils
-import L2G.meshio_utils
-import L2G.imas_utils
+import l2g.hlm.general
+import l2g.hlm.ramp_down
+import l2g.utils
+import l2g.utils.meshio
 import imas
 import medcoupling as mc
-import MEDLoader as ml
-from L2G.core import PyEmbreeAccell
+from l2g.comp.core import PyEmbreeAccell
 import glob
 import numpy as np
 
-L2G.log.info("Starting...")
+l2g.log.info("Starting...")
 
 # Load json file
-inp = L2G.utils.load_l2g_json(json_input)
+inp = l2g.utils.load_l2g_json(json_input)
 
 # First check if there is a hlm section
 if "hlm" not in inp:
-    L2G.log.info(f"No hlm section in {json_input}. Cannot continue")
+    l2g.log.info(f"No hlm section in {json_input}. Cannot continue")
     sys.exit(-1)
 
 # Obtain information on which exponential function and how Q_par is defined.
 function_exp = None
 if "function_exp" not in inp["hlm"]:
-    L2G.log.info("No defition on which exponential function to use! Check hlm for 'function_exp'")
+    l2g.log.info("No defition on which exponential function to use! Check hlm for 'function_exp'")
     sys.exit(-1)
 function_exp = inp['hlm']['function_exp']
 if function_exp not in ["single", "double", 'ramp_down']:
-    L2G.log.info(f"Wrong setting for function_exp: {function_exp}")
+    l2g.log.info(f"Wrong setting for function_exp: {function_exp}")
 
 function_q_par = None
 if "function_q_par" not in inp["hlm"]:
-    L2G.log.info("No definition on which exponential function to use! Check hlm for 'function_q_par'")
+    l2g.log.info("No definition on which exponential function to use! Check hlm for 'function_q_par'")
     # sys.exit(-1)
 else:
     function_q_par = inp['hlm']['function_q_par']
 
     if function_q_par not in ["P_sol", "q_par"]:
-        L2G.log.info(f"Wrong setting for function_q_par: {function_q_par}")
+        l2g.log.info(f"Wrong setting for function_q_par: {function_q_par}")
 
     if function_q_par == "P_sol":
         P_sol = inp['hlm']['P_sol']
@@ -76,14 +77,11 @@ if 'lambda_q' in inp['hlm']:
     lambda_q = inp['hlm']['lambda_q']
 cutoff_conlen = inp['hlm']['cutoff_conlen']
 
-L2G.log.info("Loading equilibriums...")
+l2g.log.info("Loading equilibriums...")
 
 # Obtain the equilibriums
 # Figure out what kind of equilibriums do we have
 if inp['eq_type'] == "imas":
-
-    import L2G.imas_utils
-
     shot = inp['imas']['shot']
     run = inp['imas']['run']
 
@@ -118,9 +116,9 @@ else:
 
     eqdsk_files.sort()
 
-L2G.log.info("Done.")
+l2g.log.info("Done.")
 
-L2G.log.info("Applying heat load map...")
+l2g.log.info("Applying heat load map...")
 result_file_name = args.input_med
 # Load mesh for creation of fields
 result_mesh_data = mc.ReadMeshFromFile(result_file_name)
@@ -128,11 +126,11 @@ result_mesh_data = mc.ReadMeshFromFile(result_file_name)
 # First check if there is at least drsep in the fields.
 fieldNames = mc.GetAllFieldNames(args.input_med)
 if "drsep" not in fieldNames:
-    L2G.log.info(f"Field drsep missing in {args.input_med}")
+    l2g.log.info(f"Field drsep missing in {args.input_med}")
     sys.exit(-1)
 
 # Now obtain all iterations. It is a list of tuples (index, order, time)
-field_iterations = ml.GetAllFieldIterations(args.input_med, 'drsep')
+field_iterations = mc.GetAllFieldIterations(args.input_med, 'drsep')
 
 N = len(field_iterations)
 
@@ -148,25 +146,25 @@ if inp['eq_type'] == 'imas':
 
     ids_summary = ids.summary
 
-eq = L2G.eq.EQ()
+eq = l2g.equil.EQ()
 
 for i in range(N):
     index, order, time = field_iterations[i]
-    L2G.log.info(f"Processing {i+1} of {N} slices. Index={index} Time={time}")
+    l2g.log.info(f"Processing {i+1} of {N} slices. Index={index} Time={time}")
 
     # Obtain the EQDSK
     if inp['eq_type'] == 'imas':
         # Open the IMAS ids
         ids_equilibrium.getSlice(time, 1)
         slice = ids_equilibrium.time_slice[0]
-        equilibrium = L2G.eq.getEquilibriumFromIMAS(slice, ids_wall)
+        equilibrium = l2g.equil.getEquilibriumFromIMAS(slice, ids_wall)
         ids_summary.getSlice(time, 1)
     else:
-        eqdsk = L2G.eq.EQDSKIO(eqdsk_files[i])
-        equilibrium = L2G.eq.getEquilibriumFromEQDSKG(eqdsk)
+        eqdsk = l2g.equil.EQDSKIO(eqdsk_files[i])
+        equilibrium = l2g.equil.getEquilibriumFromEQDSKG(eqdsk)
 
     # Load the Equilibrium
-    # eq = L2G.eq.EQ(eqdsk)
+    # eq = l2g.equil.EQ(eqdsk)
     eq.setEquilibrium(equilibrium)
 
     # Obtain the midplane boundary values
@@ -175,23 +173,23 @@ for i in range(N):
 
     # Get the fields from the result file
     # Drsep, the distance of each element from the midplane
-    drsep = L2G.meshio_utils.fieldToNumpy(args.input_med, "drsep", index) * 1e-3
+    drsep = l2g.utils.meshio.fieldToNumpy(args.input_med, "drsep", index) * 1e-3
     # Bdot is the dot product between the normal and the magnetic vector at the
     # element
-    Bdot = np.abs(L2G.meshio_utils.fieldToNumpy(args.input_med, 'Bdot', index))
+    Bdot = np.abs(l2g.utils.meshio.fieldToNumpy(args.input_med, 'Bdot', index))
     # BVec is the magnetic vector at the element
-    BVec = L2G.meshio_utils.fieldToNumpy(args.input_med, "BVec", index)
+    BVec = l2g.utils.meshio.fieldToNumpy(args.input_med, "BVec", index)
     # Poloidal magnetic flux
-    flux = L2G.meshio_utils.fieldToNumpy(args.input_med, "flux", index)
+    flux = l2g.utils.meshio.fieldToNumpy(args.input_med, "flux", index)
     # Connection lengths.
-    conlen = L2G.meshio_utils.fieldToNumpy(args.input_med, "conlen", index)
+    conlen = l2g.utils.meshio.fieldToNumpy(args.input_med, "conlen", index)
 
     if function_exp == "single":
         if function_q_par == "P_sol":
-            q = L2G.hlm_profiles.single_exponential_psol(drsep, Bpm, Rb, lambda_q, P_sol,
+            q = l2g.hlm.general.single_exponential_psol(drsep, Bpm, Rb, lambda_q, P_sol,
                 F)
         else: # q_par
-            q = L2G.hlm_profiles.single_exponential_qpar(drsep, Bpm, Rb, lambda_q, q_par)
+            q = l2g.hlm.general.single_exponential_qpar(drsep, Bpm, Rb, lambda_q, q_par)
     elif function_exp == "double": # double
         if function_q_par == "P_sol":
             raise NotImplementedError
@@ -201,7 +199,7 @@ for i in range(N):
         # First check if the eqdsk_type is imas. If it is not we cannot gather
         # the necessary
         if inp["eq_type"] != 'imas':
-            L2G.log.info('Cannot apply Ramp Down function as key information is ' +
+            l2g.log.info('Cannot apply Ramp Down function as key information is ' +
                   'required, which is not available in EQDSK G file.!')
             sys.exit(-1)
 
@@ -214,11 +212,11 @@ for i in range(N):
         Area = slice.global_quantities.area
         if Ip < 10e6:
             # Lambda_q is in millimeters.
-            lambda_q = L2G.hlm_profiles.decay_length_L_mode_diverted(a, R,
+            lambda_q = l2g.hlm.ramp_down.decay_length_L_mode_diverted(a, R,
                 Ip, Area)
 
-            L2G.log.info(f'RAMP_DOWN: {i} {time} {lambda_q} {Ip}')
-            q = L2G.hlm_profiles.single_exponential_psol(drsep, Btotal, Bpm,
+            l2g.log.info(f'RAMP_DOWN: {i} {time} {lambda_q} {Ip}')
+            q = l2h.hlm.general.single_exponential_psol(drsep, Btotal, Bpm,
                     Rb, lambda_q * 1e-3, Psol)
         else:
             lambda_q = 'NaN'
@@ -237,11 +235,11 @@ for i in range(N):
     # Write the result to the file at the correct index.
 
     # Convert to field
-    q_field = L2G.meshio_utils.numpyArrayToField(arr=q_inc,
+    q_field = l2g.utils.meshio.numpyArrayToField(arr=q_inc,
         fieldName=f"q",
         mesh=result_mesh_data,
         iteration=index, associatedTime=time)
-    L2G.meshio_utils.writeFieldToAlreadyExistingMesh(q_field,
+    l2g.utils.meshio.writeFieldToAlreadyExistingMesh(q_field,
         result_file_name)
 
-L2G.log.info("Done.")
+l2g.log.info("Done.")

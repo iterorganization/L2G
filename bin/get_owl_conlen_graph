@@ -44,21 +44,20 @@ args = parser.parse_args()
 
 print("Starting...")
 
-import L2G
-# L2G.enableLogging()
-import L2G.meshio_utils
-import L2G.core
+import l2g
+import l2g.utils.meshio
+import l2g.comp.core
 import numpy as np
-import L2G.eq
+import l2g.equil
 import time
 case = L2G.FieldLineTracer()
 
 #Load full tokamak
-embreeObj = L2G.core.PyEmbreeAccell()
+embreeObj = l2g.comp.core.PyEmbreeAccell()
 
 shadowMesh = args.shadow
 
-v, t = L2G.meshio_utils.readMesh(shadowMesh)
+v, t = l2g.utils.meshio.readMesh(shadowMesh)
 embreeObj.commitMesh(v * 1e-3, t)
 case.setEmbreeObj(embreeObj)
 
@@ -66,8 +65,8 @@ case.setEmbreeObj(embreeObj)
 
 eqdskFile = args.eqdsk
 
-eqdsk = L2G.eq.EQDSKIO(eqdskFile)
-equilibrium = L2G.eq.getEquilibriumFromEQDSKG(eqdsk)
+eqdsk = l2g.equil.EQDSKIO(eqdskFile)
+equilibrium = l2g.equil.getEquilibriumFromEQDSKG(eqdsk)
 
 case.setEquilibrium(equilibrium)
 case.eq.evaluate()

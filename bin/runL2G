@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-print("Starting up...")
-import time
+import l2g
+l2g.log.info("Starting up...")
 
+import time
 import argparse
 
 description = """Runs a L2G case, described within a L2G JSON file.
@@ -12,15 +13,11 @@ parser = argparse.ArgumentParser(description=description)
 parser.add_argument('-i', '--input', type=str,
                     required=True, help='Input Json file')
 parser.add_argument('-v', '--verbose', help='Verbosity',
-                    default=0, type=int)
+                    default=1, type=int)
 
 parser.add_argument('-p', '--progress', help='Progress bar. Enable/Disable return carriage',
                     default=1, type=int)
-parser.add_argument('-r', '--run_flt', help='Run FLT tracing',
-                    default=1, type=int)
 parser.add_argument('-fl', '--get_fls', help="Obtain fieldlines",
-                    default=1, type=int)
-parser.add_argument('-cd', '--calculate_drsep', help="Calculate drsep",
                     default=1, type=int)
 args = parser.parse_args()
 
@@ -31,180 +28,97 @@ if not args.progress:
 
 import os
 import sys
+from pathlib import Path
 
 # Check if the JSON file can be read.
 json_input = args.input
 if not os.access(json_input, mode=os.R_OK):
-    print(f"Could not read: '{json_input}'!")
+    l2g.log.info(f"Could not read: '{json_input}'!")
     sys.exit(-1)
 
 # Now that everything went okay start with the module loads. Putting these
 # module loads at the top of the file creates a time overhead.
 
-import L2G
-import L2G.utils
-import L2G.meshio_utils
-import medcoupling as mc
-import MEDLoader as ml
-from L2G.core import PyEmbreeAccell
+import l2g.utils
+import l2g.utils.meshio
+import l2g.hlm.steady_state
+import l2g.hlm.general
+import l2g.hlm.ramp_down
+import l2g.comp
+import l2g.equil
+
 if args.verbose:
-    L2G.addStreamHandler()
-    L2G.enableLogging()
-import glob
+    l2g.addStreamHandler()
+    l2g.enableLogging()
 import numpy as np
 
 # Load json file
-inp = L2G.utils.load_l2g_json(json_input)
+inp = l2g.utils.load_l2g_json(json_input)
+
+CUTOFF = 4.3e3
+if "cutoff" in inp:
+    CUTOFF = inp["cutoff"]
+
+R_BREAK = 0.025
 # Create an instance of the FieldLineTracer so that we start setting parameters
 # and input data.
-case = L2G.utils.FieldLineTracer()
+
+OUTPUT_DIRECTORY = os.path.dirname(os.path.abspath(args.input))
+
+if "output_directory" in inp:
+    OUTPUT_DIRECTORY = os.path.abspath(inp["output_directory"])
+    Path(OUTPUT_DIRECTORY).mkdir(parents=True, exist_ok=True)
+
 
 time_start = time.perf_counter()
-print()
-print('Loading case parameters.')
+l2g.log.info("Loading data")
 
-case.name = inp['name']
-# Set the parameters. If unknown, just print and ignore
-for parameter in inp['parameters']:
-    if not hasattr(case.parameters, parameter):
-        print(f"Illegal parameter: {parameter}. Ignored")
-    else:
-        setattr(case.parameters, parameter, inp['parameters'][parameter])
+flt_case = l2g.comp.FieldLineTracer()
+flt_case.name = inp['name']
 
-# Set the options
-for option in inp['options']:
-    if not hasattr(case.options, option):
-        print(f"Illegal option: {option}. Ignored")
-    else:
-        setattr(case.options, option, inp['options'][option])
+elm_case = l2g.comp.FieldLineTracer()
+elm_case.name = inp['name'] + "_elm"
+
+# Load global parameters
+l2g.utils.set_parameters_and_options(inp, flt_case)
+l2g.utils.load_flt_settings(inp['flt'], flt_case)
+
+if "elm" in inp:
+    l2g.utils.set_parameters_and_options(inp, elm_case)
+    l2g.utils.load_elm_settings(inp['elm'], elm_case)
+    if "r_break" in inp['elm']:
+        R_BREAK = inp['elm']['r_break']
+
+
+# Load parameters
 
 # See if there are any FL ids to set
 fl_ids = []
 if "fl_ids" in inp:
     fl_ids = inp["fl_ids"]
 
-correct_helicity = True
-if "correct_helicity" in inp:
-    correct_helicity = inp["correct_helicity"]
-
 # See if there is a custom wall limiter
 if 'wall_limiter' in inp:
     custom_wall_limiter = True
-    print("Custom wall limiter included")
+    l2g.log.info("Custom wall limiter included")
 else:
     custom_wall_limiter = False
 
 # Let's see if we run in a HPC job. Currently only slurm based.
-slurm_job = False
-if "SLURM_JOBID" in os.environ:
-    print('Detected SLURM environment.')
-    job_id = os.environ['SLURM_JOBID']
-    print(f"SLURM JOB ID: {job_id}")
-    print("Setting the number of OpenMP threads equal to the number of "
-          + "allocated CPUs")
-    slurm_job = True
-
-if slurm_job:
-    # In this case assign the number of threads equal to the number of
-    # CPUs per task.
-    # We only have 1 distributed task.
-
-    if "SLURM_CPUS_PER_TASK" in os.environ:
-        print('Trying to get maximum number of cpus assigned for this task.')
-        try:
-            cpus_per_task = int(os.environ["SLURM_CPUS_PER_TASK"])
-            case.parameters.num_of_threads = cpus_per_task
-            print(f"case.parameters.num_of_threads={cpus_per_task}")
-        except:
-            print("Failed to obtain a number from SLURM_CPUS_PER_TASK")
+l2g.utils.check_if_in_slurm_job(flt_case, elm_case)
 
 TIME_LOADING_CASE = time.perf_counter() - time_start
-print(f"Loaded case in {TIME_LOADING_CASE} seconds.")
+l2g.log.info(f"Loaded case in {TIME_LOADING_CASE} seconds.")
 
-print()
+l2g.log.info("")
 
-time_start = time.perf_counter()
+l2g.log.info(f"Loading {inp['eq_type']} equilibriums")
 
-# Load the target mesh
-if not os.access(inp["target_mesh"], os.R_OK):
-    print(f"Failed to read target mesh {inp['target_mesh']}!")
-    print("Check the validity of the path.")
-    sys.exit(-1)
-print(f"\tLoading {inp['target_mesh']}")
-verticesTarget, trianglesTarget = L2G.meshio_utils.readMesh(inp["target_mesh"])
-case.setTargetData(verticesTarget, trianglesTarget)
-TIME_LOADING_TARGET_MESH = time.perf_counter() - time_start
-print(f"Loaded target mesh in {TIME_LOADING_TARGET_MESH}")
+equilIter = l2g.equil.EquilibriumIterator()
 
-time_start = time.perf_counter()
-# Create Embree
-embree = PyEmbreeAccell()
-
-# Use glob if it is necessary
-shadowMeshFiles = []
-
-# Gather the file names
-for fileName in inp["shadow_meshes"]:
-    if '*' in fileName:
-        shadowMeshFiles += glob.glob(fileName)
-    else:
-        shadowMeshFiles.append(fileName)
-
-# Exclude any meshes if exclude_meshes is inside
-if "exclude_meshes" in inp:
-    mesh_to_remove = []
-    # Since files are actual paths it is the easiest to just loop the list
-    # and accumulate which meshes to remove
-    for filePath in shadowMeshFiles:
-        fileName = os.path.basename(filePath)
-        if fileName in inp["exclude_meshes"]:
-            mesh_to_remove.append(filePath)
-    #
-    for m in set(mesh_to_remove):
-        shadowMeshFiles.remove(m)
-
-# Now load it
-c = 0
-N = len(shadowMeshFiles)
-
-# List of loaded geometry. Th egeomIDs list is used to generate a text
-# file so that the user can check in the results to which geometry does the
-# geometry Id belongs to.
-geomIds = []
-
-# Include the target mesh into the shadow object. Usually, the first mesh
-# gets the geometry ID 0 when loading to Embree.
-if "include_target_in_shadow" in inp:
-    if inp["include_target_in_shadow"]:
-        print("\tLoading target mesh also to Embree")
-        print("")
-        # v, t comes from before block. Do not delete it!!!
-        geomId = embree.commitMesh(
-            verticesTarget * case.parameters.target_dim_mul,
-            trianglesTarget)
-        geomIds.append((geomId, inp["target_mesh"]))
-print(f"Loading {N} meshes")
-
-# Load the shadow meshes. v, t corresponds to vertices, triangles.
-for filePath in shadowMeshFiles:
-    fileName = os.path.basename(filePath)
-    sys.stdout.write(f"{RETURN_CARRIAGE}Loading {fileName}: {c / N:.2f}%!")
-    v, t = L2G.meshio_utils.readMesh(filePath)
-    c+=100
-    sys.stdout.write(f"{RETURN_CARRIAGE}Loaded {fileName}: {c / N:.2f}%!")
-    geomId = embree.commitMesh(v * 1e-3, t)
-    geomIds.append((geomId, filePath))
-print('')
-print(f"Writing list of loaded meshes to {case.name}_embree_meshes.txt")
-with open(f"{case.name}_embree_meshes.txt", 'w') as f:
-    for pair in geomIds:
-        f.write(f'{pair[0]} {pair[1]}\n')
-case.setEmbreeObj(embree)
-TIME_LOADING_SHADOW_MESHES = time.perf_counter() - time_start
-
-print(f"Loading {inp['eq_type']} equilibriums")
-
-equilIter = L2G.utils.EquilibriumIterator()
+correct_helicity = True
+if "correct_helicity" in inp:
+    correct_helicity = inp["correct_helicity"]
 
 equilIter.correctHelicity(correct_helicity)
 # Figure out what kind of equilibriums do we have
@@ -213,78 +127,176 @@ if inp['eq_type'] == "imas":
 else:
     equilIter.loadEqdskEquilibriums(inp['eqdsk_files'])
 
-# Create the result MED file.
-resultMesh = mc.ReadMeshFromFile(inp["target_mesh"])
-resultFileName = os.path.join(os.path.dirname(os.path.abspath(args.input)),
-                case.name + '.med')
-
+# Create the result MED file. If needed. Otherwise read the MED mesh from the
+# existing FLT med file.
+run_flt = True
+resultFileName = os.path.join(OUTPUT_DIRECTORY, flt_case.name + '.med')
+result_med = l2g.comp.MEDMeshIO()
+result_med.loadMedFile(inp["flt"]["target_mesh"])
 if os.path.exists(resultFileName):
-    print("Warning result file already exists! Overwriting!")
+    l2g.log.info("Result file name already exists. No need to rerun full FLT")
+    run_flt = False
+    result_med.med_file_path = resultFileName
     # time.sleep(10)
-
-ml.WriteMesh(resultFileName, resultMesh, True)
-
-
-# Now doing the main thing
-_c = 0 # In case of EQDSK, the associated time to write to MED field. In case
-       # of multiple EQDSK G files.
-
-# NOTE THAT THE INDEX "i" IS THE MAIN INDEX, SO SUBSEQUENT FOR LOOPS INSIDE
-# MUST NOT USE "i" AS INDEX!
+else:
+    result_med.writeMesh(resultFileName)
 
 TIME_RUNNING_CASES = 0
-n_equils = len(equilIter)
-for i, associated_time, equilibrium in equilIter:
+
+N = len(equilIter)
+for index, associated_time, equilibrium in equilIter:
     time_start = time.perf_counter()
-    print(f"Getting results for {i + 1} of {n_equils} equilibriums.")
+
+    # Set the index and associated time to the result MEDMeshIO object
+    result_med.index = index
+    result_med.associated_time = associated_time
+
+    l2g.log.info("")
+    l2g.log.info(f"Getting results for {index + 1} of {N} equilibriums.")
+    l2g.log.info(f"Index={index}, Time={associated_time:.3f}.")
+    l2g.log.info("")
+
     # Get EQDSKIO
 
     if custom_wall_limiter:
         equilibrium.wall_contour_r = np.array(inp['wall_limiter']['r'])
         equilibrium.wall_contour_z = np.array(inp['wall_limiter']['z'])
 
-    case.setEquilibrium(equilibrium)
+    flt_case.setEquilibrium(equilibrium)
 
-    # Apply parameters and load Equilibrium. This is done everytime
-    case.applyParameters()
-    case.loadEq()
+    # Apply parameters and load Equilibrium. This is done every time.
+    flt_case.applyParameters()
+    flt_case.loadEq()
+    flt_case.processDataOnMesh()
 
-    case.processDataOnMesh()
+    # If the equilibrium is limiter, then in case that the geometry is also
+    # the one that has the LCFS contact point, we need to adjust r_move or
+    # z_move in order to put the equilibrium data correctly on the geometry.
+
+    # For now we shift only in the radial direction.
+
+    flt_case.evaluateEq()
+    if flt_case.eq.type_ == 'lim':
+        flt_case.alignGeometryWithLCFS()
+
+
     # Running FLT and saving FLT data on input mesh
-    if args.run_flt:
-        print("Running FLT...")
-        case.runFltOnMesh()
+    if run_flt:
+        l2g.log.info("Running FLT...")
+        flt_case.runFltOnMesh()
 
-    if args.calculate_drsep:
-        print("Calculating drsep...")
-        case.calculateDrsep()
+        l2g.log.info("Calculating drsep...")
+        flt_case.calculateDrsep()
 
-    print("Saving results to MED file...")
-    case.saveMeshResultsToExistingMed(mesh_med=resultMesh,
-        output_med_file=resultFileName, iteration=i,
-        associated_time=associated_time)
+        l2g.comp.dump_flt_mesh_results_to_med(flt_case.mesh_results, result_med)
+    else:
+        # Load the resulting FLT data.
+        l2g.log.info("Loading flt results from output...")
+        l2g.comp.load_flt_mesh_results_from_med(flt_case.mesh_results, result_med)
+
     # Running FLT to get FLs from selected ids.
     if args.get_fls and fl_ids:
-        print("Getting FLs...")
+        l2g.log.info("Getting FLs...")
         # Obtain FLs and output them into a file.
         if all(isinstance(x, list) for x in fl_ids):
             # We have a group of IDs.
             for j, subset in enumerate(fl_ids):
-                case.fl_ids = subset
-                case.getFL()
-                case.saveFlToVTK(f"{case.name}_{j}_{i}.vtk")
-
+                flt_case.fl_ids = subset
+                flt_case.getFL()
+                fl_path_name = os.path.join(OUTPUT_DIRECTORY, f"{flt_case.name}_{j}_{index}.vtk")
+                l2g.comp.save_results_to_vtk(flt_case.fl_results, fl_path_name)
         else:
-            case.fl_ids = fl_ids
-            case.getFL()
-            case.saveFlToVTK(f"{case.name}_{i}.vtk")
+            flt_case.fl_ids = fl_ids
+            flt_case.getFL()
+            fl_path_name = os.path.join(OUTPUT_DIRECTORY, f"{flt_case.name}_{index}.vtk")
+            l2g.comp.save_results_to_vtk(flt_case.fl_results, fl_path_name)
+
+    # Now check for other things.
+
+    if "elm" in inp:
+        l2g.log.info("Applying Steady-State plasma profile.")
+        elm_case.setEquilibrium(equilibrium)
+        elm_case.applyParameters()
+        elm_case.loadEq()
+        # First we need the connection length data. Check if the data exists
+
+        conlen_data_path = os.path.join(OUTPUT_DIRECTORY, elm_case.name + f"_conlen_{index}.dat")
+
+        if os.path.exists(conlen_data_path):
+            conlen_data = np.loadtxt(conlen_data_path)
+        else:
+            elm_case.obtainOwlConlenGraph()
+            conlen_data = elm_case.owl_conlen_data
+            np.savetxt(conlen_data_path, conlen_data, header="drsep(Phi) [m], drsep(R) [m], Connection length Up [m], Connection length Down [m]")
+
+
+        elm_qpar_path = os.path.join(OUTPUT_DIRECTORY, elm_case.name + f"_qpar_{index}.dat")
+
+        if os.path.exists(elm_qpar_path):
+            qelm_data = np.loadtxt(elm_qpar_path)
+        else:
+            # Output name
+            Rb, Z, Btotal, Bpm = elm_case.eq.getOWL_midplane()
+            graphics_output_name = os.path.join(OUTPUT_DIRECTORY,
+                f"{elm_case.name}_{index}")
+            qelm_data = l2g.hlm.steady_state.get_elm_data(conlen_data,
+                generate_graphics=True, output_name=graphics_output_name,
+                Rb=Rb, Btot=Btotal, Bpm=Bpm,
+                r_break=elm_case.parameters.r_break, drsep=elm_case.eq.drsep)
+            np.savetxt(elm_qpar_path, qelm_data, header="drsep [m], elm PLM [MW/m^2]")
+
+        elm_data_r = qelm_data[:, 0]
+        elm_data_q = qelm_data[:, 1] * 1e6
+
+        flt_case.applySteadyState(elm_data_r, elm_data_q)
+
+        # Save the results.
+        result_med.writeArray(array=flt_case.ss_results.expansion,
+                              array_name="Total flux expansion")
+        result_med.writeArray(array=flt_case.ss_results.elm,
+                              array_name="Parallel ELM")
+        result_med.writeArray(array=flt_case.ss_results.interELM,
+                              array_name="Parallel inter-ELM")
+        result_med.writeArray(array=flt_case.ss_results.q_parallel,
+                              array_name="Parallel ELM + inter-ELM")
+        result_med.writeArray(array=flt_case.ss_results.q_inc, array_name="ELM + inter-ELM")
+
+    if "ramp-down" in inp:
+        l2g.log.info("Applying Ramp-Down plasma profile.")
+
+        flt_case.applyRampDown()
+        # Save results
+        result_med.writeArray(array=flt_case.rd_results.q_inc,
+                              array_name="q ramp-down")
+        result_med.writeArray(array=flt_case.rd_results.q_par,
+                              array_name="qpar ramp-down")
+        result_med.writeArray(array=flt_case.rd_results.q_inc_cons,
+                              array_name="q ramp-down conservative")
+        result_med.writeArray(array=flt_case.rd_results.q_par_cons,
+                              array_name="qpar ramp-down conservative")
+        l2g.log.info(f'[RAMP DOWN]: i={index} t={associated_time:.3f} lq={flt_case.rd_results.lambda_q:.2f} Ip={flt_case.equilibrium.Ip:.2e}')
+
+    if "start-up" in inp:
+        l2g.log.info("Applying Start-Up plasma profile (double exponential).")
+
+        lq_main = inp["start-up"]["lq_main"]
+        lq_near = inp["start-up"]["lq_near"]
+        ratio = inp["start-up"]["ratio"]
+        p_sol = inp["start-up"]["p_sol"]
+
+        flt_case.applyStartUp(lq_main=lq_main, lq_near=lq_near, ratio=ratio,
+                              power_loss=p_sol)
+
+        # Save results
+        result_med.writeArray(array=flt_case.sup_results.q_sup,
+                              array_name="q start-up")
+        result_med.writeArray(array=flt_case.sup_results.q_sup_par,
+                              array_name="qpar start-up")
 
     TIME_RUNNING_CASES += time.perf_counter() - time_start
 
-print("Time summaries:")
-print("\tLoading case:".rjust(25) + f"{TIME_LOADING_CASE:.2f} s")
-print("\tLoading target mesh:".rjust(25) + f"{TIME_LOADING_TARGET_MESH:.2f} s")
-print("\tLoading shadow meshes:".rjust(25) + f"{TIME_LOADING_SHADOW_MESHES:.2f} s")
-print("\tRunning cases:".rjust(25) + f"{TIME_RUNNING_CASES:.2f} s")
-print()
-print(f"Total: {TIME_LOADING_CASE + TIME_LOADING_TARGET_MESH + TIME_LOADING_SHADOW_MESHES + TIME_RUNNING_CASES:.2f}s")
+l2g.log.info("Time summaries:")
+l2g.log.info("\tLoading case:".rjust(25) + f"{TIME_LOADING_CASE:.2f} s")
+l2g.log.info("\tRunning cases:".rjust(25) + f"{TIME_RUNNING_CASES:.2f} s")
+l2g.log.info("")
+l2g.log.info(f"Total: {TIME_LOADING_CASE + TIME_RUNNING_CASES:.2f}s")

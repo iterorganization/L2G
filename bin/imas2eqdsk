@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 
-# from eqdsk_utils import EQDSKIO
-#import matplotlib.pyplot as plt
-from L2G.eq import EQDSKIO
 import imas
-import L2G.imas_utils
+import l2g.equil
 
 
 import argparse
@@ -82,11 +79,11 @@ for ts in time_slices:
     ids_equilibrium.getSlice(ts, 1)
     slice = ids_equilibrium.time_slice[0]
 
-    eqObj = L2G.imas_utils.createEqdskFromSlice(slice,
+    eqObj = l2g.equil.createEqdskFromSlice(slice,
                                                 HEADER_COMMENT)
     ids_wall = imas_obj.wall
     ids_wall.get()
-    L2G.imas_utils.addWallDescriptionToEqdsk(eqObj, ids_wall)
+    l2g.equil.addWallDescriptionToEqdsk(eqObj, ids_wall)
 
     # SuccessfullRead is needed to set to 1 as we manually populate the data
     # and not read from an existing EQDSK G file. Without this, the

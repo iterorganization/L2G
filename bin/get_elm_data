@@ -64,7 +64,7 @@ print("Starting.")
 import os
 import sys
 import numpy as np
-from L2G.elm import ELM_loss
+from l2g.hlm.steady_state import ELM_loss
 
 fELM = 33 # ELM frequency [Hz]
 WELM0 = 0.6  # Energy lost per ELM [MJ]
@@ -123,7 +123,7 @@ np.savetxt(os.path.join(os.getcwd(), outputFileName), data_jnme[:2])
 
 if args.create_graphics:
     print('Creating graphics')
-    from L2G.eq import EQDSKIO, EQ, getEquilibriumFromEQDSKG
+    from l2g.equil import EQDSKIO, EQ, getEquilibriumFromEQDSKG
     import matplotlib.pyplot as plt
 
     eqdsk = EQDSKIO(args.eqdsk)

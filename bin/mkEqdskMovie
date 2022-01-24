@@ -21,15 +21,15 @@ parser.add_argument('-t', '--output_type', metavar='gif|png', type=str,
 args = parser.parse_args()
 eqdskFiles = args.eqdsk_files
 
-import L2G.eq_plot_utils
-from L2G.eq import EQDSKIO, getEquilibriumFromEQDSKG
+import l2g.plot
+from l2g.equil import EQDSKIO, getEquilibriumFromEQDSKG
 # eqdskFiles.sort()
 eqdsks = [EQDSKIO(_) for _ in eqdskFiles]
 labels = [_.getName() for _ in eqdsks]
 equilibriums = [L2G.eq.getEquilibriumFromEQDSKG(_) for _ in eqdsks]
 
 print('Making the movie... It can take a few minutes.')
-L2G.eq_plot_utils.createLcfsMovie(
+l2g.plot.createLcfsMovie(
     equilibriums=equilibriums,
     labels=labels,
     legend_name="Time",

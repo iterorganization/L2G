@@ -21,14 +21,11 @@ parser.add_argument('-rb', '--r_break', type=float, default=0.025,
                     help='Breakpoint. In meters.')
 
 args = parser.parse_args()
-import sys
-import os
 
 import numpy as np
-import L2G.eq
-import L2G.meshio_utils
-import L2G.utils
-import L2G.hlm_profiles
+import l2g.equil
+import l2g.utils.meshio
+import l2g.hlm.steady_state
 import medcoupling as mc
 
 print("Applying ELM PLM profile...")
@@ -39,17 +36,17 @@ elm_data = np.loadtxt(args.input_elm)
 result_mesh_data = mc.ReadMeshFromFile(args.input_med)
 CUTOFF = args.cutoff
 print(f"Cut-off for connection lengths is {CUTOFF*1e-3} m.")
-eq = L2G.eq.EQ()
-eqdsk = L2G.eq.EQDSKIO(args.input_eqdsk)
-equilibrium = L2G.eq.getEquilibriumFromEQDSKG(eqdsk)
+eq = l2g.equil.EQ()
+eqdsk = l2g.equil.EQDSKIO(args.input_eqdsk)
+equilibrium = l2g.equil.getEquilibriumFromEQDSKG(eqdsk)
 eq.setEquilibrium(equilibrium)
 eq.evaluate()
 
-drsep = L2G.meshio_utils.fieldToNumpy(args.input_med, "drsep") * 1e-3
-Bdot = np.abs(L2G.meshio_utils.fieldToNumpy(args.input_med, 'Bdot'))
-BVec = L2G.meshio_utils.fieldToNumpy(args.input_med, "BVec")
-flux = L2G.meshio_utils.fieldToNumpy(args.input_med, "flux")
-conlen = L2G.meshio_utils.fieldToNumpy(args.input_med, "conlen")
+drsep = l2g.utils.meshio.fieldToNumpy(args.input_med, "drsep") * 1e-3
+Bdot = np.abs(l2g.utils.meshio.fieldToNumpy(args.input_med, 'Bdot'))
+BVec = l2g.utils.meshio.fieldToNumpy(args.input_med, "BVec")
+flux = l2g.utils.meshio.fieldToNumpy(args.input_med, "flux")
+conlen = l2g.utils.meshio.fieldToNumpy(args.input_med, "conlen")
 bfield_mag = np.linalg.norm(BVec, axis=1)
 Rb, Z, Btotal, Bpm = eq.getOWL_midplane()
 # Point to ELM data slice
@@ -58,36 +55,36 @@ elm_data_q = elm_data[1] * 1e6
 
 expansion = bfield_mag / Btotal
 
-expansionField = L2G.meshio_utils.numpyArrayToField(expansion,
+expansionField = l2g.utils.meshio.numpyArrayToField(expansion,
     "Total flux expansion", result_mesh_data, 0, -1)
-L2G.meshio_utils.writeFieldToAlreadyExistingMesh(expansionField,
+l2g.utils.meshio.writeFieldToAlreadyExistingMesh(expansionField,
     args.input_med)
 
-interELM = L2G.hlm_profiles.inter_ELM(drsep, Rb, Btotal, Bpm, Rb=args.r_break)
-elm = L2G.hlm_profiles.ELM(drsep, elm_data_r, elm_data_q)
+interELM = l2g.hlm.steady_state.inter_ELM(drsep, Rb, Btotal, Bpm, Rb=args.r_break)
+elm = l2g.hlm.steady_state.ELM(drsep, elm_data_r, elm_data_q)
 
-elm_par_field = L2G.meshio_utils.numpyArrayToField(elm,
+elm_par_field = l2g.utils.meshio.numpyArrayToField(elm,
     "Parallel ELM", result_mesh_data, 0, -1)
-L2G.meshio_utils.writeFieldToAlreadyExistingMesh(elm_par_field,
+l2g.utils.meshio.writeFieldToAlreadyExistingMesh(elm_par_field,
     args.input_med)
 
-interElm_par_field = L2G.meshio_utils.numpyArrayToField(interELM,
+interElm_par_field = l2g.utils.meshio.numpyArrayToField(interELM,
     "Parallel inter-ELM", result_mesh_data, 0, -1)
-L2G.meshio_utils.writeFieldToAlreadyExistingMesh(interElm_par_field,
+l2g.utils.meshio.writeFieldToAlreadyExistingMesh(interElm_par_field,
     args.input_med)
 
 q_parallel = interELM + elm
-q_parallel_field = L2G.meshio_utils.numpyArrayToField(q_parallel,
+q_parallel_field = l2g.utils.meshio.numpyArrayToField(q_parallel,
     "Parallel ELM + inter-ELM", result_mesh_data, 0, -1)
-L2G.meshio_utils.writeFieldToAlreadyExistingMesh(q_parallel_field,
+l2g.utils.meshio.writeFieldToAlreadyExistingMesh(q_parallel_field,
     args.input_med)
 
 q_inc = (elm + interELM) * Bdot / Btotal # Bdot applies the incident angle and the total
                           # flux expansion
 q_inc = np.where(conlen > CUTOFF, q_inc, 0)
-q_inc_field = L2G.meshio_utils.numpyArrayToField(q_inc,
+q_inc_field = l2g.utils.meshio.numpyArrayToField(q_inc,
     "ELM + inter-ELM", result_mesh_data, 0, -1)
-L2G.meshio_utils.writeFieldToAlreadyExistingMesh(q_inc_field,
+l2g.utils.meshio.writeFieldToAlreadyExistingMesh(q_inc_field,
     args.input_med)
 
 print("Done.")
