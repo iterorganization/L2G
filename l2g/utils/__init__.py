@@ -1,0 +1,175 @@
+# Main function that reads mesh data
+# from ._meshio import readMesh
+# MEDCoupling function for transforming numpy array to field and vice versa
+# from ._meshio import fieldToNumpy, numpyArrayToField, writeFieldToAlreadyExistingMesh
+
+import l2g.utils.meshio
+
+# Next functions are helper functions for
+import glob
+import json
+import logging
+import os
+import sys
+log = logging.getLogger(__name__)
+
+import numpy as np
+
+def check_if_in_slurm_job(*flt_objs):
+    if "SLURM_JOBID" in os.environ:
+        log.info('Detected SLURM environment.')
+        job_id = os.environ['SLURM_JOBID']
+        log.info(f"SLURM JOB ID: {job_id}")
+        log.info("Setting the number of OpenMP threads equal to the number of "
+              + "allocated CPUs")
+        # In this case assign the number of threads equal to the number of
+        # CPUs per task.
+        # We only have 1 distributed task.
+
+        if "SLURM_CPUS_PER_TASK" in os.environ:
+            log.info('Trying to get maximum number of cpus assigned for this task.')
+            try:
+                cpus_per_task = int(os.environ["SLURM_CPUS_PER_TASK"])
+                for flt_obj in flt_objs:
+                    flt_obj.parameters.num_of_threads = cpus_per_task
+                log.info(f"case.parameters.num_of_threads={cpus_per_task}")
+            except:
+                log.info("Failed to obtain a number from SLURM_CPUS_PER_TASK")
+
+
+def load_l2g_json(file_path: str) -> dict:
+    """Normal JSON format does not allow // comments, so we first clean it of
+    such comment blocks and also remove empty lines.
+
+    If there is a problem with the JSON file, lines are printed to show user,
+    what is causing the error. Also since it fails to load the JSON file, do
+    not allow the program to run.
+    """
+
+    # Load json file
+    inp = {}
+    text = open(file_path, 'r').read().splitlines()
+    try:
+        # Comments with // are not allowed in a json file, so first we filter
+        # those out and remove empty lines.
+
+        no_comments_text = []
+        for line in text:
+            if line.lstrip().startswith('//'):
+                continue
+            if line.strip() == "":
+                continue
+            comment_index = line.find('//')
+            if comment_index == -1:
+                no_comments_text.append(line)
+            else:
+                no_comments_text.append(line[:comment_index])
+        log.info("Stripped JSON file of comments and empty lines.")
+        # log.info('\n'.join(no_comments_text))
+        inp = json.loads('\n'.join(no_comments_text))
+    except json.JSONDecodeError as e:
+        log.info("Failed to read JSON file:")
+        log.info(e)
+        log.info("Check the following lines in the JSON file.")
+        # Print some help with which line is causing issues.
+
+        # Use list comprehension to ignore dangling at the end or beginning
+        # of the text.
+        [log.info(line) for line in text[e.lineno - 3: e.lineno - 1]]
+        log.info(text[e.lineno - 1] + '    <----- ERROR')
+        [log.info(line) for line in text[e.lineno: e.lineno + 2]]
+        raise
+
+    return inp
+
+def set_parameters_and_options(d: dict, flt_obj) -> None:
+    """Set parameters to a FieldLineTracer object.
+    """
+    # Set the parameters. If unknown, just print and ignore
+    if "parameters" in d:
+        for parameter in d['parameters']:
+            if not hasattr(flt_obj.parameters, parameter):
+                log.info(f"Illegal parameter: {parameter}. Ignored")
+            else:
+                setattr(flt_obj.parameters, parameter, d['parameters'][parameter])
+
+    # Set the options
+    if "options" in d:
+        for option in d['options']:
+            if not hasattr(flt_obj.options, option):
+                log.info(f"Illegal option: {option}. Ignored")
+            else:
+                setattr(flt_obj.options, option, d['options'][option])
+
+
+def load_flt_settings(d: dict, flt) -> None:
+    """Loads the settings for the FLT
+    """
+
+    set_parameters_and_options(d, flt)
+
+    if not os.access(d["target_mesh"], os.R_OK):
+        log.error(f"Failed to read target mesh {d['target_mesh']}!")
+        log.info("Check the validity of the path.")
+        sys.exit(-1)
+
+    # Load target meshes
+    log.info(f"Loading target mesh data {d['target_mesh']}")
+    verticesTarget, trianglesTarget = l2g.utils.meshio.readMesh(d["target_mesh"])
+
+    flt.setTargetData(verticesTarget, trianglesTarget)
+    log.info("Loading shadow mesh data.")
+    shadowMeshFiles = []
+    for fileName in d["shadow_meshes"]:
+        if '*' in fileName:
+            shadowMeshFiles += glob.glob(fileName)
+        else:
+            shadowMeshFiles.append(fileName)
+
+    if "exclude_meshes" in d:
+        mesh_to_remove = []
+        # Since files are actual paths it is the easiest to just loop the list
+        # and accumulate which meshes to remove
+        for filePath in shadowMeshFiles:
+            fileName = os.path.basename(filePath)
+            if fileName in d["exclude_meshes"]:
+                mesh_to_remove.append(filePath)
+        #
+        for m in set(mesh_to_remove):
+            shadowMeshFiles.remove(m)
+    geomIds = []
+    if "include_target_in_shadow" in d:
+        log.info("Including target to shadowing Embree.")
+        if d["include_target_in_shadow"]:
+            geomId = flt.embree_obj.commitMesh(
+                verticesTarget * flt.parameters.target_dim_mul,
+                trianglesTarget)
+            geomIds.append((geomId, d["target_mesh"]))
+
+    log.info(f"Loading {len(shadowMeshFiles)} mesh/es to Embree.")
+    for filePath in shadowMeshFiles:
+        fileName = os.path.basename(filePath)
+        v, t = l2g.utils.meshio.readMesh(filePath)
+        geomId = flt.embree_obj.commitMesh(v * 1e-3, t)
+        geomIds.append((geomId, filePath))
+    log.info("Done.")
+
+def load_elm_settings(d: dict, flt) -> None:
+    """Prepares a FieldLineTracer object for evaluating ELM profiles.
+    """
+    flt.parameters.time_step = 0.01
+    flt.parameters.time_end = 2 * 3.141592653
+    flt.parameters.max_connection_length = 1000
+    flt.options.switch_runFLT = 1
+    flt.parameters.target_dim_mul = 1
+
+    set_parameters_and_options(d, flt)
+
+    embreeObj = l2g.comp.core.PyEmbreeAccell()
+
+    shadowMeshFiles = d['shadow_meshes']
+
+    for f in shadowMeshFiles:
+        v, t = l2g.utils.meshio.readMesh(f)
+        embreeObj.commitMesh(v * 1e-3, t)
+        flt.setEmbreeObj(embreeObj)

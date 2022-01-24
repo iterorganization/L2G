@@ -1,0 +1,711 @@
+"""This file holds the FieldLineTracer class which helps the user setup the
+case.
+"""
+import l2g.comp.core
+import l2g.comp
+import l2g.utils.meshio
+import l2g.equil
+import l2g.hlm
+import numpy as np
+
+import logging
+from time import perf_counter
+log = logging.getLogger(__name__)
+
+class FieldLineTracer:
+    """FLT object for performing FLT on a given input mesh.
+
+    Attributes:
+        name (str): Name of the case
+        parameters (l2g.comp.Parameters): Holds parameters for the tracer
+        options (l2g.comp.Options): Options on what to run
+
+
+    """
+    def __init__(self):
+        self.name = "L2G_flt_case-1"
+        self.parameters = l2g.comp.Parameters()
+        self.options = l2g.comp.Options()
+        self.flt_obj = l2g.comp.core.PyFLT()
+        self.embree_obj = l2g.comp.core.PyEmbreeAccell()
+        self.equilibrium = None
+        self.eq = l2g.equil.EQ()
+        self.eq._verbose=True # For additional output
+        self.point_results = None # Holds FLT result on points
+        self.mesh_results = None # Holds FLT result on mesh
+        self.fl_results = None # Holds fieldlines
+        self.owl_conlen_data = None
+        self.target_vertices = []
+        self.target_triangles = []
+        self.target_points = []
+        self.fl_ids = []
+
+        # RampDown results
+        self.rd_results = None
+        self.ss_results = None
+        self.sup_results = None
+
+    def setParameters(self, parameters) -> None:
+        self.parameters = parameters
+
+    def setFltObj(self, flt_obj) -> None:
+        self.flt_obj = flt_obj
+
+    def setEmbreeObj(self, embree_obj) -> None:
+        self.embree_obj = embree_obj
+        if self.flt_obj:
+            self.flt_obj.applyRT(self.embree_obj)
+
+    def commitMeshesToEmbree(self, mesh_files, dim_mul=1e-3) -> list:
+        """Commits mesh from files to embree.
+
+        Returns:
+            ok (bool): Ok if finished
+
+        Arguments:
+            mesh_files: Either a single file or multiple files
+            dim_mul (float): Dimension multiplier to convert mesh dimension to
+                meters. Default 1e-3.
+        """
+        log.info("Commiting meshes to Embree object...")
+        if isinstance(mesh_files, str):
+            mesh_files = [mesh_files]
+
+        out_ids = []
+
+        for file in mesh_files:
+            log.info(f"Commiting {file} to Embree object.")
+            v, t = l2g.utils.meshio.readMesh(file)
+            out_ids.append(self.embree_obj.commitMesh(v * dim_mul, t))
+            # Dimension is in meters
+
+        return out_ids
+
+    def setTargetData(self, vertices:list = [], cells:list = []) -> None:
+        """Sets new target data via function. In this case a target mesh is
+        provided to the case via providing a list of nodes and a list of cells.
+
+        With this the past mesh results are cleared.
+        """
+        self.target_vertices = vertices
+        self.target_triangles = cells
+        self.mesh_results = None
+
+    def setTargetPoints(self, points: list = []) -> None:
+        """Sets new target data via function. In this case target points are
+        provided. This is used when we wish to analyze FLs on a ROI (i.e.,
+        midplane).
+
+        With this past point results are cleared.
+        """
+        self.target_points = points
+        self.point_results = []
+
+    def setEquilibrium(self, equilibrium: l2g.equil.Equilibrium) -> None:
+        """Set the equilibrium data, which is propagated to the eq analyze
+        class and the external FLT C++ code.
+        """
+        self.equilibrium = equilibrium
+        self.eq.setEquilibrium(equilibrium)
+
+    def applyParameters(self) -> None:
+        """Propagates the parameters to the external FLT C++ code. Run this
+        before running any FLT run functions.
+        """
+        log.info("Commiting parameters")
+        # Set the Embree pointer
+        self.flt_obj.applyRT(self.embree_obj)
+
+        # Apply RKF45 accuracy settings
+        self.flt_obj.setAbsError(self.parameters.abs_error)
+        self.flt_obj.setRelError(self.parameters.rel_error)
+
+        # Apply plasma shift
+        plasma_r_displ, plasma_z_displ = self.parameters.plasma_r_displ, self.parameters.plasma_z_displ
+        self.flt_obj.setShift(plasma_r_displ, plasma_z_displ)
+        # Apply plasma shift to the EQ object
+        self.eq.setDisplacement(plasma_r_displ, plasma_z_displ)
+        # Apply toroidal angle settings.
+        self.flt_obj.setTimeSpan(self.parameters.time_end,
+                                self.parameters.time_step)
+        # Apply maximum connection length settings
+        self.flt_obj.setMaximumConnectionLength(
+            self.parameters.max_connection_length)
+        # Apply the self intersection avoidance length.
+        self.flt_obj.setSelfIntersectionAvoidanceLength(
+            self.parameters.self_intersection_avoidance_length)
+        # Set FLT option
+        self.flt_obj.setFltOption(self.options.switch_runFLT)
+
+    def loadEq(self) -> None:
+        """Loads the equilibrium data to the external FLT C++ code. Data is
+        used for FL equations. Run this before running any FLT run functions.
+        """
+        log.info("Dumping equilibrium data to FLT object.")
+        self.flt_obj.setNDIM(self.equilibrium.grid_dim_r,
+                             self.equilibrium.grid_dim_z)
+        self.flt_obj.setRARR(self.equilibrium.grid_r)
+        self.flt_obj.setZARR(self.equilibrium.grid_z)
+        self.flt_obj.setPSI(self.equilibrium.psi.flatten())
+        self.flt_obj.setVacuumFPOL(self.equilibrium.fpol_vacuum)
+        self.flt_obj.setFARR(self.equilibrium.fpol_flux)
+        self.flt_obj.setFPOL(self.equilibrium.fpol)
+
+        # self.flt_obj.setRARR(self.eq._R)
+        # self.flt_obj.setZARR(self.eq._Z)
+        # self.flt_obj.setPSI(self.eq._psi.flatten())
+        # self.flt_obj.setFARR(self.eq._psi_fpol)
+        # self.flt_obj.setFPOL(self.eq._fpol)
+        # self.flt_obj.setVacuumFPOL(self.eq._fpol[-1])
+
+        self.flt_obj.prepare() # Prepares the interpolators
+
+
+    def evaluateEq(self) -> None:
+        """Tries to automatically determine the type of the equilibrium
+        """
+        log.info("Evaluating equilibrium")
+        self.eq.evaluate()
+        log.info(f"Type: {self.eq.type_}, LCFS flux: {self.eq.psiLCFS} Webb/rad")
+
+    def processDataOnMesh(self) -> None:
+        if not len(self.target_vertices):
+            log.error("No target vertices loaded! Stopping")
+            return
+
+        start = perf_counter()
+        log.info("Processing data on mesh...")
+        self.mesh_results = l2g.comp.core.processData(
+            fltObj=self.flt_obj, tg_Vertices=self.target_vertices,
+            tg_Cells=self.target_triangles,
+            dim_mul=self.parameters.target_dim_mul)
+        log.info(f"Processing done in {perf_counter() - start:.2f} seconds")
+
+    def processDataOnPoints(self) -> None:
+        if not len(self.target_points):
+            log.error("No target points loaded! Stopping")
+            return
+
+        start = perf_counter()
+        log.info("Processing data on points...")
+        self.point_results = l2g.comp.core.processDataOnPoints(
+            fltObj=self.flt_obj, tg_Vertices=self.target_points,
+            dim_mul=self.parameters.target_dim_mul)
+        log.info(f"Processing done in {perf_counter() - start:.2f} seconds")
+
+    def getFL(self) -> None:
+        """Starts FL trace and creates result container.
+        """
+
+        if not len(self.fl_ids):
+            log.error("No target points to trace FL from. Stopping")
+            return
+
+        if not self.mesh_results:
+            # We need the BaryCenters.
+            self.processDataOnMesh()
+
+        # Just to be sure, convert the fl ids to numpy unsigned int 32
+        self.fl_ids = np.asarray(self.fl_ids, np.uint32)
+
+        log.info("Getting FLs...")
+        start = perf_counter()
+        self.fl_results = l2g.comp.core.getFL(self.flt_obj, self.target_vertices,
+            self.target_triangles, self.fl_ids, self.mesh_results,
+            self.parameters.target_dim_mul, self.options.switch_getFL_with_FLT)
+        log.info(f"Finished getting FLs in {perf_counter() - start} seconds.")
+
+    def runFltOnMesh(self) -> None:
+        if not len(self.target_vertices):
+            log.error("No target vertices loaded! Stopping")
+            return
+
+        if not self.mesh_results:
+            self.processDataOnMesh()
+
+        # Determine what kind of FLT. By toroidal angle or max conlen.
+
+        log.info("Starting FLT on mesh...")
+        start = perf_counter()
+        self.mesh_results = l2g.comp.core.runFLT(self.flt_obj, self.target_vertices,
+                self.target_triangles, self.parameters.num_of_threads,
+                self.mesh_results, self.parameters.target_dim_mul)
+
+        log.info(f"Finished. It took {perf_counter() - start} seconds.")
+
+    def runFltOnPoints(self) -> None:
+        if not len(self.target_points):
+            log.error("No target points loaded! Stopping")
+            return
+        if not self.point_results:
+            self.processDataOnPoints()
+
+        log.info("Starting FLT on points...")
+        start = perf_counter()
+        self.mesh_results = l2g.comp.core.runFLTonPoints(fltObj=self.flt_obj,
+                tg_Vertices=self.target_points,
+                user_num_threads=self.parameters.num_of_threads,
+                results=self.point_results,
+                dim_mul=self.parameters.target_dim_mul)
+
+        log.info(f"Finished. It took {perf_counter() - start} seconds.")
+
+    def obtainOwlConlenGraph(self) -> None:
+        """Obtains the outer wall connection length graph. Basically following
+        FLs on the midplane.
+        """
+
+        radial_points = 2000
+        toroidal_points = 360
+
+        points = self.createMidplanePoints(radialPoints=radial_points,
+                                           toroidalSegments=toroidal_points)
+        self.target_points = points
+        # Reset result on points.
+        self.point_results = None
+
+        R_points = points[:3*2000:3]
+
+        log.info("Obtaining OWL connection length graph")
+        # Getting the outer wall midplane profile.
+        self.runFltOnPoints()
+
+        radial_points = 2000
+        toroidal_points = 360
+
+        psiLcfs = self.eq.psiLCFS
+        Rb, Z, Btot, Bpm = self.eq.getOWL_midplane()
+        flux = self.point_results.flux[:2000]
+        # Calculate drsep
+        drsep = np.abs((flux - psiLcfs) / (Rb * Bpm))
+
+        # Actual drsep. take from R_points
+        drsep_r = R_points - R_points[0]
+
+        conlenUp = self.point_results.conlenUp.reshape((toroidal_points,
+                                                        radial_points))
+        conlenDown = self.point_results.conlenDown.reshape((toroidal_points,
+                                                            radial_points))
+        # Columns are the points, laid in the poloidal direction.
+        conlenUp_mean = np.mean(conlenUp, 0)
+        conlenDown_mean = np.mean(conlenDown, 0)
+        out = np.empty((radial_points, 4), np.float64)
+        out[:, 0] = drsep
+        out[:, 1] = drsep_r
+        out[:, 2] = conlenUp_mean
+        out[:, 3] = conlenDown_mean
+        self.owl_conlen_data = out
+
+    def alignGeometryWithLCFS(self) -> None:
+        """In most cases the wall silhouette used in generating the equilibrium
+        do not coincide with the geometry used in FLT. Therefore in cases, such
+        as limiter cases, where every millimeter counts, we require to align
+        the input geometry, so that the equilibrium LCFS is limiting also on
+        the geometry.
+        """
+        log.info("Checking whether the input geometry is aligned with the" +
+                 " contact point of the data")
+
+        # Simplest way to check is to check the Psi values. Note that this
+        # will not work great, if for instance the poloidal flux map contains
+        # a series of contour "islands" where the values overlap, meaning we
+        # have a set of magnetic surfaces that have the same poloidal flux map.
+
+        # Calculate the initial drsep.
+        log.info("Initial check for drsep.")
+        self.calculateDrsep()
+
+        # Get the element that is closest.
+        el_min = np.argmin(self.mesh_results.drsep)
+        dr_min = self.mesh_results.drsep[el_min]
+        elr_min = self.mesh_results.baryCent[3 * el_min]
+        elz_min = self.mesh_results.baryCent[3 * el_min + 1]
+        psi_min = self.mesh_results.flux[el_min]
+        log.info(f"Closest element {el_min}: R={elr_min}")
+        log.info(f"Closest distance from boundary: {dr_min}")
+
+        # Who would've known that the following commented code doesn't work. We
+        # need a better midplane distance evaluator, other than bisection which
+        # can be quite slow.
+
+        # Compare radial position of the element and the magnetic axis
+        if elr_min > self.equilibrium.mag_axis_r:
+            # In this case the magnetic axis is situated left of the element.
+            # Meaning we have to move the plasma towards the element in order
+            # to make contact.
+            sign = 1
+        else:
+            # Vice versa
+            sign = -1
+
+        # Use the drsep[el_min] as the argument for the radial shift, sign
+        # included.
+        # self.parameters.plasma_r_displ = sign * dr_min
+
+        # Using bisection in the meantime.
+        # Determine bounds.
+        if dr_min < 0:
+            # The point is inside the LCFS.
+            # Now we also have to take into account if we are left or right
+            # of the whole thing.
+            if sign:
+                # Point is inside the LCFS, LCFS being on the right side.
+                a = elr_min + 3 * dr_min
+                b = elr_min
+            else:
+                # Point is inside the LCFS, LCFS being on the left side.
+                a = elr_min
+                b = elr_min - 3 * dr_min
+
+        else:
+            # The point is outside the LCFS.
+            if sign:
+                # Point is outside LCFS, LCFS being on the right side.
+                a = elr_min
+                b = elr_min + 3 * dr_min
+            else:
+                # Point is outside LCFS, LCFS being on the left side.
+                a = elr_min - 3 * dr_min
+                b = elr_min
+
+        def fun(R, Z, value):
+            return self.eq._psi_spline.ev(R, Z) - value
+        from scipy.optimize import bisect
+        log.info(f"a={a} b={b}")
+        fa = self.eq._psi_spline.ev(a, elz_min) - self.eq.psiLCFS
+        fb = self.eq._psi_spline.ev(b, elz_min) - self.eq.psiLCFS
+        log.info(f"fa={fa} fb={fb}")
+        con_point = bisect(fun, a, b, maxiter=100,
+            args=(elz_min, self.eq.psiLCFS))
+
+        r_displ = elr_min - con_point
+        prev_r_displ = self.parameters.plasma_r_displ
+        self.parameters.plasma_r_displ = r_displ
+        log.info(f"Setting new plasma radial displacement to {r_displ}")
+        log.info(f"Drsep from flux: {dr_min}. Actual displacement from bisection: {r_displ}")
+        # REAPPLY parameters
+        self.applyParameters()
+        # DO NOT CHANGE EQ data
+        self.eq.setDisplacement(prev_r_displ, self.parameters.plasma_z_displ)
+        self.loadEq()
+        self.processDataOnMesh()
+
+    def calculateDrsep(self) -> None:
+        """From the evaluated Flux data and the equilibrium data evaluate the
+        radial distance along the midplane for the input target mesh data.
+        """
+        log.info("Calculating distance from the boundary on midplane for each mesh element.")
+
+        # Evaluate the equilibrium
+        self.eq.evaluate()
+        # Get IWL or OWL parameters
+        if self.parameters.side == "iwl":
+            Rb, Z, Btotal, Bpm = self.eq.getIWL_midplane()
+        else: # owl
+            Rb, Z, Btotal, Bpm = self.eq.getOWL_midplane()
+
+        drsep = (self.mesh_results.flux - self.eq.psiLCFS) / (Rb * Bpm)
+
+        # In case of some COCOS notations, the flux gradient direction can
+        # go either away from the plasma or inside of the plasma. In other
+        # words the the flux values are either multiplied with -1 or 1. Hence
+        # the correction. Otherwise in case when the gradient goes inside the
+        # drsep value will become negative as the flux values will be less then
+        # the boundary value
+        drsep *= self.equilibrium.psi_sign
+
+        self.mesh_results.drsep = drsep
+
+        if self.eq.type_ == "div":
+            # Also evaluate the distance from the 2nd separatrix.
+            if self.parameters.side == "iwl":
+                Rb, Z, Btotal, Bpm = self.eq.getIWL_midplane(lcfs=self.eq.psiLCFS2)
+            else: # owl
+                Rb, Z, Btotal, Bpm = self.eq.getOWL_midplane(lcfs=self.eq.psiLCFS2)
+
+            drsep2 = (self.mesh_results.flux - self.eq.psiLCFS2) / (Rb * Bpm)
+            drsep2 *= self.equilibrium.psi_sign
+
+            self.mesh_results.drsep2 = drsep2
+
+    def applySingleExponential(self) -> None:
+        """Applies the single exponential profile on the results.
+        """
+        if self.mesh_results.drsep is None:
+            self.calculateDrsep()
+        if len(self.mesh_results.drsep) == 0:
+            self.calculateDrsep()
+
+        # Get the Plasma LCFS
+        self.eq.evaluate()
+        # Get IWL or OWL parameters
+        if self.parameters.side == "iwl":
+            Rb, Z, Btotal, Bpm = self.eq.getIWL_midplane()
+        else: # owl
+            Rb, Z, Btotal, Bpm = self.eq.getOWL_midplane()
+
+        log.info(f"Evaluated boundary values for {self.parameters.side}:")
+        log.info(f"Rb = {Rb} m")
+        log.info(f"Btotal = {Btotal} T")
+        log.info(f"Bpm = {Bpm} T")
+
+        drsep = self.mesh_results.drsep
+        # Get magnitude of magnetic field for each cell
+        # You have to reshape the BVec as it holds vector values.
+        # Make a reference
+        BVec = self.mesh_results.BVec
+        BVec = BVec.reshape(BVec.shape[0] // 3, 3) # Create a new view.
+                                                   # DO NOT MODIFY IT!
+        Bmag = np.linalg.norm(BVec, axis = 1)
+
+        # Check if Q_parallel is set to something
+        if self.parameters.q_parallel is not None:
+            # Divide by Btotal, as the incident angle comes
+            # with BdotN, with which we apply the flux expansion
+            K = self.parameters.q_parallel / Btotal
+            q_par = K * Bmag * np.exp(-drsep / self.parameters.lambda_q_main)
+        else:
+            K = self.parameters.P_sol * self.parameters.F_split / \
+                (2 * np.pi * Rb * Bpm * self.parameters.lambda_q_main)
+            q_par = K * Bmag * np.exp(-drsep / self.parameters.lambda_q_main)
+
+        self.mesh_results.qpar = q_par
+
+        # Now calculate Q
+        q = np.where(self.mesh_results.mask == 0,
+            K * self.mesh_results.direction * self.mesh_results.Bdot * np.exp(-drsep / self.parameters.lambda_q_main),
+            0)
+        self.mesh_results.q = q
+
+    def createMidplanePoints(self, which:str='owl', length:float=0.3,
+            radialPoints:int=2000, toroidalSegments:int=360,
+            angularStep:float=1) -> np.ndarray:
+        """Based on the Equilibrium data, create points placed on the midplane
+        plane, just outside the boundary contour (only first point should
+        generally have connection lengths going to infinity, or free path on
+        the boundary magnetic surface).
+
+        Arguments:
+            which (str): On which side, iwl = inner wall, owl = outer wall
+                we wish to obtain the points
+            length (float): Length in the major radius direction. That is,
+                effectively to which drsep we wish to populate points. In
+                meters.
+            radialPoints (int): How many points in radial direction we wish to
+                have.
+            toroidalSegments (int): How many segments or lines of points do we
+                wish to have in poloidal direction. The number of segments
+                times the angularStep should at maximum be 360 degrees.
+            angularStep (float): Angular distance between the segments. In
+                degrees.
+
+        Returns:
+            points (array): 1D array of points: (R1, Z1, Phi1, R2, Z2, Phi2,...)
+        """
+        log.info("Creating points on the midplane")
+        # First we need to obtain the R, Z point of the midplane, which sits
+        # on the boundary magnetic surface.
+        if self.eq is None:
+            log.error("No EQ instance loaded! Stopping.")
+            return
+
+        self.eq.evaluate()
+
+        # Obtain the R, Z point
+        # Rb, Z, Btotal, Bpm = self.eq.get_midplane_info(which=which)
+        Rb, Z, Btotal, Bpm = self.eq.getOWL_midplane()
+        log.info(f"Midplane height [m]: {Z}")
+        log.info(f"Radial start [m]: {Rb}")
+        log.info(f"Radial span [m]: {length}")
+        log.info(f"Number of radial points per segment: {radialPoints}")
+        log.info(f"Toroidal segments: {toroidalSegments}")
+        log.info(f"Angular step: {angularStep}")
+        log.info(f"Total angle: {angularStep * toroidalSegments}")
+
+        if which == 'owl':
+            # Points go in +R direction away from owl midplane
+            radial_dir = 1
+        else:
+            # Points go in -R direction away from iwl midplane
+            radial_dir = -1
+
+        # Now let's start creating the points.
+
+        total_num_of_points = radialPoints * toroidalSegments * 3
+
+        # Note: for post-processing, re-shaping will come in handy, so think of
+        # segments as rows and radial points as columns
+        # points.reshape((toroidalSegments, radialPoints * 3))
+
+        points = np.empty(total_num_of_points, np.float32)
+        radial_step = length / (radialPoints - 1)
+        phi = 0
+        angularStep = np.deg2rad(angularStep) # Convert to radians
+        # To ensure that the poloidal segments are rows
+        for i in range(toroidalSegments):
+            # Now to ensure radial points would be columns
+
+            for j in range(radialPoints):
+                r_point = Rb + radial_dir * j * radial_step
+
+                # x = r_point * np.cos(phi)
+                # y = r_point * np.sin(phi)
+                offset = (i * radialPoints + j) * 3
+                points[offset] = r_point
+                points[offset + 1] = Z
+                points[offset + 2] = phi
+
+            phi += angularStep
+
+        return points
+
+    def applySteadyState(self, elm_data_r: np.ndarray,
+                         elm_data_q: np.ndarray) -> None:
+        """Applies the Steady-State plasma profile to the mesh results.
+        """
+
+        if self.ss_results is None:
+            self.ss_results = l2g.comp.L2GSteadyStateHLM()
+
+        # Obtain the arrays from the FLT results
+        drsep = self.mesh_results.drsep * 1e-3
+        Bdot = np.abs(self.mesh_results.Bdot)
+        BVec = self.mesh_results.BVec
+        conlen = self.mesh_results.conlen
+        n_cells = drsep.shape[0]
+        bfield_mag = np.linalg.norm(BVec.reshape((n_cells, 3)), axis=1)
+
+        # Get IWL or OWL parameters
+        if self.parameters.side == "iwl":
+            Rb, Z, Btotal, Bpm = self.eq.getIWL_midplane()
+        else: # owl
+            Rb, Z, Btotal, Bpm = self.eq.getOWL_midplane()
+
+
+        expansion = bfield_mag / Btotal
+
+        # Both contributions
+        interELM = l2g.hlm.steady_state.inter_ELM(drsep, Rb, Btotal, Bpm,
+                Rb=self.parameters.r_break)
+        elm = l2g.hlm.steady_state.ELM(drsep, elm_data_r, elm_data_q)
+
+        # Q parallel sum
+        q_parallel = interELM + elm
+
+        # Apply incident angle, flux expansion
+        q_inc = (elm + interELM) * Bdot / Btotal # Bdot applies the incident
+                                  # angle and the total flux expansion
+        # Apply the cutoff mask for which FL actually wet the area
+        q_inc = np.where(conlen >= self.parameters.cutoff_conlen, q_inc, 0)
+
+        self.ss_results.expansion = expansion
+        self.ss_results.elm = elm
+        self.ss_results.interELM = interELM
+        self.ss_results.q_inc = q_inc
+        self.ss_results.q_parallel = q_parallel
+
+    def applyRampDown(self):
+        """Applies the Ramp-Down plasma profile to the mesh results.
+        """
+        if self.equilibrium is None:
+            log.error("No loaded equilibrium. Stopping")
+            return
+
+        if self.mesh_results is None:
+            log.error("No mesh results to apply Ramp Down on. Stopping")
+            return
+
+        if self.mesh_results.drsep is None:
+            log.error("Mesh results are empty. Stopping.")
+            return
+
+        a = self.equilibrium.a
+        R = self.equilibrium.mag_axis_r
+        Ip = self.equilibrium.Ip # NOT used as P_sol
+        Psol = self.equilibrium.Psol
+        Area = self.equilibrium.Area
+        drsep = self.mesh_results.drsep * 1e-3
+        Bdot = np.abs(self.mesh_results.Bdot)
+        conlen = self.mesh_results.conlen
+
+        self.eq.evaluate()
+
+        # Get IWL or OWL parameters
+        if self.parameters.side == "iwl":
+            Rb, Z, Btotal, Bpm = self.eq.getIWL_midplane()
+        else: # owl
+            Rb, Z, Btotal, Bpm = self.eq.getOWL_midplane()
+
+
+        # P_sol taken from IMAS, hopefully.
+        if Ip < self.parameters.rd_ip_transition:
+            lambda_q = l2g.hlm.ramp_down.decay_length_L_mode_diverted(a, R, Ip,
+                Area)
+            q_par = l2g.hlm.general.single_exponential_psol(drsep, Btotal,
+                Bpm, Rb, lambda_q * 1e-3, Psol)
+        else:
+            lambda_q = float("NaN")
+            q_par = np.zeros(drsep.shape)
+
+        q_inc = q_par * Bdot / Btotal
+        q_inc = np.where(conlen > self.parameters.cutoff_conlen, q_inc, 0)
+
+
+        # P_sol == I_p
+        if Ip < self.parameters.rd_ip_transition:
+            lambda_q = l2g.hlm.ramp_down.decay_length_L_mode_diverted(a, R, Ip,
+                Area)
+            q_par_cons = l2g.hlm.general.single_exponential_psol(drsep, Btotal,
+                Bpm, Rb, lambda_q * 1e-3, Ip)
+        else:
+            lambda_q = float("NaN")
+            q_par_cons = np.zeros(drsep.shape)
+
+        q_inc_cons = q_par_cons * Bdot / Btotal
+        q_inc_cons = np.where(conlen >= self.parameters.cutoff_conlen,
+                              q_inc_cons, 0)
+
+
+        if self.rd_results is None:
+            self.rd_results = l2g.comp.L2GRampDownHLM()
+
+        self.rd_results.lambda_q = lambda_q
+        self.rd_results.q_par = q_par
+        self.rd_results.q_inc = q_inc
+        self.rd_results.q_par_cons = q_par_cons
+        self.rd_results.q_inc_cons = q_inc_cons
+
+    def applyStartUp(self, lq_main: float, lq_near: float, ratio: float,
+                         power_loss: float) -> None:
+        """Applies the Start-Up, double exponential plasma profile, an
+        equation with the near and main features and with a ratio factor
+        between the two features.
+        """
+        if self.sup_results is None:
+            self.sup_results = l2g.comp.L2GStartUpHLM()
+
+        # Obtain the arrays from the FLT results
+        drsep = self.mesh_results.drsep * 1e-3
+        Bdot = np.abs(self.mesh_results.Bdot)
+        BVec = self.mesh_results.BVec
+        conlen = self.mesh_results.conlen
+
+        self.eq.evaluate()
+
+        # Get IWL or OWL parameters
+        if self.parameters.side == "iwl":
+            Rb, Z, Btotal, Bpm = self.eq.getIWL_midplane()
+        else: # owl
+            Rb, Z, Btotal, Bpm = self.eq.getOWL_midplane()
+
+
+        q_par = l2g.hlm.general.double_exponential_psol(drsep=drsep,
+            Bt=Btotal, Bpm=Bpm, Rb=Rb, lambda_q_main=lq_main,
+            lambda_q_near=lq_near, Rq=ratio, P_sol=power_loss, F=0.5)
+
+        q_inc = q_par * Bdot / Btotal
+        q_inc = np.where(conlen >= self.parameters.cutoff_conlen, q_inc, 0)
+
+
+        self.sup_results.q_sup = q_inc
+        self.sup_results.q_sup_par = q_par

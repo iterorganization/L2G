@@ -1,0 +1,34 @@
+import logging
+
+log = logging.getLogger(__name__)
+_file_handler = None
+_stream_handler = None
+
+fmt = '%(asctime)s %(levelname)-8s %(name)27s : %(message)s'
+fmt_date = '%Y-%m-%d %T'
+
+
+def addFileHandler(output_file='l2g.log'):
+    global _file_handler, log
+    if _file_handler is not None:
+        return
+
+    _file_handler = logging.FileHandler(output_file, mode='a')
+    _file_handler.setFormatter(logging.Formatter(fmt, fmt_date))
+    log.addHandler(_file_handler)
+
+def addStreamHandler():
+    global _stream_handler, log
+    if _stream_handler is not None:
+        return
+    _stream_handler = logging.StreamHandler()
+    _stream_handler.setFormatter(logging.Formatter(fmt, fmt_date))
+    log.addHandler(_stream_handler)
+
+def enableLogging():
+    global log
+    log.setLevel(logging.INFO)
+
+def enableDebugging():
+    global log
+    log.setLevel(logging.DEBUG)
