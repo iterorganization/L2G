@@ -124,10 +124,11 @@ sh_points, sh_tri = createShadow()
 # ax.set_zlim(mid_z - max_range, mid_z + max_range)
 # plt.show()
 
-from L2G.core import PyEmbreeAccell
-from L2G import FieldLineTracer, enableLogging
-from L2G.eq import EQDSKIO
-enableLogging()
+from l2g.comp.core import PyEmbreeAccell
+from l2g.comp import FieldLineTracer
+from l2g.equil import EQDSKIO
+import l2g
+l2g.enableLogging()
 
 # Construct fake EQDSK
 eqdsk = EQDSKIO()
