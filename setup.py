@@ -3,6 +3,9 @@ from setuptools.extension import Extension
 import sys
 import os
 
+from typing import List
+from pathlib import Path
+
 try:
     from Cython.Build import cythonize
 except ImportError:
@@ -23,7 +26,7 @@ if "EMBREE_ROOT_DIR" not in os.environ:
 
 useOpenMP = True
 
-def getIncludeDirectories():
+def get_include_directories():
     """Required include directories:
         FLT
         embree3
@@ -40,7 +43,7 @@ def getIncludeDirectories():
 
     return out
 
-def getLibraries():
+def get_libraries():
     """Required libraries to link:
         flt
     """
@@ -52,7 +55,7 @@ def getLibraries():
         out.append("flt")
     return out
 
-def getLibraryDirs():
+def get_library_dirs():
     out = []
 
     if sys.platform == "win32":
@@ -63,7 +66,7 @@ def getLibraryDirs():
 
     return out
 
-def getExtraCompileArgs():
+def get_extra_compile_args():
     out = []
 
     if sys.platform == "win32":
@@ -79,7 +82,7 @@ def getExtraCompileArgs():
             out.append("-fopenmp")
     return out
 
-def getExtraLinkArgs():
+def get_extra_link_args():
     out = []
     if sys.platform == "win32":
         pass
@@ -106,27 +109,60 @@ def getLongDescription():
         return open("README", "r").read()
     return ""
 
+def get_pyx_files(path: Path) -> list:
+    dir_exclusion = ["__pycache__"]
+    pyx_files = []
 
-cython_ext_module = Extension("L2G.core",
-    sources=["L2G/core/flt.pyx"],
-    include_dirs=getIncludeDirectories(),
-    libraries=getLibraries(),
-    library_dirs=getLibraryDirs(),
-    extra_compile_args=getExtraCompileArgs(),
-    extra_link_args=getExtraLinkArgs(),
-    language="c++",
-    # define_macros=[("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION")], # Causes error with np.ndarray[].shape
-)
+    for p in path.glob("*"):
+        if p.is_dir():
+            if p.stem in dir_exclusion:
+                continue
+            pyx_files += get_pyx_files(p)
+        if p.suffix == ".pyx":
+            pyx_files.append(p)
+    return pyx_files
 
-cython_module = cythonize(cython_ext_module, annotate=True)
+def prepare_cython_extensions(pyx_files: List[Path], root_path):
+    extensions = []
+    for p in pyx_files:
+        rel_path = p.relative_to(root_path)
+        source_file_path = str(rel_path)
+        # Correct module name so that it will not have src at the beginning.
+        # Collect the parts of the relative path
+        parts = rel_path.with_suffix("").parts
+        # Remove the "src" and replace it with ModuleName
+        module_name = ".".join(list(parts))
+        print(f"Cythonizing {source_file_path} as module {module_name}...")
+        # Create extensions
+        ext = Extension(
+            module_name,
+            sources=[source_file_path],
+            include_dirs=get_include_directories(),
+            libraries=get_libraries(),
+            library_dirs=get_library_dirs(),
+            extra_compile_args=get_extra_compile_args(),
+            extra_link_args=get_extra_link_args(),
+            language="c++",
+        )
+
+        # Cythonize returns a list
+        extensions += cythonize(ext, annotate=True)
+
+    return extensions
+
+# Collect the pyx files and create extensions from them
+setup_path = Path(__file__).resolve().parent
+package_path = setup_path / "l2g"
+pyx_files = get_pyx_files(package_path)
+extensions = prepare_cython_extensions(pyx_files, setup_path)
 
 setup(
-    name="L2G",
+    name="l2g",
     version="1.0.0",
     description="Python module for running FLT",
     long_description=getLongDescription(),
     long_description_content_type="text/markdown",
-    ext_modules=cython_module,
+    ext_modules=extensions,
     author="Gregor Simic",
     author_email="simic.gregor@gmail.com",
     classifiers=[
@@ -135,10 +171,11 @@ setup(
         "Programming Language :: Cython",
         "Programming Language :: C++",
     ],
-    packages = ["L2G"],
+    packages = ["l2g", "l2g.comp", "l2g.comp.core", "l2g.equil", "l2g.hlm",
+                "l2g.hlm", "l2g.plot",  "l2g.utils"],
     data_files = [('', getDataFiles())],
     python_requires=">=3.6",
-    scripts = ['bin/runL2G', 'bin/runL2G2', 'bin/submitL2G', 'bin/submitL2G2', 'bin/L2G.sbatch', 'bin/L2G2.sbatch',
+    scripts = ['bin/runL2G', 'bin/submitL2G', 'bin/L2G.sbatch',
                'bin/get_elm_data', 'bin/get_owl_conlen_graph',
                'bin/apply_elm_hlm', 'bin/apply_exp_hlm',
                'bin/imas2eqdsk', 'bin/mkEqdskMovie', 'bin/mkImasMovie']
