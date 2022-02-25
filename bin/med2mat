@@ -1,0 +1,40 @@
+# Converts fields of a MED file to MATLAB format.
+
+import medcoupling as mc
+from scipy.io import savemat
+
+import sys
+med_file = ''
+if len(sys.argv) > 1:
+    med_file = sys.argv[1]
+
+if med_file == '':
+    print("No MED file specified!")
+    sys.exit(1)
+
+FLT_FIELDS = ["drsep", "angle", "conlen", "BVec", "BVecCyln", "BDot",
+    "normals", "flux", "baryCent", "triangles", "vertices", "q_perp"]
+
+# Get all fields
+fieldNames = mc.GetAllFieldNames(med_file)
+
+if not fieldNames:
+    print(f"No fields in MED file {med_file}")
+    sys.exit(1)
+
+# Expect that each field has data at the same indexes
+indexes = [(_[0], _[1]) for _ in mc.GetAllFieldIterations(med_file, fieldNames[0])]
+
+
+for i in range(len(indexes)):
+    mat_file = f"{med_file.split('.')[0]}_{i}_matlab.mat"
+    out = {}
+
+    for fieldName in fieldNames:
+        field = mc.ReadField(med_file, fieldName, *indexes[i])
+        array = field.getArray()
+        out[fieldName] = array.toNumPyArray()
+
+    # Save to matlab file
+    savemat(mat_file, out)
+
