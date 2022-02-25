@@ -89,7 +89,12 @@ if "elm" in inp:
     if "r_break" in inp['elm']:
         R_BREAK = inp['elm']['r_break']
 
-
+if "ramp-down" in inp:
+    # Prepare containers for plotting.
+    rd_ip = []
+    rd_psol = []
+    rd_lq = []
+    rd_time = []
 # Load parameters
 
 # See if there are any FL ids to set
@@ -203,12 +208,12 @@ for index, associated_time, equilibrium in equilIter:
             for j, subset in enumerate(fl_ids):
                 flt_case.fl_ids = subset
                 flt_case.getFL()
-                fl_path_name = os.path.join(OUTPUT_DIRECTORY, f"{flt_case.name}_{j}_{index}.vtk")
+                fl_path_name = os.path.join(OUTPUT_DIRECTORY, f"{flt_case.name}_{j}_{associated_time}.vtk")
                 l2g.comp.save_results_to_vtk(flt_case.fl_results, fl_path_name)
         else:
             flt_case.fl_ids = fl_ids
             flt_case.getFL()
-            fl_path_name = os.path.join(OUTPUT_DIRECTORY, f"{flt_case.name}_{index}.vtk")
+            fl_path_name = os.path.join(OUTPUT_DIRECTORY, f"{flt_case.name}_{associated_time}.vtk")
             l2g.comp.save_results_to_vtk(flt_case.fl_results, fl_path_name)
 
     # Now check for other things.
@@ -254,12 +259,12 @@ for index, associated_time, equilibrium in equilIter:
         result_med.writeArray(array=flt_case.ss_results.expansion,
                               array_name="Total flux expansion")
         result_med.writeArray(array=flt_case.ss_results.elm,
-                              array_name="Parallel ELM")
+                              array_name=r"$q_{\parallel}\;\;[\frac{W}{m^2}]$ ELM")
         result_med.writeArray(array=flt_case.ss_results.interELM,
-                              array_name="Parallel inter-ELM")
+                              array_name=r"$q_{\parallel}\;\;[\frac{W}{m^2}]$ inter-ELM")
         result_med.writeArray(array=flt_case.ss_results.q_parallel,
-                              array_name="Parallel ELM + inter-ELM")
-        result_med.writeArray(array=flt_case.ss_results.q_inc, array_name="ELM + inter-ELM")
+                              array_name=r"$q_{\parallel}\;\;[\frac{W}{m^2}]$")
+        result_med.writeArray(array=flt_case.ss_results.q_inc, array_name=r"$q_{\perp}\;\;[\frac{W}{m^2}]$")
 
     if "ramp-down" in inp:
         l2g.log.info("Applying Ramp-Down plasma profile.")
@@ -267,14 +272,20 @@ for index, associated_time, equilibrium in equilIter:
         flt_case.applyRampDown()
         # Save results
         result_med.writeArray(array=flt_case.rd_results.q_inc,
-                              array_name="q ramp-down")
+                              array_name=r"$q_{\perp}\;\;[\frac{W}{m^2}]$")
         result_med.writeArray(array=flt_case.rd_results.q_par,
-                              array_name="qpar ramp-down")
+                              array_name=r"$q_{\parallel}\;\;[\frac{W}{m^2}]$")
         result_med.writeArray(array=flt_case.rd_results.q_inc_cons,
-                              array_name="q ramp-down conservative")
+                              array_name=r"$q_{\perp}\;\;[\frac{W}{m^2}]$ CONS")
         result_med.writeArray(array=flt_case.rd_results.q_par_cons,
-                              array_name="qpar ramp-down conservative")
+                              array_name=r"$q_{\parallel}\;\;[\frac{W}{m^2}]$ CONS")
         l2g.log.info(f'[RAMP DOWN]: i={index} t={associated_time:.3f} lq={flt_case.rd_results.lambda_q:.2f} Ip={flt_case.equilibrium.Ip:.2e}')
+
+        # Store values for generating graphics
+        rd_ip.append(equilibrium.Ip)
+        rd_psol.append(equilibrium.Psol)
+        rd_lq.append(flt_case.rd_results.lambda_q)
+        rd_time.append(associated_time)
 
     if "start-up" in inp:
         l2g.log.info("Applying Start-Up plasma profile (double exponential).")
@@ -289,11 +300,32 @@ for index, associated_time, equilibrium in equilIter:
 
         # Save results
         result_med.writeArray(array=flt_case.sup_results.q_sup,
-                              array_name="q start-up")
+                              array_name=r"$q_{\perp}\;\;[\frac{W}{m^2}]$")
         result_med.writeArray(array=flt_case.sup_results.q_sup_par,
-                              array_name="qpar start-up")
+                              array_name=r"$q_{\parallel}\;\;[\frac{W}{m^2}]$")
 
     TIME_RUNNING_CASES += time.perf_counter() - time_start
+
+# Finally for Ramp-down generate the graphics
+if "ramp-down" in inp:
+    import matplotlib.pyplot as plt
+    f = plt.figure()
+    ax = f.add_subplot(111)
+    ax.set_title(flt_case.name)
+    ax.grid(True)
+    plot1 = ax.plot(rd_time, [_*1e-6 for _ in rd_ip], color='r')
+    plot2 = ax.plot(rd_time, [_*1e-6 for _ in rd_psol], color='g')
+    ax.set_ylabel('Ip [MA], Psol [MW]')
+    ax.set_xlabel('Time [s]')
+
+    ax2 = ax.twinx()
+    plot3 = ax2.plot(rd_time, rd_lq, color='b')
+
+    ax2.set_ylabel(r'$\lambda_q [mm]$')
+    ax.set_ylim((0, 16))
+    ax.legend(plot1 + plot2 + plot3, [r'$I_p$', r'$P_{sol}$', r'$\lambda_q$'],
+              loc='upper center')
+    f.savefig(os.path.join(OUTPUT_DIRECTORY, f"{flt_case.name}_rd.pdf"))
 
 l2g.log.info("Time summaries:")
 l2g.log.info("\tLoading case:".rjust(25) + f"{TIME_LOADING_CASE:.2f} s")
