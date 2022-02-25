@@ -178,5 +178,6 @@ setup(
     scripts = ['bin/runL2G', 'bin/submitL2G', 'bin/L2G.sbatch',
                'bin/get_elm_data', 'bin/get_owl_conlen_graph',
                'bin/apply_elm_hlm', 'bin/apply_exp_hlm',
-               'bin/imas2eqdsk', 'bin/mkEqdskMovie', 'bin/mkImasMovie']
+               'bin/imas2eqdsk', 'bin/mkEqdskMovie', 'bin/mkImasMovie',
+               'bin/med2mat']
 )
