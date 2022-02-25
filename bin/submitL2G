@@ -47,5 +47,10 @@ LOG_NAME=${JOB_NAME}_slurm.log
 # Defaults to gen10_ib
 PARTITION_NAME=${PARTITION_NAME:-"gen10_ib"}
 
+# Just to be sure, when generating graphics on compute nodes, use Agg for
+# matplotlib backend. Otherwise an error "could not connect to display"
+# will crash the run
+export MPLBACKEND=Agg
+
 CPUS_PER_TASK=${CPUS_PER_TASK:-$(sinfo -p ${PARTITION_NAME} -O "cpus" --noheader)}
 sbatch --job-name=${JOB_NAME} --output=${LOG_NAME} --partition=${PARTITION_NAME} --cpus-per-task=${CPUS_PER_TASK} --nodes=1 ${SCRIPTPATH}/L2G.sbatch "${L2G_JSON}"
