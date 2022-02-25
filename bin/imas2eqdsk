@@ -75,12 +75,18 @@ if time_slices == [-1]:
     time_slices = imas_obj.summary.time
 
 for ts in time_slices:
-    HEADER_COMMENT=f"IDS shot={shot} run={run} t={ts}s"
-    ids_equilibrium.getSlice(ts, 1)
-    slice = ids_equilibrium.time_slice[0]
+    ids_equilibrium.getSlice(ts, imas.imasdef.CLOSEST_SAMPLE)
 
+    # Actual time depends on what is the closest sample, do NOT trust linear
+    # interpolation!!
+
+
+    slice = ids_equilibrium.time_slice[0]
+    time = slice.time
+
+    HEADER_COMMENT=f"IDS shot={shot} run={run} t={time:.3f}s"
     eqObj = l2g.equil.createEqdskFromSlice(slice,
-                                                HEADER_COMMENT)
+                                           HEADER_COMMENT)
     ids_wall = imas_obj.wall
     ids_wall.get()
     l2g.equil.addWallDescriptionToEqdsk(eqObj, ids_wall)
@@ -90,6 +96,6 @@ for ts in time_slices:
     # generateText function would not return anything.
     eqObj.successfullRead = True
     text = eqObj.generateText()
-    f = open(f'shot_{shot}_run_{run}_t_{ts}s.eqdsk', 'w')
+    f = open(f'shot_{shot}_run_{run}_t_{time:.3f}s.eqdsk', 'w')
     f.write(text)
     f.close()
