@@ -13,28 +13,45 @@ parser.add_argument('-s', '--shot', metavar='SHOT', type=int,
 parser.add_argument('-r', '--run', metavar='RUN', type=int,
                     help='Run number', required=True)
 parser.add_argument('-u', '--user', metavar='USER', type=str, default="public",
-                    help='Image DPI or size control')
+                    help='Username')
 parser.add_argument('-d', '--device',
-                    metavar="DEVICE", type=str, default="ITER", help='Image bitrate')
+                    metavar="DEVICE", type=str, default="ITER", help='Device')
 parser.add_argument('-ts', '--time_start', metavar='#time_start', type=float,
                     default=0.0, help='Starting time')
 parser.add_argument('-te', '--time_end', type=float, default=999999)
+parser.add_argument('-o', '--output_name', type=str, default="out.gif",
+                    help="Name of gif.", metavar="OUTNAME")
 
+# Additional cosmetic arguments
+parser.add_argument('-minx', '--min_x', type=float, help="Abscissa lower limit",
+                    metavar="MIN X")
+parser.add_argument('-maxx', '--max_x', type=float, help="Abscissa upper limit",
+                    metavar="MAX X")
+parser.add_argument('-miny', '--min_y', type=float, help="Ordinate lower limit",
+                    metavar="MIN Y")
+parser.add_argument('-maxy', '--max_y', type=float, help="Ordinate upper limit",
+                    metavar="MAX Y")
 
 args = parser.parse_args()
 
 import imas
 
-ids = imas.ids(args.shot, args.run)
-ids.open_env(args.user, args.device, '3')
+#ids = imas.ids(args.shot, args.run)
+#ids.open_env(args.user, args.device, '3')
+ids = imas.DBEntry(backend_id=imas.imasdef.MDSPLUS_BACKEND,
+    user_name=args.user, db_name=args.device, shot=args.shot, run=args.run,
+    data_version='3')
+ids.open()
+# Old API
+#wall_ids = ids.wall
+#wall_ids.get()
+wall_ids = ids.get("wall")
 
-wall_ids = ids.wall
-wall_ids.get()
+#summary_ids = ids.summary
+#summary_ids.get()
+summary_ids = ids.get("summary")
 
-summary_ids = ids.summary
-summary_ids.get()
-
-equilibrium = ids.equilibrium
+#equilibrium = ids.equilibrium
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -56,6 +73,7 @@ R_LIMITS = np.min(wall_contour_r) - 1, np.max(wall_contour_r) + 1
 
 # Plot limiter
 ax.plot(wall_contour_r, wall_contour_z, 'r-')
+ax.set_title(f"S={args.shot} R={args.run} U={args.user} D={args.device}")
 lines = [] # Holds plotting objects
 
 N = len(summary_ids.time)
@@ -80,14 +98,21 @@ for time in summary_ids.time:
         continue
 
     times.append(f"t={time:12.4f}s")
-    print(time)
-    equilibrium.getSlice(time, 1)
+    # equilibrium.getSlice(time, 1)
+    equilibrium = ids.get_slice("equilibrium", time,
+        imas.imasdef.CLOSEST_INTERP)
 
     slice = equilibrium.time_slice[0]
     if len(slice.boundary_separatrix.outline.r):
         collection_r = []
         collection_z = []
         # Figure out the parts of the plot.
+        # When the contour is stored in this place, it is saved as one array.
+        # Therefore the following way tries to find indexes where the different
+        # parts of the contour start and end. Indexes are obtained by checking
+        # for significant jump in radial *and* vertical direction. Sometimes
+        # the contour makes a vertical jump but practically no radial move and
+        # vice versa.
         diff_r = np.abs(np.diff(slice.boundary_separatrix.outline.r))
         indexes = [_ for _ in np.argwhere(diff_r > 0.5).flatten()]
 
@@ -149,7 +174,6 @@ N = len(times)
 # Now make the animation
 
 def update(i, lr, lz, sr, sz, lines, labels):
-    print(f"Frame {i}")
     while lines:
         el = lines.pop(0)
         el.remove()
@@ -171,7 +195,7 @@ frame_update = partial(update, lr=lcfs_contour_r, lz=lcfs_contour_z,
                               lines=lines, labels=times)
 
 anim = FuncAnimation(figure, frame_update, frames=N, interval=250)
-anim.save("test.gif", writer=PillowWriter())
+anim.save(args.output_name, writer=PillowWriter())
 
 
 
