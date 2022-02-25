@@ -157,7 +157,28 @@ class EQ:
 
         self.evaluated = False
 
-    def setEquilibrium(self, obj: Equilibrium, load: bool = True) -> None:
+        # Points of the LCFS contour, which are obtained when the type is
+        # limiter.
+        self._lcfs_points_1 = None
+        self._lcfs_points_2 = None
+
+    def setEquilibrium(self, obj: Equilibrium, load: bool = True,
+                       reset: bool = True) -> None:
+        """Set equilibrium data to the diagnostic class.
+
+        Arguments:
+            obj (Equilibirum): Equilibrium data (flux, fpol, ...)
+            load (bool): Prepare interpolator and helper variables.
+                Default True.
+            reset (bool): Reset all the quantities used for analyzing the
+                equilibrium. Useful when using single object for multiple
+                equilibriums. Default True.
+
+        """
+        # First reset values. When a new equilibrium is added.
+        if reset:
+            self.resetValues()
+
         self._eq = obj
         self.evaluated = False
         if load:
@@ -172,9 +193,13 @@ class EQ:
         # self._OPointsBounds = [[3.5, 8.5], [-4.5, 4.7]]
 
         # Initial guess for Xpoint (lower)
+        # TODO, set the initial guess position relative to the bounding box
+        # of the wall silhouette.
         self._initialGuessXPoint = [5 ,-3.5]
 
         # Initial guess for Xpoint (upper)
+        # TODO, set the initial guess position relative to the bounding box
+        # of the wall silhouette.
         self._initialGuessXPointUpper = [4.6, 4.5]
 
         self.interpolate()
@@ -232,13 +257,19 @@ class EQ:
         return oPoint
 
     def scanSaddle(self, initialGuess = None):
+        """Try to find a saddle point by searching the minimum of the sum of
+        squares of first derivatives in the (R, Z) cylindrical plane.
+        """
+
         if not initialGuess:
             initialGuess = self._initialGuessXPoint
         def evalPsiDxDy(p, *args):
             psi_spl = args[0]
 
-            drdz = psi_spl.ev(p[0], p[1], dr=1)**2 + \
-                   psi_spl.ev(p[0], p[1], dz=1)**2
+            psi_dr1 = psi_spl.ev(p[0], p[1], dr=1)
+            psi_dz1 = psi_spl.ev(p[0], p[1], dz=1)
+
+            drdz = psi_dr1 * psi_dr1 + psi_dz1 * psi_dz1
             return drdz
 
         xPoint = minimize(evalPsiDxDy, initialGuess, args=(self._psi_spline))
@@ -246,6 +277,10 @@ class EQ:
         return xPoint
 
     def secondDerivativeTest(self, p):
+        """Second derivative test to see if the point is a saddle. First the
+        point is found by using the minimize function than this second test
+        checks whether it is a saddle point.
+        """
         # drdz_sq = self._psi_spline.ev(p[0], p[1], dr=1) **2 + \
         #     self._psi_spline.ev(p[0], p[1], dz=1) ** 2
         dr2 = self._psi_spline.ev(p[0], p[1], dr=2)
@@ -515,6 +550,42 @@ class EQ:
                 br * np.sin(phi) + bphi * np.cos(phi),
                 bz], dtype=np.float)
 
+    def alignLcfsToPoint(self, point: np.ndarray) -> np.ndarray:
+        """Finds the shortest displacement required to put the limiter LCFS
+        to point p.
+
+        Arguments:
+            p (np.ndarray): 1D array with 2 values.
+
+        Returns:
+            displ (np.ndarray): New evaluated displacement.
+        """
+
+        if not self.type_ == "lim":
+            log.info("alignLcfsToPoint not used for Diverted state")
+            return
+
+        if self._lcfs_points_1 is None or self._lcfs_points_2 is None:
+            log.info("No LCFS points to use for aligning.")
+            return
+
+        diff_1 = point - self._lcfs_points_1
+        dist_1 = np.sum(diff_1**2, axis=1)
+        min_ind_1 = np.argmin(dist_1)
+
+        diff_2 = point - self._lcfs_points_2
+        dist_2 = np.sum(diff_2**2, axis=1)
+        min_ind_2 = np.argmin(dist_2)
+
+        # The new plasma displacement will point from the closest point on the
+        # LCFS to the closest point on the geometry.
+        if dist_1[min_ind_1] < dist_2[min_ind_2]:
+            displ = diff_1[min_ind_1]
+        else:
+            displ = diff_2[min_ind_2]
+
+        return displ
+
     def checkIfLimiter(self):
         """Checks if there is a contact point on the wall that is closed inside
         the wall.
@@ -649,6 +720,9 @@ class EQ:
                          "diverted equilibrium.")
                 return False, None, None
 
+        # So for so good, let's save the lcfs points
+        self._lcfs_points_1 = solver.y.T
+
         # Now the other direction. Sign changed at valx and valy
         sign = -1 # Now follow in the other direction
         solver = solve_ivp(fun=fun, t_span=(0, 2*np.pi), y0=contactPoint,
@@ -670,6 +744,9 @@ class EQ:
                 log.info("Surface does not lie inside tokamak. Possibly " +
                          "diverted equilibrium.")
                 return False, None, None
+
+        # Ok now save the other points of the LCFS contour
+        self._lcfs_points_2 = solver.y.T
 
         log.info("Surface lies inside tokamak. Limiter configuration.")
 
@@ -703,6 +780,13 @@ class EQ:
 
         # if not np.allclose(r0, r1):
         #     return False, None, None
+
+        # Now that we have a LCFS contour, let's save it for limiter cases, in
+        # which we wish to position the LCFS directly on the target geometry,
+        # by measuring the closest distance (x, y) from the closest point on
+        # the target geometry to the LCFS.
+
+
         return True, contactFlux, contactPoint
 
     def calculate_drsep(self, sep1: float, sep2: float) -> float:
@@ -765,9 +849,9 @@ class EQ:
         if v1 < 1e-2 and v2 < 1e-2:
             pass
         else:
-            log.info('O point detected has too large derivatives:')
-            log.info(f'1st deriv sum square: {v1}')
-            log.info(f'2nd deriv sum square: {v2}')
+            log.debug('O point detected has too large derivatives:')
+            log.debug(f'1st deriv sum square: {v1}')
+            log.debug(f'2nd deriv sum square: {v2}')
         log.info(f'O point detected: {oPoint.x}')
 
         self.oPoint = oPoint.x
@@ -797,7 +881,7 @@ class EQ:
                 log.info("No lower X point detected")
                 success = False
             else:
-                log.info("2nd derivative test succeeded.")
+                log.debug("2nd derivative test succeeded.")
                 log.info("Obtained first separatrix flux value.")
                 self.psiLCFS = self._psi_spline.ev(lowX.x[0], lowX.x[1])
                 self.lowXPoint = lowX.x
@@ -823,7 +907,7 @@ class EQ:
             # instance, it might go to the O point location
             if self.secondDerivativeTest(uppX.x):
                 # Local maximum
-                log.info("2nd derivative test failed.")
+                log.debug("2nd derivative test failed.")
                 log.info("Detected upper X point is not a saddle " +
                              f"point: {uppX.x}")
                 self.drsep = None

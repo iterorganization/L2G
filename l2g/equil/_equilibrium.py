@@ -1,5 +1,7 @@
 import numpy as np
 
+from typing import Optional
+
 import logging
 log = logging.getLogger(__name__)
 
@@ -63,33 +65,33 @@ class Equilibrium(object):
         "Area"]
 
     def __init__(self):
-        self.wall_contour_r = []
-        self.wall_contour_z = []
+        self.wall_contour_r: list = []
+        self.wall_contour_z: list = []
 
-        self.mag_axis_r = -1
-        self.mag_axis_z = -1
+        self.mag_axis_r: int = -1
+        self.mag_axis_z: int = -1
 
-        self.grid_dim_r = -1
-        self.grid_dim_z = -1
+        self.grid_dim_r: int = -1
+        self.grid_dim_z: int = -1
 
-        self.grid_r = []
-        self.grid_z = []
-        self.psi = []
-        self.psi_sign = None # Sign of flux gradient from center to boundary.
-        self.psi_boundary = None
-        self.psi_axis = None
+        self.grid_r: Optional[np.ndarray] = []
+        self.grid_z: Optional[np.ndarray] = []
+        self.psi: Optional[np.ndarray] = []
+        self.psi_sign: Optional[int] = None # Sign of flux gradient from center to boundary.
+        self.psi_boundary: Optional[float] = None
+        self.psi_axis: Optional[float] = None
 
-        self.Ip = -1
+        self.Ip: Optional[float] = -1.0
 
-        self.fpol = []
-        self.fpol_flux = []
-        self.fpol_vacuum = -1
+        self.fpol: list = []
+        self.fpol_flux: list = []
+        self.fpol_vacuum: float= -1.0
 
-        self.type = ''
+        self.type: str = ''
 
-        self.a = 0
-        self.Psol = 0
-        self.Area = 0
+        self.a: float = 0.0
+        self.Psol: float = 0.0
+        self.Area: float = 0.0
 
         pass
 

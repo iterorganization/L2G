@@ -1,6 +1,6 @@
 
 def decay_length_L_mode_diverted(a: float, R: float, Ip: float, Area: float):
-    """Calculates the decay length of a L-mode diverted equilibrium, by the
+    r"""Calculates the decay length of a L-mode diverted equilibrium, by the
     use of the most suitable scaling law from Horacek, et.al, 2020.
 
     For convenience the data stored in a IMAS IDS is in the following:
@@ -9,6 +9,10 @@ def decay_length_L_mode_diverted(a: float, R: float, Ip: float, Area: float):
      - R = equilibrium.time_slice[:].global_quantities.magnetic_axis.r
      - Ip = equilibirum.time_slice[:].global_quantities.ip
      - Area = equilibrium.time_slice[:].global_quantities.area
+
+    .. math::
+
+       \lambda_q = 4350 (\frac{a}{R})^{1.09} (\frac{Ip}{Area})^{-0.43}
 
 
     Returns:

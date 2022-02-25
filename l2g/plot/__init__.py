@@ -85,7 +85,8 @@ def plotMidplane(equil: Equilibrium, ax, pattern='r-'):
 def createLcfsMovie(equilibriums, labels, legend_name='Legend',
     legend_pos='upper right', movieName='movie.gif', dpi=90, bitrate=1000,
     type='gif'):
-    """Creates a movie out of EQDSKs.
+    """Creates a movie out of EQDSKs. It takes a list of equilibriums, takes
+    the LCFS or boundary points and plot it.
     """
     if not isinstance(equilibriums, list):
         equilibriums = [equilibriums]

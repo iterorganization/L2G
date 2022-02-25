@@ -7,6 +7,7 @@ import l2g.utils.meshio
 
 # Next functions are helper functions for
 import glob
+import re
 import json
 import logging
 import os
@@ -15,7 +16,115 @@ log = logging.getLogger(__name__)
 
 import numpy as np
 
+
+import typing
+
+if typing.TYPE_CHECKING:
+    from l2g.comp import FieldLineTracer
+
+def json_remove_comments(json_like_string: str) -> str:
+    r"""Removes C-style comments from *json_like* and returns the result.
+
+    Regex pattern:
+
+    ``//.*?$|/\*.*?\*/|\'(?:\\.|[^\\\'])*\'|"(?:\\.|[^\\"])*"``
+
+     - ``//.*?`` Match the comment section non-greedy zero or more times
+
+    or
+
+     - ``/\*.*?\*/`` Match the /* ... */ non-greedy zero or more times.
+
+    The following matches find strings that contain also supposedly C-style
+    comments. These are ignored then in the replacing function, as they are
+    valid JSON strings.
+
+     -  ``\'(?:\\.|[^\\\'])*\'`` Find strings that contain C-style comments.
+     - ``"(?:\\.|[^\\"])*"`` Find strings that contain C-style comments.
+
+
+    Example:
+
+    .. code-block:: python
+
+       test_json = '''\
+       {
+           "foo": "bar", // This is a single-line comment
+           "baz": "blah" /* Multi-line
+           Comment */
+       }'''
+       remove_comments('{"foo":"bar","baz":"blah",}')
+         '{\n    "foo":"bar",\n    "baz":"blah"\n}'
+    """
+    comments_re = re.compile(
+        r'//.*?$|/\*.*?\*/|\'(?:\\.|[^\\\'])*\'|"(?:\\.|[^\\"])*"',
+        re.DOTALL | re.MULTILINE
+    )
+    def replacer(match):
+        s = match.group(0)
+        if s[0] == '/': return ""
+        return s
+    return comments_re.sub(replacer, json_like_string)
+
+def json_remove_trailing_commas(json_line_string: str) -> str:
+    """Removes trailing commas from *json_like* and returns the result.
+
+    Example:
+
+    .. code-block:: python
+
+       remove_trailing_commas('{"foo":"bar","baz":["blah",],}')
+       '{"foo":"bar","baz":["blah"]}'
+    """
+    trailing_object_commas_re = re.compile(
+        r'(,)\s*}(?=([^"\\]*(\\.|"([^"\\]*\\.)*[^"\\]*"))*[^"]*$)')
+    trailing_array_commas_re = re.compile(
+        r'(,)\s*\](?=([^"\\]*(\\.|"([^"\\]*\\.)*[^"\\]*"))*[^"]*$)')
+    # Fix objects {} first
+    objects_fixed = trailing_object_commas_re.sub("}", json_line_string)
+    # Now fix arrays/lists [] and return the result
+    return trailing_array_commas_re.sub("]", objects_fixed)
+
+def json_loads(json_like: str) -> dict:
+    """JSON format does not allow comments or trailing commas, therefore this
+    functions first cleans the JSON like content and finally calls json.loads.
+    """
+
+    # Remove comments
+    almost_json = json_remove_comments(json_like)
+
+    # Remove trailing white spaces
+    proper_json = json_remove_trailing_commas(almost_json)
+
+    out = None
+
+    try:
+        out = json.loads(proper_json)
+    except json.JSONDecodeError as e:
+        # Get the line number error
+        lines = proper_json.splitlines()
+        log.info("Error when parsing JSON.")
+        [log.info(line) for line in lines[e.lineno - 2: e.lineno]]
+        log.info(lines[e.lineno] + '    <----- ERROR')
+        [log.info(line) for line in lines[e.lineno + 1: e.lineno + 3]]
+        raise
+
+    return out
+
+
+
 def check_if_in_slurm_job(*flt_objs):
+    """This function checks if the process is run in a SLURM environment. A
+    simple check if environment variable SLURM_JOBID exists. If it exists, then
+    it is deduced that the process is run inside a compute node, therefore
+    ideally we increase the number of max OpenMP threads to whatever is the
+    maximum for the compute node. One thing less to worry about the user.
+
+
+    Arguments:
+        flt_objs (FieldLinesTracer): Set of FLT objects, for which we set the
+            maximum number of cpu threads.
+    """
     if "SLURM_JOBID" in os.environ:
         log.info('Detected SLURM environment.')
         job_id = os.environ['SLURM_JOBID']
@@ -78,12 +187,14 @@ def load_l2g_json(file_path: str) -> dict:
         [log.info(line) for line in text[e.lineno - 3: e.lineno - 1]]
         log.info(text[e.lineno - 1] + '    <----- ERROR')
         [log.info(line) for line in text[e.lineno: e.lineno + 2]]
-        raise
+        # Remove Raise, because the trace log obscures all the log output.
+        log.info("Check for any trailing commas, missing commas, ...")
+        # raise
 
     return inp
 
 def set_parameters_and_options(d: dict, flt_obj) -> None:
-    """Set parameters to a FieldLineTracer object.
+    """Set parameters to a FieldLineTracer object from a dictionary.
     """
     # Set the parameters. If unknown, just print and ignore
     if "parameters" in d:
@@ -103,7 +214,14 @@ def set_parameters_and_options(d: dict, flt_obj) -> None:
 
 
 def load_flt_settings(d: dict, flt) -> None:
-    """Loads the settings for the FLT
+    """Loads the settings for the FLT from a dictionary. Also loads geometries.
+
+
+    .. todo::
+
+       Figure out whether it is okay to have a function like this which loads
+       settings and ALSO loads geometry.
+
     """
 
     set_parameters_and_options(d, flt)
@@ -154,8 +272,15 @@ def load_flt_settings(d: dict, flt) -> None:
         geomIds.append((geomId, filePath))
     log.info("Done.")
 
-def load_elm_settings(d: dict, flt) -> None:
+def load_elm_settings(d: dict, flt: 'FieldLineTracer') -> None:
     """Prepares a FieldLineTracer object for evaluating ELM profiles.
+
+    Essentially, in this case the main goal is to obtain the outer wall
+    midplane connection length graph. For that what we really need is that the
+    maximum length until which a field line is followed is set to a high value
+    and that's it. This is then used for evaluating the ELM contribution via
+    the ELM PLM model.
+
     """
     flt.parameters.time_step = 0.01
     flt.parameters.time_end = 2 * 3.141592653
@@ -165,11 +290,13 @@ def load_elm_settings(d: dict, flt) -> None:
 
     set_parameters_and_options(d, flt)
 
-    embreeObj = l2g.comp.core.PyEmbreeAccell()
+    # embreeObj = l2g.comp.core.PyEmbreeAccell()
 
     shadowMeshFiles = d['shadow_meshes']
+    flt.commitMeshesToEmbree(shadowMeshFiles)
 
-    for f in shadowMeshFiles:
-        v, t = l2g.utils.meshio.readMesh(f)
-        embreeObj.commitMesh(v * 1e-3, t)
-        flt.setEmbreeObj(embreeObj)
+
+    # for f in shadowMeshFiles:
+    #     v, t = l2g.utils.meshio.readMesh(f)
+    #     embreeObj.commitMesh(v * 1e-3, t)
+    #     flt.setEmbreeObj(embreeObj)

@@ -8,27 +8,14 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import numpy as np
 
-
-def plot_psi(eq: l2g.equil.EQ, output_path: str, plot_midplane=False,
-             save_files=True) -> plt.figure:
-    """Plot the poloidal magnetic flux of an equilibrium.
-
-    If for output only the directory is specified, it generates two graphics in
-    the directory, named psi.png and psi.pdf, otherwise it will append the
-    _psi and generate a pdf and png file.
+def plot_psi_to_mpl_ax(ax, eq: l2g.equil.EQ):
+    """Plot the poloidal magnetic flux of an equilibrium to a matplotlib axes.
 
     Arguments:
-        eq (l2g.equil.EQ): Equilibrium with diagnostic
-        output_path (str): Output path.
+        ax: matplotlib axis or subplot
+        eq: Equilibrium with diagnostic
     """
     eq.evaluate()
-
-    figure = plt.figure(figsize=plt.figaspect(3/2))
-    ax = figure.add_subplot(111)
-    ax.axis("equal")
-    ax.set_xlabel("R[m]")
-    ax.set_ylabel("Z[m]")
-
     psi = eq._eq.psi
     grid_r = eq._eq.grid_r
     grid_z = eq._eq.grid_z
@@ -118,9 +105,29 @@ def plot_psi(eq: l2g.equil.EQ, output_path: str, plot_midplane=False,
 
     # Plot limiter silhouette
     ax.plot(eq._eq.wall_contour_r, eq._eq.wall_contour_z, 'r-', linewidth=2.5)
-
-
     ax.legend()
+
+
+def plot_psi(eq: l2g.equil.EQ, output_path: str, plot_midplane=False,
+             save_files=True) -> plt.figure:
+    """Plot the poloidal magnetic flux of an equilibrium.
+
+    If for output only the directory is specified, it generates two graphics in
+    the directory, named psi.png and psi.pdf, otherwise it will append the
+    _psi and generate a pdf and png file.
+
+    Arguments:
+        eq (l2g.equil.EQ): Equilibrium with diagnostic
+        output_path (str): Output path.
+    """
+
+    figure = plt.figure(figsize=plt.figaspect(3/2))
+    ax = figure.add_subplot(111)
+    ax.axis("equal")
+    ax.set_xlabel("R[m]")
+    ax.set_ylabel("Z[m]")
+    plot_psi_to_mpl_ax(ax, eq)
+
     figure.tight_layout()
 
     if save_files:

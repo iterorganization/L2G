@@ -7,6 +7,14 @@ import numpy as np
 import logging
 log = logging.getLogger(__name__)
 
+import math
+
+def truncate(number: float, digits: int) -> float:
+    """Truncate number decimal places to the number of digits.
+    """
+    stepper = 10.0 ** digits
+    return math.trunc(number * stepper) / stepper
+
 class EquilibriumIterator(object):
     """Iterator object that has equilibriums and acts as a iterator over them.
     """
@@ -23,6 +31,8 @@ class EquilibriumIterator(object):
         self._wall_equilibrium = None
 
         self._correct_helicity = True
+
+        self.truncate_digits = 3
 
     def correctHelicity(self, val):
         self._correct_helicity = val
@@ -79,39 +89,54 @@ class EquilibriumIterator(object):
             n_steps = int((d['time_end'] - d['time_start']) / d['time_step']) + 1
             time_slices = np.linspace(d['time_start'], d['time_end'], n_steps)
 
+        # OLD API
+        # self._ids = imas.ids(shot, run)
+        # self._ids.open_env(user, device, version)
 
-        self._ids = imas.ids(shot, run)
-        self._ids.open_env(user, device, version)
+        # self._ids_wall = self._ids.wall
+        # self._ids_wall.get()
 
-        self._ids_wall = self._ids.wall
-        self._ids_wall.get()
+        # self._ids_summary = self._ids.summary
+        # self._ids_summary.get()
 
-        self._ids_summary = self._ids.summary
-        self._ids_summary.get()
-
-        self._ids_equilibrium = self._ids.equilibrium
+        # self._ids_equilibrium = self._ids.equilibrium
 
         # Trouble in some cases
         # interpolation = imas.imasdef.INTERPOLATION
         # Closest interpolation.
-        interpolation = imas.imasdef.CLOSEST_SAMPLE
+        # interpolation = imas.imasdef.CLOSEST_SAMPLE
+        interpolation = imas.imasdef.CLOSEST_INTERP
+
+        # New API
+        self._ids = imas.DBEntry(backend_id=imas.imasdef.MDSPLUS_BACKEND,
+            db_name=device, shot=shot, run=run, user_name=user,
+            data_version=version)
+        self._ids.open()
+
+        self._ids_wall = self._ids.get("wall")
+
 
         log.info(f"Opening and reading data from SHOT={shot}, RUN={run}, device={device}, username={user}")
 
         for t in time_slices:
             log.info(f"Loading time slice {t}")
-            self._ids_equilibrium.getSlice(t, interpolation)
-            self._ids_summary.getSlice(t, interpolation)
+            self._ids_equilibrium = self._ids.get_slice("equilibrium", t,
+                interpolation)
+            self._ids_summary = self._ids.get_slice("summary", t,
+                interpolation)
             slice = self._ids_equilibrium.time_slice[0]
+
             equilibrium = getEquilibriumFromIMAS(slice, self._ids_wall,
                 self._ids_summary, correct_helicty=self._correct_helicity)
 
             if interpolation == 1:
-                # CLosest interpolation
+                # Closest interpolation
                 t = slice.time
 
             self._equilibriums.append(equilibrium)
-            self._times.append(t)
+
+            # Truncate the time
+            self._times.append(truncate(t, self.truncate_digits))
 
         return None
 

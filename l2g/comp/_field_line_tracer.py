@@ -12,14 +12,38 @@ import logging
 from time import perf_counter
 log = logging.getLogger(__name__)
 
+from typing import Optional
+
 class FieldLineTracer:
     """FLT object for performing FLT on a given input mesh.
 
     Attributes:
-        name (str): Name of the case
-        parameters (l2g.comp.Parameters): Holds parameters for the tracer
-        options (l2g.comp.Options): Options on what to run
-
+        name (str): Name of the case.
+        parameters (l2g.comp.Parameters): Holds parameters for the tracer.
+        options (l2g.comp.Options): Options on what to run.
+        flt_obj (l2g.comp.core.PyFLT): Cython wrapper over C++ kernel.
+        embree_obj (l2g.comp.core.PyEmbreeAccell): Cython wrapper over C++
+            Embree.
+        equilibrium (l2g.equil.Equilibrium): Data class for holding equilibrium
+            data.
+        eq (l2g.equil.EQ): Equilibrium diagnostics class.
+        point_results (l2g.comp.L2GPointsResults): Data class for FLT results
+            performed on points (e.g., for owl connection length graph).
+        mesh_results (l2g.comp.L2GResults): Data class for FLT results
+            performed on meshs (e.g., main storage FLT results)
+        fl_results (l2g.comp.L2GFLs): Data class for fieldline points.
+        owl_conlen_data (np.ndarray): Outer wall connection length graph array
+        target_vertices (np.ndarray | list): Location of points
+        target_triangles (np.ndarray | list): Mesh triangles. List of IDs.
+        target_points (np.ndarray | list): List of R/Z/Phi points.
+        fl_ids (list): List of triangle elements from which we wish to obtain
+            the trajectories of the field lines.
+        rd_results (l2g.comp.L2GRampDownHLM): Data class for storing HLM
+            results for Ramp-Down scenario
+        ss_results (l2g.comp.L2GsteadyStateHLM): Data class for storing HLM
+            results for Steady-State scenario
+        sup_results (l2g.comp.L2GStartUpHLM): Data class for storing HLM
+            results for Start-Up scenario
 
     """
     def __init__(self):
@@ -28,22 +52,22 @@ class FieldLineTracer:
         self.options = l2g.comp.Options()
         self.flt_obj = l2g.comp.core.PyFLT()
         self.embree_obj = l2g.comp.core.PyEmbreeAccell()
-        self.equilibrium = None
+        self.equilibrium: l2g.equil.Equilibrium
         self.eq = l2g.equil.EQ()
         self.eq._verbose=True # For additional output
-        self.point_results = None # Holds FLT result on points
-        self.mesh_results = None # Holds FLT result on mesh
-        self.fl_results = None # Holds fieldlines
-        self.owl_conlen_data = None
+        self.point_results: Optional[l2g.comp.L2GPointResults] = None # Holds FLT result on points
+        self.mesh_results: Optional[l2g.comp.L2GResults] = None # Holds FLT result on mesh
+        self.fl_results: Optional[l2g.comp.L2GFLs] = None # Holds fieldlines
+        self.owl_conlen_data: Optional[np.ndarray] = None
         self.target_vertices = []
         self.target_triangles = []
         self.target_points = []
         self.fl_ids = []
 
         # RampDown results
-        self.rd_results = None
-        self.ss_results = None
-        self.sup_results = None
+        self.rd_results: Optional[l2g.comp.L2GRampDownHLM] = None
+        self.ss_results: Optional[l2g.comp.L2GSteadyStateHLM] = None
+        self.sup_results: Optional[l2g.comp.L2GStartUpHLM] = None
 
     def setParameters(self, parameters) -> None:
         self.parameters = parameters
@@ -99,7 +123,7 @@ class FieldLineTracer:
         With this past point results are cleared.
         """
         self.target_points = points
-        self.point_results = []
+        self.point_results = None
 
     def setEquilibrium(self, equilibrium: l2g.equil.Equilibrium) -> None:
         """Set the equilibrium data, which is propagated to the eq analyze
@@ -107,6 +131,8 @@ class FieldLineTracer:
         """
         self.equilibrium = equilibrium
         self.eq.setEquilibrium(equilibrium)
+        self.parameters.plasma_r_displ = 0.0
+        self.parameters.plasma_z_displ = 0.0
 
     def applyParameters(self) -> None:
         """Propagates the parameters to the external FLT C++ code. Run this
@@ -208,6 +234,18 @@ class FieldLineTracer:
         # Just to be sure, convert the fl ids to numpy unsigned int 32
         self.fl_ids = np.asarray(self.fl_ids, np.uint32)
 
+        # Make a check on the IDs, to see if the values are within interval
+        # of triangles
+        N_triangles = len(self.target_triangles)
+        _stop = False
+        for el in self.fl_ids:
+            if el > N_triangles or el < 0:
+                log.info(f"Skipping element id {el} as it points to no triangle")
+                log.info("Please see the settings and remove invalid FL IDs.")
+                _stop = True
+        if _stop:
+            return
+
         log.info("Getting FLs...")
         start = perf_counter()
         self.fl_results = l2g.comp.core.getFL(self.flt_obj, self.target_vertices,
@@ -302,6 +340,25 @@ class FieldLineTracer:
         as limiter cases, where every millimeter counts, we require to align
         the input geometry, so that the equilibrium LCFS is limiting also on
         the geometry.
+
+       .. note::
+
+          In order to use it, the diagnostic for the equilibrium must have a
+          the points of the LCFS or boundary contour prepared so that there
+          are points to compare.
+
+        The LCFS contour is clipped to the closest element on the mesh.
+        Afterwards the distance is set as the displacement for the radial and
+        vertical direction. If there are any original displacements, let's say
+        vertical already applied, this is already taken into account since the
+        LCFS points are following the shift, therefore the underlying C++ code
+        will receive the full correct displacement.
+
+        .. todo::
+
+           Find a good algorithm to obtain LCFS contour points with a good
+           resolution. But this has to be done in EQ class.
+
         """
         log.info("Checking whether the input geometry is aligned with the" +
                  " contact point of the data")
@@ -324,69 +381,27 @@ class FieldLineTracer:
         log.info(f"Closest element {el_min}: R={elr_min}")
         log.info(f"Closest distance from boundary: {dr_min}")
 
-        # Who would've known that the following commented code doesn't work. We
-        # need a better midplane distance evaluator, other than bisection which
-        # can be quite slow.
+        # Using the stored LCFS contour in the diagnostic class we find the
+        # shortest path and use it as radial and vertical displacement.
 
-        # Compare radial position of the element and the magnetic axis
-        if elr_min > self.equilibrium.mag_axis_r:
-            # In this case the magnetic axis is situated left of the element.
-            # Meaning we have to move the plasma towards the element in order
-            # to make contact.
-            sign = 1
-        else:
-            # Vice versa
-            sign = -1
+        point = np.array([elr_min, elz_min])
 
-        # Use the drsep[el_min] as the argument for the radial shift, sign
-        # included.
-        # self.parameters.plasma_r_displ = sign * dr_min
+        # Calculate the distance**2 from the closest element to the closest
+        # point on the LCFS contour.
 
-        # Using bisection in the meantime.
-        # Determine bounds.
-        if dr_min < 0:
-            # The point is inside the LCFS.
-            # Now we also have to take into account if we are left or right
-            # of the whole thing.
-            if sign:
-                # Point is inside the LCFS, LCFS being on the right side.
-                a = elr_min + 3 * dr_min
-                b = elr_min
-            else:
-                # Point is inside the LCFS, LCFS being on the left side.
-                a = elr_min
-                b = elr_min - 3 * dr_min
+        displ = self.eq.alignLcfsToPoint(point)
 
-        else:
-            # The point is outside the LCFS.
-            if sign:
-                # Point is outside LCFS, LCFS being on the right side.
-                a = elr_min
-                b = elr_min + 3 * dr_min
-            else:
-                # Point is outside LCFS, LCFS being on the left side.
-                a = elr_min - 3 * dr_min
-                b = elr_min
 
-        def fun(R, Z, value):
-            return self.eq._psi_spline.ev(R, Z) - value
-        from scipy.optimize import bisect
-        log.info(f"a={a} b={b}")
-        fa = self.eq._psi_spline.ev(a, elz_min) - self.eq.psiLCFS
-        fb = self.eq._psi_spline.ev(b, elz_min) - self.eq.psiLCFS
-        log.info(f"fa={fa} fb={fb}")
-        con_point = bisect(fun, a, b, maxiter=100,
-            args=(elz_min, self.eq.psiLCFS))
-
-        r_displ = elr_min - con_point
         prev_r_displ = self.parameters.plasma_r_displ
-        self.parameters.plasma_r_displ = r_displ
-        log.info(f"Setting new plasma radial displacement to {r_displ}")
-        log.info(f"Drsep from flux: {dr_min}. Actual displacement from bisection: {r_displ}")
+        prev_z_displ = self.parameters.plasma_z_displ
+        self.parameters.plasma_r_displ = displ[0]
+        self.parameters.plasma_z_displ = displ[1]
+        log.info(f"Setting new plasma displacement to:")
+        log.info(f"R={displ[0]}, Z={displ[1]}")
         # REAPPLY parameters
         self.applyParameters()
         # DO NOT CHANGE EQ data
-        self.eq.setDisplacement(prev_r_displ, self.parameters.plasma_z_displ)
+        self.eq.setDisplacement(prev_r_displ, prev_z_displ)
         self.loadEq()
         self.processDataOnMesh()
 
@@ -636,7 +651,6 @@ class FieldLineTracer:
         else: # owl
             Rb, Z, Btotal, Bpm = self.eq.getOWL_midplane()
 
-
         # P_sol taken from IMAS, hopefully.
         if Ip < self.parameters.rd_ip_transition:
             lambda_q = l2g.hlm.ramp_down.decay_length_L_mode_diverted(a, R, Ip,
@@ -646,7 +660,6 @@ class FieldLineTracer:
         else:
             lambda_q = float("NaN")
             q_par = np.zeros(drsep.shape)
-
         q_inc = q_par * Bdot / Btotal
         q_inc = np.where(conlen > self.parameters.cutoff_conlen, q_inc, 0)
 

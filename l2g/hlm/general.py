@@ -1,7 +1,7 @@
 import numpy as np
 
-def single_exponential_qpar(drsep: np.ndarray, Bpm: float, Rb: float,
-    lambda_q : float, q_parallel: float) -> np.ndarray:
+def single_exponential_qpar(drsep: np.ndarray, lambda_q : float,
+                            q_parallel: float) -> np.ndarray:
     r"""Applies a parallel single exponential profile to the provided drsep.
 
     For the amplitude of the exponential function a simple constant is taken
@@ -12,7 +12,7 @@ def single_exponential_qpar(drsep: np.ndarray, Bpm: float, Rb: float,
        q = q_{\parallel} e^{\frac{-drsep}{\lambda_q}}
 
     Returns:
-        q (arr): 1D array of parallel heat loads.
+        q (np.ndarray): 1D array of parallel heat loads.
 
     Arguments:
         drsep
@@ -43,10 +43,10 @@ def single_exponential_psol(drsep: np.ndarray, Bt: float, Bpm: float, Rb: float,
        cancels out.
 
     Returns:
-        q (arr): 1D array of parallel heat loads.
+        q (np.ndarray): 1D array of parallel heat loads.
 
     Arguments:
-        drsep (arr): 1D array of distances from the midplane. In meters.
+        drsep (np.ndarray): 1D array of distances from the midplane. In meters.
 
     """
 

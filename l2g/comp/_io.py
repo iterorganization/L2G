@@ -10,6 +10,7 @@ import os
 import logging
 log = logging.getLogger(__name__)
 
+from typing import Union
 
 class MEDMeshIO():
     """Wrapper class for IO of MED object/files. Also to hold the
@@ -102,6 +103,12 @@ class MEDMeshIO():
         l2g.utils.meshio.writeFieldToAlreadyExistingMesh(field=field,
             med_file=self.med_file_path)
 
+    def getArray(self, field_name):
+        """Helper function for obtaining numpy array from a MED field.
+        """
+        return l2g.utils.meshio.fieldToNumpy(self.med_file_path,
+                                             field_name, self.index, -1)
+
 def load_flt_mesh_results_from_med(mesh_results: L2GResults, med_object: MEDMeshIO):
     """Loads the FLT data from med object. Usually we only need a few FLT
     relevant quantities.
@@ -109,10 +116,8 @@ def load_flt_mesh_results_from_med(mesh_results: L2GResults, med_object: MEDMesh
     if not med_object.med_file_path:
         log.error("No MED file path to load data from")
         return
-    mesh_results.drsep = l2g.utils.meshio.fieldToNumpy(med_object.med_file_path,
-        "drsep", med_object.index, -1)
-    mesh_results.conlen = l2g.utils.meshio.fieldToNumpy(med_object.med_file_path,
-        "conlen", med_object.index, -1)
+    mesh_results.drsep = med_object.getArray("drsep")
+    mesh_results.conlen = med_object.getArray("conlen")
 
 def dump_flt_mesh_results_to_med(mesh_results: L2GResults, med_object: MEDMeshIO):
     """Dumps flt_mesh results to med object.
@@ -141,7 +146,7 @@ def dump_flt_mesh_results_to_med(mesh_results: L2GResults, med_object: MEDMeshIO
             # 3 component array in Cartesian!
             infoOnComponent = ['x', 'y', 'z']
         elif key == 'normals':
-            infoOnComponent=['x', 'y', 'z']
+            infoOnComponent = ['x', 'y', 'z']
         elif key == 'BVecCyln':
             # Write the Magnetic field poloidal and toroidal component
             # properly. A 2 component array in Cylindrical
@@ -156,6 +161,11 @@ def dump_flt_mesh_results_to_med(mesh_results: L2GResults, med_object: MEDMeshIO
                               info_on_component=infoOnComponent)
 
 def save_fls_to_vtk(data, file_path):
+    """Helper function that saves field lines points or polylines to a VTK
+    file. In this case ``vtkGenericDataObjectWriter`` is used.
+
+    This should be used to save :class:`L2GFLs` to a VTK file.
+    """
     import vtk
     writer = vtk.vtkGenericDataObjectWriter()
     writer.SetInputData(data)
@@ -163,13 +173,28 @@ def save_fls_to_vtk(data, file_path):
     writer.Write()
 
 def save_mesh_to_vtk(data, file_path):
+    """Helper function that saves field lines points or vtkUnstructuredGrid to
+    a VTK file. In this case ``vtkXMLUnstructuredGridWriter`` is used.
+
+    This should be used to save :class:`L2GResults` to a VTK file.
+    """
     import vtk
     writer = vtk.vtkXMLUnstructuredGridWriter()
     writer.SetInputData(data)
     writer.SetFileName(file_path)
     writer.Write()
 
-def save_results_to_vtk(result_obj, file_path):
+def save_results_to_vtk(result_obj: Union[L2GFLs, L2GResults],
+                       file_path: str) -> None:
+    """Helper function to save result objects: :class:`L2GResults`,
+    :class:`L2GFLs` to a file.
+
+    In case of :class:`L2GResults` the data is saved to an existing MED file,
+    so the MED file has to exist.
+
+    In case of :class:`L2GFLs` a new VTK file is created
+
+    """
     if not isinstance(result_obj, (L2GResults, L2GFLs)):
         log.error("Wrong object provided to results")
 

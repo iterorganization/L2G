@@ -9,6 +9,12 @@ fmt_date = '%Y-%m-%d %T'
 
 
 def addFileHandler(output_file='l2g.log'):
+    """Add a handler to redirect logs to a file.
+
+    Arguments:
+        output_file (str): Location of the log file.
+
+    """
     global _file_handler, log
     if _file_handler is not None:
         return
@@ -18,6 +24,10 @@ def addFileHandler(output_file='l2g.log'):
     log.addHandler(_file_handler)
 
 def addStreamHandler():
+    """Adds a stream handler for redirecting the log output to the terminal.
+    There is no streamhandler added by default, for better integration into
+    GUI.
+    """
     global _stream_handler, log
     if _stream_handler is not None:
         return
@@ -26,9 +36,13 @@ def addStreamHandler():
     log.addHandler(_stream_handler)
 
 def enableLogging():
+    """Raises the l2g logger level to INFO.
+    """
     global log
     log.setLevel(logging.INFO)
 
 def enableDebugging():
+    """Raises the l2g logger level to DEBUG.
+    """
     global log
     log.setLevel(logging.DEBUG)

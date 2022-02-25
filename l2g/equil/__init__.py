@@ -111,6 +111,8 @@ def getEquilibriumFromIMAS(equilibrium_ids_time_slice, wall_ids,
     return obj
 
 def createEqdskFromSlice(slice, HEADER="") -> EQDSKIO:
+    """From a slice of the equilibrium IDS, create an EQDSKIO object.
+    """
     import numpy as np
     eqObj = EQDSKIO()
 
@@ -194,6 +196,9 @@ def createEqdskFromSlice(slice, HEADER="") -> EQDSKIO:
     return eqObj
 
 def addWallDescriptionToEqdsk(eqObj, idsWall):
+    """From the wall IDS take the wall silhouette points and save it to the
+    EQDSKIO object.
+    """
     if len(idsWall.description_2d) == 0:
         eqObj.setRLIM([1])
         eqObj.setZLIM([1])
