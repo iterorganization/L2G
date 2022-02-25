@@ -13,6 +13,7 @@ Welcome to L2G_py's documentation!
    abbreviations.rst
    introduction.rst
    digest.rst
+   applied_theory.rst
    examples.rst
    code_documentation.rst
    dev_tooltips.rst
