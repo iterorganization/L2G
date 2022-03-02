@@ -22,16 +22,25 @@ class EquilibriumIterator(object):
     def __init__(self) -> None:
         self.type = None
 
+        #: List for storing :pyclass:`l2g.equil.Equilibrium` objects.
         self._equilibriums = []
+
+        #: List of associated times.
         self._times = []
 
-        # For imas
+        #: IMAS IDS reference
         self._ids = None
+
+        #: Wall IDS reference
         self._wall_ids = None
+
+        #: Equilibrium IDS reference
         self._wall_equilibrium = None
 
+        #: Flag for correcting helicity of equilibriums.
         self._correct_helicity = True
 
+        #: Number of digits of time to write into identifiers
         self.truncate_digits = 3
 
     def correctHelicity(self, val):
@@ -60,7 +69,6 @@ class EquilibriumIterator(object):
                 correct_helicity=self._correct_helicity)
             self._equilibriums.append(equilibrium)
             self._times.append(i)
-
 
     def loadIMASEquilibriums(self, d: dict = {}) -> None:
         """Loads equilibriums from IMAS.
@@ -135,8 +143,9 @@ class EquilibriumIterator(object):
 
             self._equilibriums.append(equilibrium)
 
+            truncate_time = truncate(t, self.truncate_digits)
             # Truncate the time
-            self._times.append(truncate(t, self.truncate_digits))
+            self._times.append(truncate_time)
 
         return None
 

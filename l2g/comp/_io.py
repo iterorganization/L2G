@@ -24,25 +24,41 @@ class MEDMeshIO():
     """
 
     def __init__(self):
+        #: MED mesh object. Used to tie fields to mesh.
         self.med_mesh = None
-        self.med_file_orig_path = "" # Usually we make a copy of input mesh.
+
+        #: Source of the MED mesh. For instance, for results we write a new
+        #: MED file, using the target input mesh as source.
+        self.med_mesh_source_file = "" # Usually we make a copy of input mesh.
+
+
+        #: Location of the resulting MED file.
         self.med_file_path = "" # Target location of the resulting mesh.
 
         self.overwrite_mesh = True
 
-        # Used to associate the index and associated time to a slice of data.
-        self.index = 0 # Default
-        self.associated_time = -1 # Default
+        #: Set index for fields in MED file.
+        self.index = 0
+
+        #: Set associated time for fields in MED file.
+        self.associated_time = -1
 
         self._vertices = None
         self._triangles = None
 
-    def loadMedFile(self, file: str) -> None:
+    def setIndexAndTime(self, new_index: int, new_time: float) -> None:
+        self.index = new_index
+        self.associated_time = new_time
+
+    def readMeshFromMedFile(self, file: str) -> None:
+        """Reads the mesh from a MED file. Currently no name are supported for
+        meshes, as there can be multiple meshes in a file.
+        """
         if not os.path.exists(file):
             log.error(f"File {file} does not exist!")
             return
         self.med_mesh = mc.ReadMeshFromFile(file)
-        self.med_file_orig_path = file
+        self.med_mesh_source_file = file
 
     def getMeshData(self):
         """Return the vertices and triangles of the mesh file.
@@ -77,6 +93,10 @@ class MEDMeshIO():
     def writeMesh(self, file_location: str) -> None:
         """Write the mesh into a new location. Reason behind is that usually
         we have input mesh and the resulting mesh will be a copy of that mesh.
+
+        The file_location is stored, so if there are subsequent writes of
+        arrays to the same object, then those arrays are written to this new
+        location.
         """
         if self.med_mesh is None:
             log.error("Could not write mesh as no MED mesh was read!")
@@ -90,6 +110,12 @@ class MEDMeshIO():
                    info_on_component: list = []):
         """Helper function to write a numpy array to the mesh, as several steps
         need to be performed before writing to the med file.
+
+        Arguments:
+            array (np.ndarray): Numpy array holding data.
+            array_name (str): Name of quantity.
+            info_on_component (list): Holds information on components, this
+                also tells if the array is a vector field or scalar field.
         """
         if self.med_mesh is None:
             log.error(f"Could not write {array_name} as no MED mesh was read!")

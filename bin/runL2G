@@ -137,12 +137,31 @@ else:
 run_flt = True
 resultFileName = os.path.join(OUTPUT_DIRECTORY, flt_case.name + '.med')
 result_med = l2g.comp.MEDMeshIO()
-result_med.loadMedFile(inp["flt"]["target_mesh"])
+result_med.readMeshFromMedFile(inp["flt"]["target_mesh"])
 if os.path.exists(resultFileName):
-    l2g.log.info("Result file name already exists. No need to rerun full FLT")
-    run_flt = False
+    l2g.log.info("Result file name already exists.")
+    l2g.log.info("Checking if the result contains FLT results.")
+
     result_med.med_file_path = resultFileName
-    # time.sleep(10)
+
+    # Use the field Conlen as reference for FLT data, since this is always
+    # stored.
+
+    import medcoupling as mc
+    field_names = mc.GetAllFieldNames(result_med.med_file_path)
+    run_flt = False
+    if "conlen" not in field_names:
+        run_flt = True
+    else:
+        # Check the number of indexes
+        iterations = mc.GetAllFieldIterations(result_med.med_file_path,
+                                              "conlen")
+        if len(iterations) != len(equilIter):
+            run_flt = True
+            l2g.log.info("FLT result file does not have data for all " +
+                         "equilibriums. ")
+    if run_flt:
+        l2g.log.info("Result file does not have complete FLT data.")
 else:
     result_med.writeMesh(resultFileName)
 
@@ -153,8 +172,7 @@ for index, associated_time, equilibrium in equilIter:
     time_start = time.perf_counter()
 
     # Set the index and associated time to the result MEDMeshIO object
-    result_med.index = index
-    result_med.associated_time = associated_time
+    result_med.setIndexAndTime(index, associated_time)
 
     l2g.log.info("")
     l2g.log.info(f"Getting results for {index + 1} of {N} equilibriums.")
