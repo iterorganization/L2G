@@ -103,9 +103,9 @@ for time in summary_ids.time:
         imas.imasdef.CLOSEST_INTERP)
 
     slice = equilibrium.time_slice[0]
+    threshold = 0.5
     if len(slice.boundary_separatrix.outline.r):
-        collection_r = []
-        collection_z = []
+
         # Figure out the parts of the plot.
         # When the contour is stored in this place, it is saved as one array.
         # Therefore the following way tries to find indexes where the different
@@ -113,27 +113,30 @@ for time in summary_ids.time:
         # for significant jump in radial *and* vertical direction. Sometimes
         # the contour makes a vertical jump but practically no radial move and
         # vice versa.
-        diff_r = np.abs(np.diff(slice.boundary_separatrix.outline.r))
-        indexes = [_ for _ in np.argwhere(diff_r > 0.5).flatten()]
 
-        diff_z = np.abs(np.diff(slice.boundary_separatrix.outline.z))
-        indexes += [_ for _ in np.argwhere(diff_z > 0.5).flatten()]
-        indexes = [_ + 1 for _ in set(indexes)]
-        indexes.sort()
 
-        # Make chunks based on these changes
-        prev_index = 0
+        collection_r = []
+        collection_z = []
+        r = slice.boundary_separatrix.outline.r
+        z = slice.boundary_separatrix.outline.z
 
-        if len(indexes) == 0:
-            collection_r.append(slice.boundary_separatrix.outline.r)
-            collection_z.append(slice.boundary_separatrix.outline.z)
+        diff_r = np.abs(np.diff(r))
+        diff_z = np.abs(np.diff(z))
+        indexes = np.where(np.logical_or(diff_r > threshold, diff_z > threshold))
+
+        if len(indexes[0]) == 0:
+            collection_r.append(r)
+            collection_z.append(z)
         else:
-            for index in indexes:
-                collection_r.append(slice.boundary_separatrix.outline.r[prev_index:index])
-                collection_z.append(slice.boundary_separatrix.outline.z[prev_index:index])
-                prev_index = index
-            collection_r.append(slice.boundary_separatrix.outline.r[indexes[-1]:])
-            collection_z.append(slice.boundary_separatrix.outline.z[indexes[-1]:])
+            prev_index = 0
+            for index in indexes[0]:
+                collection_r.append(r[prev_index:index+1])
+                collection_z.append(z[prev_index:index+1])
+                prev_index = index+1
+            collection_r.append(r[prev_index:])
+            collection_z.append(z[prev_index:])
+
+
         lcfs_contour_r.append(collection_r)
         lcfs_contour_z.append(collection_z)
     else:
@@ -141,29 +144,27 @@ for time in summary_ids.time:
         lcfs_contour_z.append([])
 
     if len(slice.boundary_secondary_separatrix.outline.r):
+
         collection_r = []
         collection_z = []
-        # Figure out the parts of the plot.
-        diff_r = np.abs(np.diff(slice.boundary_secondary_separatrix.outline.r))
-        indexes = [_ for _ in np.argwhere(diff_r > 0.5).flatten()]
+        r = slice.boundary_secondary_separatrix.outline.r
+        z = slice.boundary_secondary_separatrix.outline.z
 
-        diff_z = np.abs(np.diff(slice.boundary_secondary_separatrix.outline.z))
-        indexes += [_ for _ in np.argwhere(diff_z > 0.5).flatten()]
-        indexes = [_ + 1 for _ in set(indexes)]
-        indexes.sort()
+        diff_r = np.abs(np.diff(r))
+        diff_z = np.abs(np.diff(z))
+        indexes = np.where(np.logical_or(diff_r > threshold, diff_z > threshold))
 
-        # Make chunks based on these changes
-        prev_index = 0
-        if len(indexes) == 0:
-            collection_r.append(slice.boundary_secondary_separatrix.outline.r)
-            collection_z.append(slice.boundary_secondary_separatrix.outline.z)
+        if len(indexes[0]) == 0:
+            collection_r.append(r)
+            collection_z.append(z)
         else:
-            for index in indexes:
-                collection_r.append(slice.boundary_secondary_separatrix.outline.r[prev_index:index])
-                collection_z.append(slice.boundary_secondary_separatrix.outline.z[prev_index:index])
-                prev_index = index
-            collection_r.append(slice.boundary_secondary_separatrix.outline.r[indexes[-1]:])
-            collection_z.append(slice.boundary_secondary_separatrix.outline.z[indexes[-1]:])
+            prev_index = 0
+            for index in indexes[0]:
+                collection_r.append(r[prev_index:index+1])
+                collection_z.append(z[prev_index:index+1])
+                prev_index = index+1
+            collection_r.append(r[prev_index:])
+            collection_z.append(z[prev_index:])
         secondary_contour_r.append(collection_r)
         secondary_contour_z.append(collection_z)
 
