@@ -179,5 +179,5 @@ setup(
                'bin/get_elm_data', 'bin/get_owl_conlen_graph',
                'bin/apply_elm_hlm', 'bin/apply_exp_hlm',
                'bin/imas2eqdsk', 'bin/mkEqdskMovie', 'bin/mkImasMovie',
-               'bin/med2mat']
+               'bin/med2mat', 'bin/plot_IMAS_slice']
 )
