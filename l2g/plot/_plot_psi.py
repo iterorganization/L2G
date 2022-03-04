@@ -99,7 +99,7 @@ def plot_psi_to_mpl_ax(ax, eq: l2g.equil.EQ):
 
         psi_dist4cm = eq._psi_spline.ev(Rbdry + 0.04, Zcen)
         con_dist4cm = eq.getContourPaths(flux=psi_dist4cm)
-        plotPolyLine(ax, con_dist4cm, label=r"$dr_{1^{st}}=4cm$", color='tab:orange', linewidth=1.5)
+        plotPolyLine(ax, con_dist4cm, label=r"40 mm flux surface", color='tab:orange', linewidth=1.5)
     else:
         plotPolyLine(ax, lcfs1, label=r"LCFS", color='g', linewidth=1.5)
 
