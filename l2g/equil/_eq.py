@@ -195,12 +195,22 @@ class EQ:
         # Initial guess for Xpoint (lower)
         # TODO, set the initial guess position relative to the bounding box
         # of the wall silhouette.
-        self._initialGuessXPoint = [5 ,-3.5]
+
+        minR = np.min(self._eq.grid_r)
+        maxR = np.max(self._eq.grid_r)
+        minZ = np.min(self._eq.grid_z)
+        maxZ = np.max(self._eq.grid_z)
+
+        halfR = (maxR + minR) * 0.5
+        lowerZ = minZ + 0.25 * (maxZ - minZ)
+        upperZ = minZ + 0.75 * (maxZ - minZ)
+        # Lower initial guess.
+        self._initialGuessXPoint = [halfR ,lowerZ]
 
         # Initial guess for Xpoint (upper)
         # TODO, set the initial guess position relative to the bounding box
         # of the wall silhouette.
-        self._initialGuessXPointUpper = [4.6, 4.5]
+        self._initialGuessXPointUpper = [halfR, upperZ]
 
         self.interpolate()
 
@@ -825,6 +835,10 @@ class EQ:
             log.info("Already evaluated.")
             return
 
+        self.psiLCFS = None
+        self.psiLCFS2 = None
+        self.drsep = None
+
         log.info("Running EQ.evaluate()")
         log.info("First checking if equilibrium is limiter configuration.")
         isLim, contactFlux, contactPoint = self.checkIfLimiter()
@@ -891,7 +905,6 @@ class EQ:
         if not success:
             log.info("Failed to find X point in a diverted equilibrium!")
             log.info("Manually set the conditions or check if the input file is ok")
-            return
 
         # X point found, now let's use the 2nd derivative test. For
         # instance, it might go to the O point location
@@ -919,7 +932,20 @@ class EQ:
                              f"{self.uppXPoint}")
                 log.info("Both X points detected!")
                 log.info("Calculating distance between the separatrixes.")
-                self.drsep = self.calculate_drsep(self.psiLCFS, self.psiLCFS2)
                 log.info(f"Drsep={self.drsep}")
+
+        if self.psiLCFS and self.psiLCFS2:
+            self.drsep = self.calculate_drsep(self.psiLCFS, self.psiLCFS2)
+        else:
+            self.drsep = None
+
+        # Now here is the tricky part. In some cases, we could have only one
+        # upper X-point, like West...
+        if self.psiLCFS is None and self.psiLCFS2:
+            self.psiLCFS = self.psiLCFS2
+            self.psiLCFS2 = None
+            log.info("Upper X point detected, but lower not.")
+            log.info("Assuming upper x point configuration.")
+
 
         self.evaluated = True
