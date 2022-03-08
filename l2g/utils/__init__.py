@@ -157,40 +157,8 @@ def load_l2g_json(file_path: str) -> dict:
 
     # Load json file
     inp = {}
-    text = open(file_path, 'r').read().splitlines()
-    try:
-        # Comments with // are not allowed in a json file, so first we filter
-        # those out and remove empty lines.
-
-        no_comments_text = []
-        for line in text:
-            if line.lstrip().startswith('//'):
-                continue
-            if line.strip() == "":
-                continue
-            comment_index = line.find('//')
-            if comment_index == -1:
-                no_comments_text.append(line)
-            else:
-                no_comments_text.append(line[:comment_index])
-        log.info("Stripped JSON file of comments and empty lines.")
-        # log.info('\n'.join(no_comments_text))
-        inp = json.loads('\n'.join(no_comments_text))
-    except json.JSONDecodeError as e:
-        log.info("Failed to read JSON file:")
-        log.info(e)
-        log.info("Check the following lines in the JSON file.")
-        # Print some help with which line is causing issues.
-
-        # Use list comprehension to ignore dangling at the end or beginning
-        # of the text.
-        [log.info(line) for line in text[e.lineno - 3: e.lineno - 1]]
-        log.info(text[e.lineno - 1] + '    <----- ERROR')
-        [log.info(line) for line in text[e.lineno: e.lineno + 2]]
-        # Remove Raise, because the trace log obscures all the log output.
-        log.info("Check for any trailing commas, missing commas, ...")
-        # raise
-
+    text = open(file_path, 'r').read()
+    inp = json_loads(text)
     return inp
 
 def set_parameters_and_options(d: dict, flt_obj) -> None:
