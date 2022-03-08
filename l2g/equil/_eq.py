@@ -931,11 +931,11 @@ class EQ:
                 log.info("X point position (R, Z) in meters: " +
                              f"{self.uppXPoint}")
                 log.info("Both X points detected!")
-                log.info("Calculating distance between the separatrixes.")
-                log.info(f"Drsep={self.drsep}")
 
         if self.psiLCFS and self.psiLCFS2:
+            log.info("Calculating distance between the separatrixes.")
             self.drsep = self.calculate_drsep(self.psiLCFS, self.psiLCFS2)
+            log.info(f"Drsep={self.drsep}")
         else:
             self.drsep = None
 
