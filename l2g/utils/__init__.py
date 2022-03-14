@@ -223,21 +223,33 @@ def load_flt_settings(d: dict, flt) -> None:
         #
         for m in set(mesh_to_remove):
             shadowMeshFiles.remove(m)
-    geomIds = []
+    geom_ids = []
     if "include_target_in_shadow" in d:
         log.info("Including target to shadowing Embree.")
         if d["include_target_in_shadow"]:
-            geomId = flt.embree_obj.commitMesh(
+            geom_id = flt.embree_obj.commitMesh(
                 verticesTarget * flt.parameters.target_dim_mul,
                 trianglesTarget)
-            geomIds.append((geomId, d["target_mesh"]))
+            geom_ids.append((geom_id, d["target_mesh"]))
 
     log.info(f"Loading {len(shadowMeshFiles)} mesh/es to Embree.")
     for filePath in shadowMeshFiles:
         fileName = os.path.basename(filePath)
         v, t = l2g.utils.meshio.readMesh(filePath)
-        geomId = flt.embree_obj.commitMesh(v * 1e-3, t)
-        geomIds.append((geomId, filePath))
+        geom_id = flt.embree_obj.commitMesh(v * 1e-3, t)
+        geom_ids.append((geom_id, filePath))
+
+    if "afl_catcher_meshes" in d:
+        afl_catcher_meshes = d["afl_catcher_meshes"]
+        log.info(f"Loading {len(afl_catcher_meshes)} meshes, for catching " +
+                 "and marking FLs as shadowed")
+        for filePath in afl_catcher_meshes:
+            v, t = l2g.utils.meshio.readMesh(filePath)
+            geom_id = flt.embree_obj.commitMesh(v * 1e-3, t)
+            flt.parameters.artificial_fl_catcher_geom_id.add(geom_id)
+            fileName = os.path.basename(filePath)
+            log.info(f"Loaded {fileName} as {geom_id}")
+
     log.info("Done.")
 
 def load_elm_settings(d: dict, flt: 'FieldLineTracer') -> None:

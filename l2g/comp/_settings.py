@@ -38,7 +38,7 @@ class Parameters:
                "target_dim_mul", "shadow_dim_mul", "num_of_threads",
                "side", "P_sol", "F_split", "q_parallel", "lambda_q_main",
                "lambda_q_near", "R_q", "rd_ip_transition",
-               "cutoff_conlen", "r_break"]
+               "cutoff_conlen", "r_break", "artificial_fl_catcher_geom_id"]
     def __init__(self):
 
         #: The plasma_*_displ parameters displaces the plasma in either R or Z
@@ -117,3 +117,13 @@ class Parameters:
         #: Parameter cutoff_conlen specifies the length at which we consider
         #: that a field line wetts target area. In meters.
         self.cutoff_conlen = 4.3e3
+
+
+        #: IDs of geometries that marks fieldlines as shadowed if they
+        #: intercept a field line. Basically using geometry that encompasses
+        #: the plasma volume and is used as a boundary where there is no plasma
+        #: (example, vacuum vessel), then this array of IDs is used when
+        #: applying heat load maps or evaluating the wetted area. If the ID
+        #: of intercepted geometry belongs to this array for a given fieldline,
+        #: then mark the fieldline as non-wetting on the target.
+        self.artificial_fl_catcher_geom_id = set()

@@ -443,54 +443,58 @@ class FieldLineTracer:
 
             self.mesh_results.drsep2 = drsep2
 
-    def applySingleExponential(self) -> None:
-        """Applies the single exponential profile on the results.
-        """
-        if self.mesh_results.drsep is None:
-            self.calculateDrsep()
-        if len(self.mesh_results.drsep) == 0:
-            self.calculateDrsep()
+    # def applySingleExponential(self) -> None:
+    #     """Applies the single exponential profile on the results.
+    #     """
+    #     if self.mesh_results.drsep is None:
+    #         self.calculateDrsep()
+    #     if len(self.mesh_results.drsep) == 0:
+    #         self.calculateDrsep()
 
-        # Get the Plasma LCFS
-        self.eq.evaluate()
-        # Get IWL or OWL parameters
-        if self.parameters.side == "iwl":
-            Rb, Z, Btotal, Bpm = self.eq.getIWL_midplane()
-        else: # owl
-            Rb, Z, Btotal, Bpm = self.eq.getOWL_midplane()
+    #     # Get the Plasma LCFS
+    #     self.eq.evaluate()
+    #     # Get IWL or OWL parameters
+    #     if self.parameters.side == "iwl":
+    #         Rb, Z, Btotal, Bpm = self.eq.getIWL_midplane()
+    #     else: # owl
+    #         Rb, Z, Btotal, Bpm = self.eq.getOWL_midplane()
 
-        log.info(f"Evaluated boundary values for {self.parameters.side}:")
-        log.info(f"Rb = {Rb} m")
-        log.info(f"Btotal = {Btotal} T")
-        log.info(f"Bpm = {Bpm} T")
+    #     log.info(f"Evaluated boundary values for {self.parameters.side}:")
+    #     log.info(f"Rb = {Rb} m")
+    #     log.info(f"Btotal = {Btotal} T")
+    #     log.info(f"Bpm = {Bpm} T")
 
-        drsep = self.mesh_results.drsep
-        # Get magnitude of magnetic field for each cell
-        # You have to reshape the BVec as it holds vector values.
-        # Make a reference
-        BVec = self.mesh_results.BVec
-        BVec = BVec.reshape(BVec.shape[0] // 3, 3) # Create a new view.
-                                                   # DO NOT MODIFY IT!
-        Bmag = np.linalg.norm(BVec, axis = 1)
+    #     drsep = self.mesh_results.drsep
+    #     # Get magnitude of magnetic field for each cell
+    #     # You have to reshape the BVec as it holds vector values.
+    #     # Make a reference
+    #     BVec = self.mesh_results.BVec
+    #     BVec = BVec.reshape(BVec.shape[0] // 3, 3) # Create a new view.
+    #                                                # DO NOT MODIFY IT!
+    #     Bmag = np.linalg.norm(BVec, axis = 1)
 
-        # Check if Q_parallel is set to something
-        if self.parameters.q_parallel is not None:
-            # Divide by Btotal, as the incident angle comes
-            # with BdotN, with which we apply the flux expansion
-            K = self.parameters.q_parallel / Btotal
-            q_par = K * Bmag * np.exp(-drsep / self.parameters.lambda_q_main)
-        else:
-            K = self.parameters.P_sol * self.parameters.F_split / \
-                (2 * np.pi * Rb * Bpm * self.parameters.lambda_q_main)
-            q_par = K * Bmag * np.exp(-drsep / self.parameters.lambda_q_main)
+    #     # Check if Q_parallel is set to something
+    #     if self.parameters.q_parallel is not None:
+    #         # Divide by Btotal, as the incident angle comes
+    #         # with BdotN, with which we apply the flux expansion
+    #         K = self.parameters.q_parallel / Btotal
+    #         q_par = K * Bmag * np.exp(-drsep / self.parameters.lq)
+    #     else:
+    #         K = self.parameters.P_sol * self.parameters.F_split / \
+    #             (2 * np.pi * Rb * Bpm * self.parameters.lambda_q_main)
+    #         q_par = K * Bmag * np.exp(-drsep / self.parameters.lq)
 
-        self.mesh_results.qpar = q_par
+    #     self.mesh_results.qpar = q_par
 
-        # Now calculate Q
-        q = np.where(self.mesh_results.mask == 0,
-            K * self.mesh_results.direction * self.mesh_results.Bdot * np.exp(-drsep / self.parameters.lambda_q_main),
-            0)
-        self.mesh_results.q = q
+    #     q_par = l2g.hlm.general.single_exponential_psol(drsep, Btotal,
+    #             Bpm, Rb, lambda_q * 1e-3, Psol)
+
+
+    #     # Now calculate Q
+    #     q = np.where(self.mesh_results.mask == 0,
+    #         K * self.mesh_results.direction * self.mesh_results.Bdot * np.exp(-drsep / self.parameters.lambda_q_main),
+    #         0)
+    #     self.mesh_results.q = q
 
     def createMidplanePoints(self, which:str='owl', length:float=0.3,
             radialPoints:int=2000, toroidalSegments:int=360,
@@ -586,7 +590,6 @@ class FieldLineTracer:
         drsep = self.mesh_results.drsep * 1e-3
         Bdot = np.abs(self.mesh_results.Bdot)
         BVec = self.mesh_results.BVec
-        conlen = self.mesh_results.conlen
         n_cells = drsep.shape[0]
         bfield_mag = np.linalg.norm(BVec.reshape((n_cells, 3)), axis=1)
 
@@ -611,7 +614,7 @@ class FieldLineTracer:
         q_inc = (elm + interELM) * Bdot / Btotal # Bdot applies the incident
                                   # angle and the total flux expansion
         # Apply the cutoff mask for which FL actually wet the area
-        q_inc = np.where(conlen >= self.parameters.cutoff_conlen, q_inc, 0)
+        q_inc = self.applyShadowMask(q_inc)
 
         self.ss_results.expansion = expansion
         self.ss_results.elm = elm
@@ -641,7 +644,6 @@ class FieldLineTracer:
         Area = self.equilibrium.Area
         drsep = self.mesh_results.drsep * 1e-3
         Bdot = np.abs(self.mesh_results.Bdot)
-        conlen = self.mesh_results.conlen
 
         self.eq.evaluate()
 
@@ -660,9 +662,8 @@ class FieldLineTracer:
         else:
             lambda_q = float("NaN")
             q_par = np.zeros(drsep.shape)
-        q_inc = q_par * Bdot / Btotal
-        q_inc = np.where(conlen > self.parameters.cutoff_conlen, q_inc, 0)
-
+        # Apply flux expansion and shadow mask.
+        q_inc = self.applyShadowMask(q_par * Bdot / Btotal)
 
         # P_sol == I_p
         if Ip < self.parameters.rd_ip_transition:
@@ -674,10 +675,8 @@ class FieldLineTracer:
             lambda_q = float("NaN")
             q_par_cons = np.zeros(drsep.shape)
 
-        q_inc_cons = q_par_cons * Bdot / Btotal
-        q_inc_cons = np.where(conlen >= self.parameters.cutoff_conlen,
-                              q_inc_cons, 0)
-
+        # Apply flux expansion and shadow mask.
+        q_inc_cons = self.applyShadowMask(q_par_cons * Bdot / Btotal)
 
         if self.rd_results is None:
             self.rd_results = l2g.comp.L2GRampDownHLM()
@@ -700,8 +699,6 @@ class FieldLineTracer:
         # Obtain the arrays from the FLT results
         drsep = self.mesh_results.drsep * 1e-3
         Bdot = np.abs(self.mesh_results.Bdot)
-        BVec = self.mesh_results.BVec
-        conlen = self.mesh_results.conlen
 
         self.eq.evaluate()
 
@@ -717,8 +714,36 @@ class FieldLineTracer:
             lambda_q_near=lq_near, Rq=ratio, P_sol=power_loss, F=0.5)
 
         q_inc = q_par * Bdot / Btotal
-        q_inc = np.where(conlen >= self.parameters.cutoff_conlen, q_inc, 0)
 
+        q_inc = self.applyShadowMask(q_par * Bdot / Btotal)
 
         self.sup_results.q_sup = q_inc
         self.sup_results.q_sup_par = q_par
+
+    def applyShadowMask(self, array: np.ndarray) -> np.ndarray:
+        """This function applies the shadow mask to an input array.
+
+        ONLY USED WITH MESH RESULTS!!!
+
+        Several criteria are used for determining if a certain area is wetted:
+
+         * Connection length of a field line: if conlen > cutoff = True else False
+         * Geometries which mark fieldlines as shadowed.
+        """
+
+        # First apply the connection length criteria
+
+        out = None
+
+        out = np.where(
+            self.mesh_results.conlen > self.parameters.cutoff_conlen,
+            array, 0)
+
+        # Now for every geom id in parameters.artificial_fl_catcher_geom_id
+        # mark the fls as zero
+
+        for geom_id in self.parameters.artificial_fl_catcher_geom_id:
+            log.info(f"Masking all elements with geom_hit_ids == {geom_id} to zero.")
+            out = np.where(self.mesh_results.geom_hit_ids != geom_id,
+                           out, 0)
+        return out
