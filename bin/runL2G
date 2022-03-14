@@ -14,17 +14,7 @@ parser.add_argument('-i', '--input', type=str,
                     required=True, help='Input Json file')
 parser.add_argument('-v', '--verbose', help='Verbosity',
                     default=1, type=int)
-
-parser.add_argument('-p', '--progress', help='Progress bar. Enable/Disable return carriage',
-                    default=1, type=int)
-parser.add_argument('-fl', '--get_fls', help="Obtain fieldlines",
-                    default=1, type=int)
 args = parser.parse_args()
-
-RETURN_CARRIAGE = "\r\t"
-if not args.progress:
-    RETURN_CARRIAGE = "\n\t"
-
 
 import os
 import sys
@@ -105,9 +95,18 @@ if "fl_ids" in inp:
 # See if there is a custom wall limiter
 if 'wall_limiter' in inp:
     custom_wall_limiter = True
-    l2g.log.info("Custom wall limiter included")
+    l2g.log.info("Custom wall limiter included in JSON.")
 else:
     custom_wall_limiter = False
+
+# See if there are custom LCFS or boundary Flux values
+if 'lcfs_values' in inp:
+    custom_lcfs_values = True
+    lcfs_values = np.array(inp["lcfs_values"])
+    l2g.log.info("Custom LCFS value included in JSON.")
+else:
+    custom_lcfs_values = False
+
 
 # Let's see if we run in a HPC job. Currently only slurm based.
 l2g.utils.check_if_in_slurm_job(flt_case, elm_case)
@@ -131,6 +130,15 @@ if inp['eq_type'] == "imas":
     equilIter.loadIMASEquilibriums(inp['imas'])
 else:
     equilIter.loadEqdskEquilibriums(inp['eqdsk_files'])
+
+if custom_lcfs_values:
+    N_lcfs_values = len(lcfs_values)
+    N_equilIter = len(equilIter)
+    if N_lcfs_values != N_equilIter:
+        l2g.log.error(f"The number of custom LCFS values ({N_lcfs_values}) " +
+                      "is not the same as the number of loaded equilibriums " +
+                      f"({N_equilIter})")
+        sys.exit(-2)
 
 # Create the result MED file. If needed. Otherwise read the MED mesh from the
 # existing FLT med file.
@@ -197,8 +205,12 @@ for index, associated_time, equilibrium in equilIter:
     # z_move in order to put the equilibrium data correctly on the geometry.
 
     # For now we shift only in the radial direction.
-
-    flt_case.evaluateEq()
+    if custom_lcfs_values:
+        # Assign the custom LCFS value
+        flt_case.eq.psiLCFS = lcfs_values[index]
+        flt_case.eq.evaluated = True
+    else:
+        flt_case.evaluateEq()
     if flt_case.eq.type_ == 'lim':
         flt_case.alignGeometryWithLCFS()
 
@@ -218,7 +230,7 @@ for index, associated_time, equilibrium in equilIter:
         l2g.comp.load_flt_mesh_results_from_med(flt_case.mesh_results, result_med)
 
     # Running FLT to get FLs from selected ids.
-    if args.get_fls and fl_ids:
+    if fl_ids:
         l2g.log.info("Getting FLs...")
         # Obtain FLs and output them into a file.
         if all(isinstance(x, list) for x in fl_ids):
