@@ -91,11 +91,15 @@ class EquilibriumIterator(object):
         else:
             version = d['version']
 
-        if 'times' in d:
-            time_slices = d['times']
-        else:
-            n_steps = int((d['time_end'] - d['time_start']) / d['time_step']) + 1
-            time_slices = np.linspace(d['time_start'], d['time_end'], n_steps)
+        # if 'times' in d:
+        #     time_slices = d['times']
+        # else:
+        #     n_steps = int((d['time_end'] - d['time_start']) / d['time_step']) + 1
+        #     time_slices = np.linspace(d['time_start'], d['time_end'], n_steps)
+
+        # Ignore times, time_step and focus on time_start and time_end
+        time_start = int(d['time_start'])
+        time_end = int(d['time_end'])
 
         # OLD API
         # self._ids = imas.ids(shot, run)
@@ -126,7 +130,16 @@ class EquilibriumIterator(object):
 
         log.info(f"Opening and reading data from SHOT={shot}, RUN={run}, device={device}, username={user}")
 
-        for t in time_slices:
+        self._ids_summary = self._ids.get("summary")
+
+        # Get times
+        times = self._ids_summary.time
+
+        log.info(f"In total {len(times)} slices.")
+
+        for t in times:
+            if  t > time_end or t < time_start:
+                continue
             log.info(f"Loading time slice {t}")
             self._ids_equilibrium = self._ids.get_slice("equilibrium", t,
                 interpolation)
@@ -146,6 +159,8 @@ class EquilibriumIterator(object):
             truncate_time = truncate(t, self.truncate_digits)
             # Truncate the time
             self._times.append(truncate_time)
+
+        log.info(f"Using {len(self._times)} slices as equilibrium input")
 
         return None
 
