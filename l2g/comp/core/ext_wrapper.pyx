@@ -14,9 +14,6 @@ cdef class PyEmbreeAccell:
     """This class wraps the EmbreeAccell class from L2G_cpp and is used to
     provide geometries to Embree and holds information about the geometries,
     i.e., what was hit, etc...
-
-
-
     """
     def __cinit__(self):
         self.c_eacc = new EmbreeAccell()

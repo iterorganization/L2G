@@ -106,8 +106,8 @@ cdef int valSign(double inp) nogil:
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cpdef processDataOnPoints(PyFLT fltObj, float [:] tg_Vertices,
-                          double dim_mul=1e-3):
+cpdef processDataOnPoints(PyFLT flt_obj, float [:] tg_vertices,
+                          results, double dim_mul=1e-3):
     """Function that pre-precoess input target points data. From the data and
     the loaded equilibrium, quantities relevant to FLT analysis are calculated:
 
@@ -116,11 +116,12 @@ cpdef processDataOnPoints(PyFLT fltObj, float [:] tg_Vertices,
     * direction
     """
     cdef:
-        Py_ssize_t N_vertices = tg_Vertices.shape[0] // 3
+        Py_ssize_t N_vertices = tg_vertices.shape[0] // 3
         Py_ssize_t i, p1, p2, p3, iS
         double t, r, phi
 
-    results = L2GPointResults()
+    # Variable results should be provided through python.
+    # results = L2GPointResults()
 
     results.points = np.empty(N_vertices * 3, np.float)
     results.BVec = np.empty(N_vertices * 3, np.float)
@@ -142,20 +143,20 @@ cpdef processDataOnPoints(PyFLT fltObj, float [:] tg_Vertices,
         vector[double] vecBuff
         vector[double] vecBuff2
         int vacuumFPolSign
-    vacuumFPolSign = valSign(fltObj.getVacuumFPOL())
+    vacuumFPolSign = valSign(flt_obj.getVacuumFPOL())
     vecBuff.resize(3)
     vecBuff2.resize(2)
 
     for i in range(N_vertices):
         iS = 3 * i
 
-        fltObj.getBCart(tg_Vertices[iS], tg_Vertices[iS + 1],
-                        tg_Vertices[iS + 2], vecBuff)
+        flt_obj.getBCart(tg_vertices[iS], tg_vertices[iS + 1],
+                         tg_vertices[iS + 2], vecBuff)
         BVec[iS] = vecBuff[0]
         BVec[iS + 1] = vecBuff[1]
         BVec[iS + 2] = vecBuff[2]
         # For now no use for the following?
-        # fltObj.getBCyln(tg_Vertices[iS], tg_Vertices[iS + 1], vecBuff2)
+        # flt_obj.getBCyln(tg_vertices[iS], tg_vertices[iS + 1], vecBuff2)
         # BVecCyln[2*i] = vecBuff2[0]
         # BVecCyln[2*i + 1] = vecBuff2[1]
 
@@ -168,19 +169,20 @@ cpdef processDataOnPoints(PyFLT fltObj, float [:] tg_Vertices,
             direction[i] = -vacuumFPolSign
 
         # # Transform point into R, Z, Phi. Well just R and Phi
-        # r = sqrt(tg_Vertices[iS]**2 + tg_Vertices[iS + 1]**2) * dim_mul
-        # phi = atan2(tg_Vertices[iS + 1], tg_Vertices[iS])
+        # r = sqrt(tg_vertices[iS]**2 + tg_vertices[iS + 1]**2) * dim_mul
+        # phi = atan2(tg_vertices[iS + 1], tg_vertices[iS])
 
         # Store the values inside points
-        points[iS] = tg_Vertices[iS] # R
-        points[iS + 1] = tg_Vertices[iS + 1] # Z
-        points[iS + 2] = tg_Vertices[iS + 2] # Phi
-        flux[i] = fltObj.getPoloidalFlux(tg_Vertices[iS], tg_Vertices[iS + 1])
-    return results
+        points[iS] = tg_vertices[iS] # R
+        points[iS + 1] = tg_vertices[iS + 1] # Z
+        points[iS + 2] = tg_vertices[iS + 2] # Phi
+        flux[i] = flt_obj.getPoloidalFlux(tg_vertices[iS], tg_vertices[iS + 1])
+    results.empty = False
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cpdef processData(PyFLT fltObj, float [:] tg_Vertices, unsigned int [:] tg_Cells,
+cpdef processData(PyFLT flt_obj, float [:] tg_vertices,
+                  unsigned int [:] tg_cells, results,
                   double dim_mul=1e-3):
     """Function that pre-process input target triangular mesh data. From the
     data and the loaded equilibrium, quantities relevant to FLT analysis are
@@ -195,9 +197,9 @@ cpdef processData(PyFLT fltObj, float [:] tg_Vertices, unsigned int [:] tg_Cells
      * direction: The direction of the FL on barycenter
 
     Arguments:
-        fltObj (PyFLT): FLT object that holds information about equilibrium
-        tg_Vertices (list): 1D array of floats containing target points
-        tg_Cells (list): 1D array of uint32 containing triangles.
+        flt_obj (PyFLT): FLT object that holds information about equilibrium
+        tg_vertices (list): 1D array of floats containing target points
+        tg_cells (list): 1D array of uint32 containing triangles.
         dim_mul (double): Dimension multiplier that transform input target data
             to meters.
     Returns:
@@ -205,12 +207,14 @@ cpdef processData(PyFLT fltObj, float [:] tg_Vertices, unsigned int [:] tg_Cells
     """
 
     cdef:
-        Py_ssize_t N_vertices = tg_Vertices.shape[0] // 3
-        Py_ssize_t N_cells = tg_Cells.shape[0] // 3
+        Py_ssize_t N_vertices = tg_vertices.shape[0] // 3
+        Py_ssize_t N_cells = tg_cells.shape[0] // 3
         Py_ssize_t i, p1, p2, p3, iS
         double t
 
-    results = L2GResults()
+    # Variable results must be provided through python. Cython code should only
+    # be used to quicken parts of the code that would benefit from it.
+    # results = L2GResults()
     results.baryCent = np.empty(N_cells * 3, np.float)
     results.normals = np.empty(N_cells * 3, np.float)
     results.BVec = np.empty(N_cells * 3, np.float)
@@ -222,8 +226,8 @@ cpdef processData(PyFLT fltObj, float [:] tg_Vertices, unsigned int [:] tg_Cells
     results.geom_hit_ids = np.empty(N_cells, np.int32)
 
     # Assign the target_verices and target_cells to results
-    results.vertices = tg_Vertices
-    results.triangles = tg_Cells
+    results.vertices = tg_vertices
+    results.triangles = tg_cells
 
     # If results haven't been made, then populate mask and conlen with
     # empty arrays or zeroed arays
@@ -251,62 +255,63 @@ cpdef processData(PyFLT fltObj, float [:] tg_Vertices, unsigned int [:] tg_Cells
     vecBuff1.resize(3)
     vecBuff2.resize(3)
     vecBuff3.resize(2)
-    vacuumFPolSign = valSign(fltObj.getVacuumFPOL())
+    vacuumFPolSign = valSign(flt_obj.getVacuumFPOL())
     for i in range(N_cells):
         iS = 3 * i
-        p1 = 3 * tg_Cells[i * 3]
-        p2 = 3 * tg_Cells[i * 3 + 1]
-        p3 = 3 * tg_Cells[i * 3 + 2]
+        p1 = 3 * tg_cells[i * 3]
+        p2 = 3 * tg_cells[i * 3 + 1]
+        p3 = 3 * tg_cells[i * 3 + 2]
 
-        trianglePoints[0] = tg_Vertices[p1]
-        trianglePoints[1] = tg_Vertices[p1 + 1]
-        trianglePoints[2] = tg_Vertices[p1 + 2]
+        trianglePoints[0] = tg_vertices[p1]
+        trianglePoints[1] = tg_vertices[p1 + 1]
+        trianglePoints[2] = tg_vertices[p1 + 2]
 
-        trianglePoints[3] = tg_Vertices[p2]
-        trianglePoints[4] = tg_Vertices[p2 + 1]
-        trianglePoints[5] = tg_Vertices[p2 + 2]
+        trianglePoints[3] = tg_vertices[p2]
+        trianglePoints[4] = tg_vertices[p2 + 1]
+        trianglePoints[5] = tg_vertices[p2 + 2]
 
-        trianglePoints[6] = tg_Vertices[p3]
-        trianglePoints[7] = tg_Vertices[p3 + 1]
-        trianglePoints[8] = tg_Vertices[p3 + 2]
+        trianglePoints[6] = tg_vertices[p3]
+        trianglePoints[7] = tg_vertices[p3 + 1]
+        trianglePoints[8] = tg_vertices[p3 + 2]
         # vecBuff = getBaryCenter(trianglePoints, mul=1e-3)
         getBaryCenter(trianglePoints, dim_mul, vecBuff1)
         baryCent[iS] = vecBuff1[0]
         baryCent[iS + 1] = vecBuff1[1]
         baryCent[iS + 2] = vecBuff1[2]
-        fltObj.getBCart(baryCent[iS], baryCent[iS + 1], baryCent[iS + 2], vecBuff1)
+        flt_obj.getBCart(baryCent[iS], baryCent[iS + 1], baryCent[iS + 2], vecBuff1)
         BVec[iS] = vecBuff1[0]
         BVec[iS + 1] = vecBuff1[1]
         BVec[iS + 2] = vecBuff1[2]
-        fltObj.getBCyln(baryCent[iS], baryCent[iS + 1], vecBuff3)
+        flt_obj.getBCyln(baryCent[iS], baryCent[iS + 1], vecBuff3)
         BVecCyln[2*i] = vecBuff3[0]
         BVecCyln[2*i + 1] = vecBuff3[1]
         getTriangleNormal(trianglePoints, vecBuff2)
         normals[iS] = vecBuff2[0]
         normals[iS + 1] = vecBuff2[1]
         normals[iS + 2] = vecBuff2[2]
-        flux[i] = fltObj.getPoloidalFlux(baryCent[iS], baryCent[iS + 1])
+        flux[i] = flt_obj.getPoloidalFlux(baryCent[iS], baryCent[iS + 1])
         Bdot[i] = vecBuff1[0] * vecBuff2[0] + vecBuff1[1] * vecBuff2[1] + vecBuff1[2] * vecBuff2[2]
         angle[i] = angleBetweenVectors(vecBuff1, vecBuff2)
 
         direction[i] = vacuumFPolSign
         if Bdot[i] < 0:
             direction[i] = -direction[i]
-
-    return results
+    results.empty = False
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cpdef runFLT(PyFLT fltObj, float [:] tg_Vertices,
-             unsigned int [:] tg_Cells, int user_num_threads=1,
+cpdef runFLT(PyFLT flt_obj, float [:] tg_vertices,
+             unsigned int [:] tg_cells, int user_num_threads=1,
              results=None, double dim_mul=1e-3):
     """Runs the FLT trace on the provided target data.
 
+    All results are saved into the results python object. It is a simple class
+    containing variables, where to store data.
 
     Arguments:
-        fltObj (PyFLT): The FLT objects
-        tg_Vertices (list): 1D array of points.
-        tg_Cells (list): 1D array of triangles.
+        flt_obj (PyFLT): The FLT objects
+        tg_vertices (list): 1D array of points.
+        tg_cells (list): 1D array of triangles.
         user_num_threads (int): Number of OpenMP threads to use
         results (L2GResults): container for results. If empty a new one is made
         dim_mul (float): Dimension multipler that transfroms target to meters!
@@ -317,8 +322,8 @@ cpdef runFLT(PyFLT fltObj, float [:] tg_Vertices,
     """
 
     cdef:
-        Py_ssize_t N_vertices = tg_Vertices.shape[0] // 3
-        Py_ssize_t N_cells = tg_Cells.shape[0] // 3
+        Py_ssize_t N_vertices = tg_vertices.shape[0] // 3
+        Py_ssize_t N_cells = tg_cells.shape[0] // 3
         Py_ssize_t i, iS
         Py_ssize_t threadId
         int num_threads
@@ -333,8 +338,10 @@ cpdef runFLT(PyFLT fltObj, float [:] tg_Vertices,
         user_num_threads = num_threads
     # Prepare Results array
 
-    if results is None:
-        results = processData(fltObj, tg_Vertices, tg_Cells, dim_mul)
+    # Pre-processing, i.e., obtaining all necessary values that are used in the
+    # FLT or applying HLM must be done outside this function.
+    # if results is None:
+        # results = processData(flt_obj, tg_vertices, tg_cells, dim_mul)
 
     # Memory view on data
     cdef:
@@ -350,7 +357,7 @@ cpdef runFLT(PyFLT fltObj, float [:] tg_Vertices,
         int [:] geom_hit_ids = results.geom_hit_ids
         double [:] initial_value
 
-    fltObj.c_prepareThreadContainers(user_num_threads)
+    flt_obj.c_prepareThreadContainers(user_num_threads)
     # Parallel work
 
     # Use barycenters of triangles as starting point
@@ -361,20 +368,19 @@ cpdef runFLT(PyFLT fltObj, float [:] tg_Vertices,
         for i in prange(N_cells, schedule="dynamic"):
             # threadId = threadid()
             iS = 3 * i
-            fltObj.c_setDirection_omp(direction[i], threadId)
-            fltObj.c_setIV_omp(initial_value[iS], initial_value[iS + 1], initial_value[iS + 2],
+            flt_obj.c_setDirection_omp(direction[i], threadId)
+            flt_obj.c_setIV_omp(initial_value[iS], initial_value[iS + 1], initial_value[iS + 2],
                                threadId)
 
-            fltObj.c_runFLT_omp(threadId)
-            mask[i] = fltObj.c_isHit_omp(threadId)
-            conlen[i] = fltObj.c_getConlen_omp(threadId)
-            geom_hit_ids[i] = fltObj.c_getGeomID_omp(threadId)
-    return results
+            flt_obj.c_runFLT_omp(threadId)
+            mask[i] = flt_obj.c_isHit_omp(threadId)
+            conlen[i] = flt_obj.c_getConlen_omp(threadId)
+            geom_hit_ids[i] = flt_obj.c_getGeomID_omp(threadId)
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cpdef runFLTonPoints(PyFLT fltObj, float [:] tg_Vertices, int user_num_threads=1,
-                   results=None, double dim_mul=1e-3):
+cpdef runFLTonPoints(PyFLT flt_obj, float [:] tg_vertices, int user_num_threads=1,
+                     results=None, double dim_mul=1e-3):
     """Runs the FLT trace on the provided target data (points).
 
     Essentially this could be used for obtaining connection length graphs on
@@ -385,8 +391,8 @@ cpdef runFLTonPoints(PyFLT fltObj, float [:] tg_Vertices, int user_num_threads=1
     prepareDataOnPoints
 
     Arguments:
-        fltObj (PyFLT): The FLT object
-        tg_Vertices (list): 1D array of points.
+        flt_obj (PyFLT): The FLT object
+        tg_vertices (list): 1D array of points.
         user_num_threads (int): Number of OpenMP threads to use
         results (L2GPointResults): container for results. If empty a new one is made
         dim_mul (float): Dimension multipler that transfroms target to meters!
@@ -395,7 +401,7 @@ cpdef runFLTonPoints(PyFLT fltObj, float [:] tg_Vertices, int user_num_threads=1
         results (L2GPointResults): Class that holds FLT results
     """
     cdef:
-        Py_ssize_t N_vertices = tg_Vertices.shape[0] // 3
+        Py_ssize_t N_vertices = tg_vertices.shape[0] // 3
         Py_ssize_t i, iS, direction
         Py_ssize_t threadId
         int num_threads
@@ -411,7 +417,7 @@ cpdef runFLTonPoints(PyFLT fltObj, float [:] tg_Vertices, int user_num_threads=1
     # Prepare Results array
 
     if results is None:
-        results = processDataOnPoints(fltObj, tg_Vertices, dim_mul)
+        results = processDataOnPoints(flt_obj, tg_vertices, dim_mul)
 
     # Memory view on data
     cdef:
@@ -422,7 +428,7 @@ cpdef runFLTonPoints(PyFLT fltObj, float [:] tg_Vertices, int user_num_threads=1
         double [:] conlenDown = results.conlenDown
         int [:] direction_map = results.direction
 
-    fltObj.c_prepareThreadContainers(user_num_threads)
+    flt_obj.c_prepareThreadContainers(user_num_threads)
 
     with nogil, parallel(num_threads=user_num_threads):
         threadId = threadid()
@@ -431,30 +437,29 @@ cpdef runFLTonPoints(PyFLT fltObj, float [:] tg_Vertices, int user_num_threads=1
             # First go Down!
             direction = -1 * direction_map[i]
             iS = 3 * i
-            fltObj.c_setDirection_omp(direction, threadId)
-            fltObj.c_setIV_omp(points[iS], points[iS + 1], points[iS + 2],
+            flt_obj.c_setDirection_omp(direction, threadId)
+            flt_obj.c_setIV_omp(points[iS], points[iS + 1], points[iS + 2],
                                threadId)
-            fltObj.c_runFLT_omp(threadId)
-            conlenDown[i] = fltObj.c_getConlen_omp(threadId)
+            flt_obj.c_runFLT_omp(threadId)
+            conlenDown[i] = flt_obj.c_getConlen_omp(threadId)
             # Next go Up!
             direction = direction_map[i]
-            fltObj.c_setDirection_omp(direction, threadId)
-            fltObj.c_setIV_omp(points[iS], points[iS + 1], points[iS + 2],
+            flt_obj.c_setDirection_omp(direction, threadId)
+            flt_obj.c_setIV_omp(points[iS], points[iS + 1], points[iS + 2],
                                threadId)
 
-            fltObj.c_runFLT_omp(threadId)
-            conlenUp[i] = fltObj.c_getConlen_omp(threadId)
-
+            flt_obj.c_runFLT_omp(threadId)
+            conlenUp[i] = flt_obj.c_getConlen_omp(threadId)
     return results
 
-def getFL(PyFLT fltObj, float [:] tg_Vertices, unsigned int [:] tg_Cells,
+def getFL(PyFLT flt_obj, float [:] tg_vertices, unsigned int [:] tg_cells,
           unsigned int [:] FL_ids, results=None, double dim_mul=1e-3,
           bool with_flt=False):
     """Gets FLs based on selected element IDs.
 
     Arguments:
-        fltObj (PyFLT): The FLT objects
-        tg_Vertices (list): 1D array of points.
+        flt_obj (PyFLT): The FLT objects
+        tg_vertices (list): 1D array of points.
         FL_ids (list): 1D array of triangles.
         user_num_threads (int): Number of OpenMP threads to use
         results (L2GResults): container for results. If empty a new one is made
@@ -466,7 +471,7 @@ def getFL(PyFLT fltObj, float [:] tg_Vertices, unsigned int [:] tg_Cells,
     """
 
     cdef:
-        Py_ssize_t N_vertices = tg_Vertices.shape[0] // 3
+        Py_ssize_t N_vertices = tg_vertices.shape[0] // 3
         Py_ssize_t N_cells = FL_ids.shape[0]
         Py_ssize_t i, iS
         double t
@@ -474,7 +479,7 @@ def getFL(PyFLT fltObj, float [:] tg_Vertices, unsigned int [:] tg_Cells,
     # Prepare Results array
 
     if results is None:
-        results = processData(fltObj, tg_Vertices, tg_Cells, dim_mul)
+        results = processData(flt_obj, tg_vertices, tg_cells, dim_mul)
 
     fl_results = L2GFLs()
 
@@ -495,17 +500,48 @@ def getFL(PyFLT fltObj, float [:] tg_Vertices, unsigned int [:] tg_Cells,
     cdef unsigned int el
     cdef vector[double] fl_buffer
     # Prepares containers for one thread
-    fltObj.c_prepareThreadContainers()
+    flt_obj.c_prepareThreadContainers()
     # Trace limited by time
 
     for i in range(N_cells):
         el = FL_ids[i]
         iS = 3 * el
-        fltObj.c_setDirection(direction[el])
-        fltObj.c_setIV(baryCent[iS], baryCent[iS + 1], baryCent[iS + 2])
+        flt_obj.c_setDirection(direction[el])
+        flt_obj.c_setIV(baryCent[iS], baryCent[iS + 1], baryCent[iS + 2])
         fl_buffer.clear()
-        fltObj.c_getFL(fl_buffer, with_flt)
+        flt_obj.c_getFL(fl_buffer, with_flt)
 
         c_fl_results.push_back(fl_buffer)
     fl_results.points = <object> c_fl_results
     return fl_results
+
+def getFlOnPoint(PyFLT flt_obj, float R, float Z, float Theta,
+                 bool with_flt):
+    """Obtain FL points using an origin point R, Z, Theta. Tracing in both
+    directions.
+    """
+
+    cdef :
+        vector[vector[double]] fl_results
+        vector[double] fl_buffer
+
+    # Prepare the thread containers
+    flt_obj.c_prepareThreadContainers()
+
+    # Set initial parameters
+    flt_obj.c_setIV(R, Z, Theta)
+    # Set upward direction.
+    flt_obj.c_setDirection(1)
+
+    fl_buffer.clear()
+    flt_obj.c_getFL(fl_buffer, with_flt)
+    fl_results.push_back(fl_buffer)
+
+    # Set downward direction
+    flt_obj.c_setDirection(-1)
+
+    fl_buffer.clear()
+    flt_obj.c_getFL(fl_buffer, with_flt)
+    fl_results.push_back(fl_buffer)
+
+    return <object> fl_results

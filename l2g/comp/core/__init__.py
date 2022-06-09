@@ -6,4 +6,4 @@ from l2g.comp.core.ext_wrapper import PyEmbreeAccell, PyFLT
 from l2g.comp.core._core import processData, processDataOnPoints
 
 # Main FLT functions
-from l2g.comp.core._core import runFLT, getFL, runFLTonPoints
+from l2g.comp.core._core import runFLT, getFL, getFlOnPoint, runFLTonPoints
