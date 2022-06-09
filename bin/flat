@@ -1,0 +1,146 @@
+#!/usr/bin/python
+
+description = """
+F.L.A.T. - Field Line Analysis Tool
+
+is a program meant for running L2G FLT cases which are describe in configuration
+files (YAML). The configuration file can have a multitude of YAML documents,
+each with their own role. Either a description of input data for the target
+shadowed geometry and with the shadowing geometry. Or a description of which
+equilibrium data or finally describing what HLM to use on the FLT data.
+
+This program reads that file and then the user can decide what to run, on what
+geometry, using which equilibrium and using which HLM.
+"""
+
+import argparse
+
+parser = argparse.ArgumentParser(description=description)
+
+parser.add_argument("yaml_file", nargs="?", help="Path to YAML file.")
+
+# Add argument subgroups.
+command_description = """Tell the binary what to do. Available commands:
+ - run: Run a FLT case with the provided options (Default)
+ - print: Prints the list of components in the YAML document
+"""
+subparsers = parser.add_subparsers(dest='command', help=command_description)
+run_subparser = subparsers.add_parser('run', help="Run FLT case")
+run_subparser.add_argument('geometry', help='Name of input data of geometries to be used in the FLT case')
+run_subparser.add_argument('equilibrium', help='Name of the equilibrium data to be used in the FLT case')
+run_subparser.add_argument('hlm', nargs="?", help='Name of the HLM to apply on the FLT data. Optional')
+run_subparser.add_argument('--dry-run', help="Performs dry run.", type=bool,
+                           default=False)
+parser.add_argument('--debug', help="Activate debug prints",
+                    action='store_true', default=False)
+print_subparser = subparsers.add_parser('print', help="Print case descriptions")
+
+args = parser.parse_args()
+
+import l2g
+l2g.addStreamHandler()
+l2g.enableLogging()
+if args.debug:
+    l2g.enableDebugging()
+
+import os
+import sys
+
+if args.yaml_file is None:
+    print(f"Specify path to a YAML file! Exiting.")
+    sys.exit(1)
+
+if not os.access(args.yaml_file, os.F_OK):
+    print(f"File {args.yaml_file} does not exist! Exiting.")
+    sys.exit(1)
+if not os.access(args.yaml_file, os.R_OK):
+    print(f"File {args.yaml_file} is not readable! Exiting.")
+    sys.exit(1)
+
+# See if command is specified
+
+# Load the YAML file
+import l2g.workflow
+
+print(f"Path to yaml configuration file: {os.path.abspath(args.yaml_file)}")
+with open(args.yaml_file, 'r') as f:
+    yaml_text = f.read()
+
+
+list_of_targets, list_of_equilibriums, list_of_hlms = l2g.workflow.load_yaml_configuration(yaml_text)
+
+# Quickly done commands:
+if args.command == "print":
+    print("Geometries:")
+    for _ in list_of_targets:
+        print(f'    {_.data["name"]}')
+    print("Equilibriums:")
+    for _ in list_of_equilibriums:
+        print(f'    {_.data["name"]}')
+    print("HLMs:")
+    for _ in list_of_hlms:
+        print(f'    {_.data["name"]}')
+    sys.exit(0)
+
+# DEBUG
+if args.command == "run":
+    print("Preparing to run FLT for the following configuration:")
+    print(f"Target geometry: {args.geometry}")
+    print(f"Equilibrium: {args.equilibrium}")
+    print(f"HLM: {args.hlm}")
+
+    # Confirm that the named blocks are indeed in the YAML configuration.
+    geo_obj = None
+    equ_obj = None
+    hlm_obj = None
+
+    for _ in list_of_targets:
+        if _.data["name"] == args.geometry:
+            geo_obj = _
+
+    for _ in list_of_equilibriums:
+        if _.data["name"] == args.equilibrium:
+            equ_obj = _
+
+    if args.hlm is not None:
+        for _ in list_of_hlms:
+            if _.data["name"] == args.hlm:
+                hlm_obj = _
+
+    if geo_obj is None:
+        print(f"Geometry {args.geometry} is not in the YAML file. Exiting!")
+        sys.exit(1)
+
+    if equ_obj is None:
+        print(f"Equilibrium {args.equilibrium} is not in the YAML file. Exiting!")
+        sys.exit(1)
+
+    if args.hlm is not None and hlm_obj is None:
+        print(f"HLM {args.hlm} is not in the YAML file. Exiting!")
+        sys.exit(1)
+
+    case = l2g.workflow.create_case(geo_obj, equ_obj, hlm_obj)
+
+    print("Configuring case for run.")
+    if not args.dry_run:
+        case.prepare_flt_obj()
+    print("Reading target geometry.")
+    if not args.dry_run:
+        case.prepare_result_med()
+
+    print("Amassing equilibrium input data")
+    if not args.dry_run:
+        case.prepare_equil_iterator_obj()
+
+    print("Checking if output file contains already the FLT data.")
+    if not args.dry_run:
+        case.see_if_results_exists()
+
+    print("Creating output result file if necessary")
+    if not args.dry_run:
+        case.create_result_file_if_necessary()
+
+    print("Running case")
+    if not args.dry_run:
+        case.main()
+    sys.exit(0)
