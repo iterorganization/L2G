@@ -7,8 +7,7 @@ import l2g.utils.meshio
 
 # Next functions are helper functions for
 import glob
-import re
-import json
+
 import logging
 import os
 import sys
@@ -21,97 +20,6 @@ import typing
 
 if typing.TYPE_CHECKING:
     from l2g.comp import FieldLineTracer
-
-def json_remove_comments(json_like_string: str) -> str:
-    r"""Removes C-style comments from *json_like* and returns the result.
-
-    Regex pattern:
-
-    ``//.*?$|/\*.*?\*/|\'(?:\\.|[^\\\'])*\'|"(?:\\.|[^\\"])*"``
-
-     - ``//.*?`` Match the comment section non-greedy zero or more times
-
-    or
-
-     - ``/\*.*?\*/`` Match the /* ... */ non-greedy zero or more times.
-
-    The following matches find strings that contain also supposedly C-style
-    comments. These are ignored then in the replacing function, as they are
-    valid JSON strings.
-
-     -  ``\'(?:\\.|[^\\\'])*\'`` Find strings that contain C-style comments.
-     - ``"(?:\\.|[^\\"])*"`` Find strings that contain C-style comments.
-
-
-    Example:
-
-    .. code-block:: python
-
-       test_json = '''\
-       {
-           "foo": "bar", // This is a single-line comment
-           "baz": "blah" /* Multi-line
-           Comment */
-       }'''
-       remove_comments('{"foo":"bar","baz":"blah",}')
-         '{\n    "foo":"bar",\n    "baz":"blah"\n}'
-    """
-    comments_re = re.compile(
-        r'//.*?$|/\*.*?\*/|\'(?:\\.|[^\\\'])*\'|"(?:\\.|[^\\"])*"',
-        re.DOTALL | re.MULTILINE
-    )
-    def replacer(match):
-        s = match.group(0)
-        if s[0] == '/': return ""
-        return s
-    return comments_re.sub(replacer, json_like_string)
-
-def json_remove_trailing_commas(json_line_string: str) -> str:
-    """Removes trailing commas from *json_like* and returns the result.
-
-    Example:
-
-    .. code-block:: python
-
-       remove_trailing_commas('{"foo":"bar","baz":["blah",],}')
-       '{"foo":"bar","baz":["blah"]}'
-    """
-    trailing_object_commas_re = re.compile(
-        r'(,)\s*}(?=([^"\\]*(\\.|"([^"\\]*\\.)*[^"\\]*"))*[^"]*$)')
-    trailing_array_commas_re = re.compile(
-        r'(,)\s*\](?=([^"\\]*(\\.|"([^"\\]*\\.)*[^"\\]*"))*[^"]*$)')
-    # Fix objects {} first
-    objects_fixed = trailing_object_commas_re.sub("}", json_line_string)
-    # Now fix arrays/lists [] and return the result
-    return trailing_array_commas_re.sub("]", objects_fixed)
-
-def json_loads(json_like: str) -> dict:
-    """JSON format does not allow comments or trailing commas, therefore this
-    functions first cleans the JSON like content and finally calls json.loads.
-    """
-
-    # Remove comments
-    almost_json = json_remove_comments(json_like)
-
-    # Remove trailing white spaces
-    proper_json = json_remove_trailing_commas(almost_json)
-
-    out = None
-
-    try:
-        out = json.loads(proper_json)
-    except json.JSONDecodeError as e:
-        # Get the line number error
-        lines = proper_json.splitlines()
-        log.info("Error when parsing JSON.")
-        [log.info(line) for line in lines[e.lineno - 2: e.lineno]]
-        log.info(lines[e.lineno] + '    <----- ERROR')
-        [log.info(line) for line in lines[e.lineno + 1: e.lineno + 3]]
-        raise
-
-    return out
-
-
 
 def check_if_in_slurm_job(*flt_objs):
     """This function checks if the process is run in a SLURM environment. A
@@ -144,22 +52,6 @@ def check_if_in_slurm_job(*flt_objs):
                 log.info(f"case.parameters.num_of_threads={cpus_per_task}")
             except:
                 log.info("Failed to obtain a number from SLURM_CPUS_PER_TASK")
-
-
-def load_l2g_json(file_path: str) -> dict:
-    """Normal JSON format does not allow // comments, so we first clean it of
-    such comment blocks and also remove empty lines.
-
-    If there is a problem with the JSON file, lines are printed to show user,
-    what is causing the error. Also since it fails to load the JSON file, do
-    not allow the program to run.
-    """
-
-    # Load json file
-    inp = {}
-    text = open(file_path, 'r').read()
-    inp = json_loads(text)
-    return inp
 
 def set_parameters_and_options(d: dict, flt_obj) -> None:
     """Set parameters to a FieldLineTracer object from a dictionary.

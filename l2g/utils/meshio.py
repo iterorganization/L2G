@@ -43,8 +43,8 @@ def fieldToNumpy(file: str, field_name: str, iteration: int = 0, order: int = -1
     return array.toNumPyArray()
 
 def numpyArrayToField(arr: np.ndarray, field_name: str,
-        mesh: mc.MEDCouplingUMesh, associated_time: int = 0, iteration: int = 0,
-        info_on_component: list=[]) -> mc.MEDCouplingFieldDouble:
+        mesh: mc.MEDCouplingUMesh, associated_time: float = 0,
+        iteration: int = 0, info_on_component: list=[]) -> mc.MEDCouplingFieldDouble:
     """Converts a numpy array to field.
 
     Returns:
