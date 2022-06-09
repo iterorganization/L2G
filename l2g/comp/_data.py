@@ -1,7 +1,7 @@
 """This module contains data container classes used to collect data from FLT
 runs.
 """
-from typing import Optional
+from typing import Optional, List
 import numpy as np
 import logging
 log = logging.getLogger(__name__)
@@ -51,13 +51,33 @@ class L2GResults:
         "conlen",
         "drsep",
         "drsep2",
-        "q",
-        "qpar",
         "geom_hit_ids",
         "vertices",
-        "triangles"]
+        "triangles",
+        "empty"]
+
+    arrays_to_dump = [
+        "baryCent",
+        "normals",
+        "flux",
+        "BVec",
+        "BVecCyln",
+        "Bdot",
+        "angle",
+        "mask",
+        "direction",
+        "conlen",
+        "drsep",
+        "drsep2",
+        "geom_hit_ids",
+        "vertices",
+        "triangles"
+        ]
 
     def __init__(self):
+        self.reset()
+
+    def reset(self):
         self.baryCent:      Optional[np.ndarray] = None
         self.normals:       Optional[np.ndarray] = None
         self.flux:          Optional[np.ndarray] = None
@@ -70,12 +90,12 @@ class L2GResults:
         self.conlen:        Optional[np.ndarray] = None
         self.drsep:         Optional[np.ndarray] = None
         self.drsep2:        Optional[np.ndarray] = None
-        self.q:             Optional[np.ndarray] = None
-        self.qpar:          Optional[np.ndarray] = None
         self.geom_hit_ids:  Optional[np.ndarray] = None
 
         self.vertices:      Optional[np.ndarray] = None
         self.triangles:     Optional[np.ndarray] = None
+        self.empty = True
+
 
     def generate_vtk_object(self):
         if self.triangles is None or self.vertices is None:
@@ -109,8 +129,8 @@ class L2GResults:
         data.SetCells(vtk.VTK_TRIANGLE, cells)
 
         cellData = data.GetCellData()
-        for key in self.mesh_results.__dict__:
-            array = self.mesh_results.__dict__[key]
+        for key in self.arrays_to_dump:
+            array = self.__dict__[key]
             if array is None:
                 continue
 
@@ -168,10 +188,26 @@ class L2GPointResults:
         "q",
         "qpar",
         "conlenUp",
+        "conlenDown",
+        "empty"
+    ]
+
+    arrays_to_dump = [
+        "points",
+        "flux",
+        "BVec",
+        "direction",
+        "drsep",
+        "q",
+        "qpar",
+        "conlenUp",
         "conlenDown"
     ]
 
     def __init__(self):
+        self.reset()
+
+    def reset(self):
         self.points:        Optional[np.ndarray] = None
         self.flux:          Optional[np.ndarray] = None
         self.BVec:          Optional[np.ndarray] = None
@@ -181,6 +217,7 @@ class L2GPointResults:
         self.qpar:          Optional[np.ndarray] = None
         self.conlenUp:      Optional[np.ndarray] = None
         self.conlenDown:    Optional[np.ndarray] = None
+        self.empty:                         bool = True
 
 class L2GFLs:
     """Class that holds calculated FLs on given target triangles.
@@ -249,36 +286,29 @@ class L2GFLs:
 
         return data
 
-class L2GRampDownHLM:
-    """Class for storing Ramp-Down results.
+class L2GResultsHLM:
+    """Class for holding HLM results
+
+    Additional arrays holds additional arrays, such as in case of Flat-Top and
+    Ramp-DOwn where we also have conservative values.
+
+
+    Attributes:
+        q_inc: Perpendicular shadowed heat load
+        q_par: Parallel unshadowed heat load
+        flux_expansion: Flux expansion
+        additional_arrays: Storage for additional arrays
     """
+    __slots__ = ["q_inc", "q_par", "flux_expansion", "additional_arrays",
+                 "empty"]
 
-    __slots__ = ["lambda_q", "q_inc", "q_par", "q_inc_cons", "q_par_cons"]
-    def __init__(self):
-        self.lambda_q: float = 0.0
-        self.q_inc:        Optional[np.ndarray] = None
-        self.q_par:        Optional[np.ndarray] = None
-        self.q_inc_cons:   Optional[np.ndarray] = None
-        self.q_par_cons:   Optional[np.ndarray] = None
-
-class L2GSteadyStateHLM:
-    """Class for storing Steady-State results.
-    """
-
-    __slots__ = ["interELM", "elm", "q_parallel", "q_inc", "expansion"]
 
     def __init__(self):
-        self.interELM:      Optional[np.ndarray] = None
-        self.elm:           Optional[np.ndarray] = None
-        self.q_parallel:    Optional[np.ndarray] = None
-        self.q_inc:         Optional[np.ndarray] = None
-        self.expansion:     Optional[np.ndarray] = None
+        self.reset()
 
-class L2GStartUpHLM:
-    """Class for storing Start-Up results.
-    """
-
-    __slots__ = ["q_sup", "q_sup_par"]
-    def __init__(self):
-        self.q_sup:        Optional[np.ndarray] = None
-        self.q_sup_par:    Optional[np.ndarray] = None
+    def reset(self):
+        self.q_inc: np.ndarray = None
+        self.q_par: np.ndarray = None
+        self.flux_expansion: np.ndarray = None
+        self.additional_arrays: List[np.ndarray] = []
+        self.empty: bool = True

@@ -24,6 +24,8 @@ class MEDMeshIO():
     """
 
     def __init__(self):
+        #: MED UMESH file for getting data.
+        self.med_umesh_file = None
         #: MED mesh object. Used to tie fields to mesh.
         self.med_mesh = None
 
@@ -57,7 +59,9 @@ class MEDMeshIO():
         if not os.path.exists(file):
             log.error(f"File {file} does not exist!")
             return
-        self.med_mesh = mc.ReadMeshFromFile(file)
+        # self.med_mesh = mc.ReadMeshFromFile(file)
+        self.med_umesh_file = mc.MEDFileUMesh.New(file)
+        self.med_mesh = self.med_umesh_file.getMeshAtLevel(0)
         self.med_mesh_source_file = file
 
     def getMeshData(self):
@@ -98,13 +102,14 @@ class MEDMeshIO():
         arrays to the same object, then those arrays are written to this new
         location.
         """
-        if self.med_mesh is None:
+        if self.med_umesh_file is None:
             log.error("Could not write mesh as no MED mesh was read!")
             return
 
         self.med_file_path = file_location
-        mc.WriteMesh(fileName=self.med_file_path, mesh=self.med_mesh,
-                     writeFromScratch=self.overwrite_mesh)
+        # mc.WriteMesh(fileName=self.med_file_path, mesh=self.med_mesh,
+        #              writeFromScratch=self.overwrite_mesh)
+        self.med_umesh_file.write(file_location, 0)
 
     def writeArray(self, array: np.ndarray, array_name: str,
                    info_on_component: list = []):
@@ -138,12 +143,23 @@ class MEDMeshIO():
 def load_flt_mesh_results_from_med(mesh_results: L2GResults, med_object: MEDMeshIO):
     """Loads the FLT data from med object. Usually we only need a few FLT
     relevant quantities.
+
+    Since the C++ code handles only 1D array, then we need to flatten any
+    vector arrays or arrays that are stored as multi dimensional array.
     """
     if not med_object.med_file_path:
         log.error("No MED file path to load data from")
         return
     mesh_results.drsep = med_object.getArray("drsep")
     mesh_results.conlen = med_object.getArray("conlen")
+    mesh_results.flux = med_object.getArray("flux")
+
+    # Necessary for FL
+    # Necessary to flatten!
+    mesh_results.BVec = med_object.getArray("BVec").flatten()
+    mesh_results.Bdot = med_object.getArray("Bdot")
+    # Necessary to flatten!
+    mesh_results.baryCent = med_object.getArray("baryCent").flatten()
 
 def dump_flt_mesh_results_to_med(mesh_results: L2GResults, med_object: MEDMeshIO):
     """Dumps flt_mesh results to med object.
@@ -152,7 +168,7 @@ def dump_flt_mesh_results_to_med(mesh_results: L2GResults, med_object: MEDMeshIO
 
     """
 
-    for key in mesh_results.__slots__:
+    for key in mesh_results.arrays_to_dump:
         array = getattr(mesh_results, key)
         if array is None:
             continue
