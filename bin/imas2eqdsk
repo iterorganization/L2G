@@ -18,12 +18,6 @@ The file is outputted wherever the command is run.
 
 parser = argparse.ArgumentParser(description='Create EQDSK from IDS time slice')
 
-parser.add_argument('-t', '--time_slices',
-                    metavar='Ts',
-                    type=float,
-                    nargs='+',
-                    help='argument for time slices. Required',
-                    required=True)
 parser.add_argument('-u', '--user',
                     metavar='user',
                     type=str,
@@ -49,7 +43,12 @@ parser.add_argument('-r', '--run',
                     metavar='run',
                     help='argument for run. Required',
                         required=True)
-
+parser.add_argument('-ts', '--time_start',
+                    type=float, metavar='time start',
+                    help='Start of time interval.')
+parser.add_argument('-te', '--time_end',
+                    type=float, metavar='time end',
+                    help='End of time interval.')
 args = parser.parse_args()
 
 user = args.user
@@ -65,16 +64,18 @@ imas_obj.open_env(user, device, version)
 
 ids_equilibrium = imas_obj.equilibrium
 
-time_slices = args.time_slices[:]
+# time_slices = args.time_slices[:]
 
 ids_wall = imas_obj.wall
 ids_wall.get()
 
-if time_slices == [-1]:
-    imas_obj.summary.get()
-    time_slices = imas_obj.summary.time
+imas_obj.summary.get()
+ids_times = imas_obj.summary.time
 
-for ts in time_slices:
+
+for ts in ids_times:
+    if ts < args.time_start or ts > args.time_end:
+        continue
     ids_equilibrium.getSlice(ts, imas.imasdef.CLOSEST_SAMPLE)
 
     # Actual time depends on what is the closest sample, do NOT trust linear

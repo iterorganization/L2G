@@ -33,7 +33,7 @@ done
 
 SCRIPTPATH="$( cd -- "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 
-JOB_NAME=$(echo ${L2G_JSON} | python3 -c "import sys,l2g.utils; print(l2g.utils.json_loads(open(sys.stdin.read().strip(), 'r').read())['name'])")
+JOB_NAME=$(echo ${L2G_JSON} | python3 -c "import sys,l2g.workflow; print(l2g.workflow.json_loads(open(sys.stdin.read().strip(), 'r').read())['name'])")
 
 JOB_NAME=${JOB_NAME:-"L2G-job"}
 LOG_NAME=${JOB_NAME}_slurm.log

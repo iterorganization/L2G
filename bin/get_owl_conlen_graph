@@ -46,11 +46,12 @@ print("Starting...")
 
 import l2g
 import l2g.utils.meshio
+import l2g.comp
 import l2g.comp.core
 import numpy as np
 import l2g.equil
 import time
-case = L2G.FieldLineTracer()
+case = l2g.comp.FieldLineTracer()
 
 #Load full tokamak
 embreeObj = l2g.comp.core.PyEmbreeAccell()

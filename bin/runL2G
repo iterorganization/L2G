@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-import l2g
-l2g.log.info("Starting up...")
-
-import time
 import argparse
 
 description = """Runs a L2G case, described within a L2G JSON file.
@@ -18,347 +14,62 @@ args = parser.parse_args()
 
 import os
 import sys
-from pathlib import Path
+import l2g
+if args.verbose:
+    l2g.addStreamHandler()
+    l2g.enableLogging()
 
+l2g.log.info("Starting up...")
 # Check if the JSON file can be read.
 json_input = args.input
 if not os.access(json_input, mode=os.R_OK):
     l2g.log.info(f"Could not read: '{json_input}'!")
     sys.exit(-1)
 
-# Now that everything went okay start with the module loads. Putting these
-# module loads at the top of the file creates a time overhead.
+import l2g.workflow
 
-import l2g.utils
-import l2g.utils.meshio
-import l2g.hlm.steady_state
-import l2g.hlm.general
-import l2g.hlm.ramp_down
-import l2g.comp
-import l2g.equil
+with open(json_input, 'r') as f:
+    json_data = f.read()
 
-if args.verbose:
-    l2g.addStreamHandler()
-    l2g.enableLogging()
-import numpy as np
+list_of_targets, list_of_equilibriums, list_of_hlms = l2g.workflow.load_json_configuration(json_data)
 
-# Load json file
-inp = l2g.utils.load_l2g_json(json_input)
+# Dump the data in dict for additional read.
+json_dict = l2g.workflow.json_loads(json_data)
 
-CUTOFF = 4.3e3
-if "cutoff" in inp:
-    CUTOFF = inp["cutoff"]
+target = list_of_targets[0]
+equilibrium = list_of_equilibriums[0]
+hlm = None
+if len(list_of_hlms):
+    hlm = list_of_hlms[0]
 
-R_BREAK = 0.025
-# Create an instance of the FieldLineTracer so that we start setting parameters
-# and input data.
 
-OUTPUT_DIRECTORY = os.path.dirname(os.path.abspath(args.input))
+case = l2g.workflow.create_case(target, equilibrium, hlm)
+# Check for any additional parameters to set.
+case.prepare_flt_obj()
+l2g.log.info("Reading target geometry.")
+case.prepare_result_med()
 
-if "output_directory" in inp:
-    OUTPUT_DIRECTORY = os.path.abspath(inp["output_directory"])
-    Path(OUTPUT_DIRECTORY).mkdir(parents=True, exist_ok=True)
+# Custom name
+med_file_name = ""
+if "name" in json_dict:
+    case.case_name = json_dict["name"]
+    case.flt_obj.name = json_dict["name"]
+    med_file_name = json_dict["name"]
 
+l2g.log.info("Amassing equilibrium input data")
+case.prepare_equil_iterator_obj()
 
-time_start = time.perf_counter()
-l2g.log.info("Loading data")
+l2g.log.info("Checking if output file contains already the FLT data.")
+output_directory = ""
+if "output_directory" in json_dict:
+    output_directory = json_dict["output_directory"]
 
-flt_case = l2g.comp.FieldLineTracer()
-flt_case.name = inp['name']
 
-elm_case = l2g.comp.FieldLineTracer()
-elm_case.name = inp['name'] + "_elm"
+case.see_if_results_exists(output_directory=output_directory,
+    med_file_name=med_file_name)
 
-# Load global parameters
-l2g.utils.set_parameters_and_options(inp, flt_case)
-l2g.utils.load_flt_settings(inp['flt'], flt_case)
+l2g.log.info("Creating output result file if necessary")
+case.create_result_file_if_necessary()
+l2g.log.info("Running case")
+case.main()
 
-if "elm" in inp:
-    l2g.utils.set_parameters_and_options(inp, elm_case)
-    l2g.utils.load_elm_settings(inp['elm'], elm_case)
-    if "r_break" in inp['elm']:
-        R_BREAK = inp['elm']['r_break']
-
-if "ramp-down" in inp:
-    # Prepare containers for plotting.
-    rd_ip = []
-    rd_psol = []
-    rd_lq = []
-    rd_time = []
-# Load parameters
-
-# See if there are any FL ids to set
-fl_ids = []
-if "fl_ids" in inp:
-    fl_ids = inp["fl_ids"]
-
-# See if there is a custom wall limiter
-if 'wall_limiter' in inp:
-    custom_wall_limiter = True
-    l2g.log.info("Custom wall limiter included in JSON.")
-else:
-    custom_wall_limiter = False
-
-# See if there are custom LCFS or boundary Flux values
-if 'lcfs_values' in inp:
-    custom_lcfs_values = True
-    lcfs_values = np.array(inp["lcfs_values"])
-    l2g.log.info("Custom LCFS value included in JSON.")
-else:
-    custom_lcfs_values = False
-
-
-# Let's see if we run in a HPC job. Currently only slurm based.
-l2g.utils.check_if_in_slurm_job(flt_case, elm_case)
-
-TIME_LOADING_CASE = time.perf_counter() - time_start
-l2g.log.info(f"Loaded case in {TIME_LOADING_CASE} seconds.")
-
-l2g.log.info("")
-
-l2g.log.info(f"Loading {inp['eq_type']} equilibriums")
-
-equilIter = l2g.equil.EquilibriumIterator()
-
-correct_helicity = True
-if "correct_helicity" in inp:
-    correct_helicity = inp["correct_helicity"]
-
-equilIter.correctHelicity(correct_helicity)
-# Figure out what kind of equilibriums do we have
-if inp['eq_type'] == "imas":
-    equilIter.loadIMASEquilibriums(inp['imas'])
-else:
-    equilIter.loadEqdskEquilibriums(inp['eqdsk_files'])
-
-if custom_lcfs_values:
-    N_lcfs_values = len(lcfs_values)
-    N_equilIter = len(equilIter)
-    if N_lcfs_values != N_equilIter:
-        l2g.log.error(f"The number of custom LCFS values ({N_lcfs_values}) " +
-                      "is not the same as the number of loaded equilibriums " +
-                      f"({N_equilIter})")
-        sys.exit(-2)
-
-# Create the result MED file. If needed. Otherwise read the MED mesh from the
-# existing FLT med file.
-run_flt = True
-resultFileName = os.path.join(OUTPUT_DIRECTORY, flt_case.name + '.med')
-result_med = l2g.comp.MEDMeshIO()
-result_med.readMeshFromMedFile(inp["flt"]["target_mesh"])
-if os.path.exists(resultFileName):
-    l2g.log.info("Result file name already exists.")
-    l2g.log.info("Checking if the result contains FLT results.")
-
-    result_med.med_file_path = resultFileName
-
-    # Use the field Conlen as reference for FLT data, since this is always
-    # stored.
-
-    import medcoupling as mc
-    field_names = mc.GetAllFieldNames(result_med.med_file_path)
-    run_flt = False
-    if "conlen" not in field_names:
-        run_flt = True
-    else:
-        # Check the number of indexes
-        iterations = mc.GetAllFieldIterations(result_med.med_file_path,
-                                              "conlen")
-        if len(iterations) != len(equilIter):
-            run_flt = True
-            l2g.log.info("FLT result file does not have data for all " +
-                         "equilibriums. ")
-    if run_flt:
-        l2g.log.info("Result file does not have complete FLT data.")
-else:
-    result_med.writeMesh(resultFileName)
-
-TIME_RUNNING_CASES = 0
-
-N = len(equilIter)
-for index, associated_time, equilibrium in equilIter:
-    time_start = time.perf_counter()
-
-    # Set the index and associated time to the result MEDMeshIO object
-    result_med.setIndexAndTime(index, associated_time)
-
-    l2g.log.info("")
-    l2g.log.info(f"Getting results for {index + 1} of {N} equilibriums.")
-    l2g.log.info(f"Index={index}, Time={associated_time:.3f}.")
-    l2g.log.info("")
-
-    # Get EQDSKIO
-
-    if custom_wall_limiter:
-        equilibrium.wall_contour_r = np.array(inp['wall_limiter']['r'])
-        equilibrium.wall_contour_z = np.array(inp['wall_limiter']['z'])
-
-    flt_case.setEquilibrium(equilibrium)
-
-    # Apply parameters and load Equilibrium. This is done every time.
-    flt_case.applyParameters()
-    flt_case.loadEq()
-    flt_case.processDataOnMesh()
-
-    # If the equilibrium is limiter, then in case that the geometry is also
-    # the one that has the LCFS contact point, we need to adjust r_move or
-    # z_move in order to put the equilibrium data correctly on the geometry.
-
-    # For now we shift only in the radial direction.
-    if custom_lcfs_values:
-        # Assign the custom LCFS value
-        flt_case.eq.psiLCFS = lcfs_values[index]
-        flt_case.eq.evaluated = True
-    else:
-        flt_case.evaluateEq()
-    if flt_case.eq.type_ == 'lim':
-        flt_case.alignGeometryWithLCFS()
-
-
-    # Running FLT and saving FLT data on input mesh
-    if run_flt:
-        l2g.log.info("Running FLT...")
-        flt_case.runFltOnMesh()
-
-        l2g.log.info("Calculating drsep...")
-        flt_case.calculateDrsep()
-
-        l2g.comp.dump_flt_mesh_results_to_med(flt_case.mesh_results, result_med)
-    else:
-        # Load the resulting FLT data.
-        l2g.log.info("Loading flt results from output...")
-        l2g.comp.load_flt_mesh_results_from_med(flt_case.mesh_results, result_med)
-
-    # Running FLT to get FLs from selected ids.
-    if fl_ids:
-        l2g.log.info("Getting FLs...")
-        # Obtain FLs and output them into a file.
-        if all(isinstance(x, list) for x in fl_ids):
-            # We have a group of IDs.
-            for j, subset in enumerate(fl_ids):
-                flt_case.fl_ids = subset
-                flt_case.getFL()
-                fl_path_name = os.path.join(OUTPUT_DIRECTORY, f"{flt_case.name}_{j}_{associated_time}.vtk")
-                l2g.comp.save_results_to_vtk(flt_case.fl_results, fl_path_name)
-        else:
-            flt_case.fl_ids = fl_ids
-            flt_case.getFL()
-            fl_path_name = os.path.join(OUTPUT_DIRECTORY, f"{flt_case.name}_{associated_time}.vtk")
-            l2g.comp.save_results_to_vtk(flt_case.fl_results, fl_path_name)
-
-    # Now check for other things.
-
-    if "elm" in inp:
-        l2g.log.info("Applying Steady-State plasma profile.")
-        elm_case.setEquilibrium(equilibrium)
-        elm_case.applyParameters()
-        elm_case.loadEq()
-        # First we need the connection length data. Check if the data exists
-
-        conlen_data_path = os.path.join(OUTPUT_DIRECTORY, elm_case.name + f"_conlen_{index}.dat")
-
-        if os.path.exists(conlen_data_path):
-            conlen_data = np.loadtxt(conlen_data_path)
-        else:
-            elm_case.obtainOwlConlenGraph()
-            conlen_data = elm_case.owl_conlen_data
-            np.savetxt(conlen_data_path, conlen_data, header="drsep(Phi) [m], drsep(R) [m], Connection length Up [m], Connection length Down [m]")
-
-
-        elm_qpar_path = os.path.join(OUTPUT_DIRECTORY, elm_case.name + f"_qpar_{index}.dat")
-
-        if os.path.exists(elm_qpar_path):
-            qelm_data = np.loadtxt(elm_qpar_path)
-        else:
-            # Output name
-            Rb, Z, Btotal, Bpm = elm_case.eq.getOWL_midplane()
-            graphics_output_name = os.path.join(OUTPUT_DIRECTORY,
-                f"{elm_case.name}_{index}")
-            qelm_data = l2g.hlm.steady_state.get_elm_data(conlen_data,
-                generate_graphics=True, output_name=graphics_output_name,
-                Rb=Rb, Btot=Btotal, Bpm=Bpm,
-                r_break=elm_case.parameters.r_break, drsep=elm_case.eq.drsep)
-            np.savetxt(elm_qpar_path, qelm_data, header="drsep [m], elm PLM [MW/m^2]")
-
-        elm_data_r = qelm_data[:, 0]
-        elm_data_q = qelm_data[:, 1] * 1e6
-
-        flt_case.applySteadyState(elm_data_r, elm_data_q)
-
-        # Save the results.
-        result_med.writeArray(array=flt_case.ss_results.expansion,
-                              array_name="Total flux expansion")
-        result_med.writeArray(array=flt_case.ss_results.elm,
-                              array_name=r"$q_{\parallel}\;\;[\frac{W}{m^2}]$ ELM")
-        result_med.writeArray(array=flt_case.ss_results.interELM,
-                              array_name=r"$q_{\parallel}\;\;[\frac{W}{m^2}]$ inter-ELM")
-        result_med.writeArray(array=flt_case.ss_results.q_parallel,
-                              array_name=r"$q_{\parallel}\;\;[\frac{W}{m^2}]$")
-        result_med.writeArray(array=flt_case.ss_results.q_inc, array_name=r"$q_{\perp}\;\;[\frac{W}{m^2}]$")
-
-    if "ramp-down" in inp:
-        l2g.log.info("Applying Ramp-Down plasma profile.")
-
-        flt_case.applyRampDown()
-        # Save results
-        result_med.writeArray(array=flt_case.rd_results.q_inc,
-                              array_name=r"$q_{\perp}\;\;[\frac{W}{m^2}]$")
-        result_med.writeArray(array=flt_case.rd_results.q_par,
-                              array_name=r"$q_{\parallel}\;\;[\frac{W}{m^2}]$")
-        result_med.writeArray(array=flt_case.rd_results.q_inc_cons,
-                              array_name=r"$q_{\perp}\;\;[\frac{W}{m^2}]$ CONS")
-        result_med.writeArray(array=flt_case.rd_results.q_par_cons,
-                              array_name=r"$q_{\parallel}\;\;[\frac{W}{m^2}]$ CONS")
-        l2g.log.info(f'[RAMP DOWN]: i={index} t={associated_time:.3f} lq={flt_case.rd_results.lambda_q:.2f} Ip={flt_case.equilibrium.Ip:.2e}')
-
-        # Store values for generating graphics
-        rd_ip.append(equilibrium.Ip)
-        rd_psol.append(equilibrium.Psol)
-        rd_lq.append(flt_case.rd_results.lambda_q)
-        rd_time.append(associated_time)
-
-    if "start-up" in inp:
-        l2g.log.info("Applying Start-Up plasma profile (double exponential).")
-
-        lq_main = inp["start-up"]["lq_main"]
-        lq_near = inp["start-up"]["lq_near"]
-        ratio = inp["start-up"]["ratio"]
-        p_sol = inp["start-up"]["p_sol"]
-
-        flt_case.applyStartUp(lq_main=lq_main, lq_near=lq_near, ratio=ratio,
-                              power_loss=p_sol)
-
-        # Save results
-        result_med.writeArray(array=flt_case.sup_results.q_sup,
-                              array_name=r"$q_{\perp}\;\;[\frac{W}{m^2}]$")
-        result_med.writeArray(array=flt_case.sup_results.q_sup_par,
-                              array_name=r"$q_{\parallel}\;\;[\frac{W}{m^2}]$")
-
-    TIME_RUNNING_CASES += time.perf_counter() - time_start
-
-# Finally for Ramp-down generate the graphics
-if "ramp-down" in inp:
-    import matplotlib.pyplot as plt
-    f = plt.figure()
-    ax = f.add_subplot(111)
-    ax.set_title(flt_case.name)
-    ax.grid(True)
-    plot1 = ax.plot(rd_time, [_*1e-6 for _ in rd_ip], color='r')
-    plot2 = ax.plot(rd_time, [_*1e-6 for _ in rd_psol], color='g')
-    ax.set_ylabel('Ip [MA], Psol [MW]')
-    ax.set_xlabel('Time [s]')
-
-    ax2 = ax.twinx()
-    plot3 = ax2.plot(rd_time, rd_lq, color='b')
-
-    ax2.set_ylabel(r'$\lambda_q [mm]$')
-    ax.set_ylim((0, 16))
-    ax.legend(plot1 + plot2 + plot3, [r'$I_p$', r'$P_{sol}$', r'$\lambda_q$'],
-              loc='upper center')
-    f.savefig(os.path.join(OUTPUT_DIRECTORY, f"{flt_case.name}_rd.pdf"))
-
-l2g.log.info("Time summaries:")
-l2g.log.info("\tLoading case:".rjust(25) + f"{TIME_LOADING_CASE:.2f} s")
-l2g.log.info("\tRunning cases:".rjust(25) + f"{TIME_RUNNING_CASES:.2f} s")
-l2g.log.info("")
-l2g.log.info(f"Total: {TIME_LOADING_CASE + TIME_RUNNING_CASES:.2f}s")
