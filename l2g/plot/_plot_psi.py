@@ -6,6 +6,7 @@ import os
 
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
+import matplotlib.figure
 import numpy as np
 
 def plot_psi_to_mpl_ax(ax, eq: l2g.equil.EQ):
@@ -108,8 +109,9 @@ def plot_psi_to_mpl_ax(ax, eq: l2g.equil.EQ):
     ax.legend()
 
 
-def plot_psi(eq: l2g.equil.EQ, output_path: str, plot_midplane=False,
-             save_files=True) -> plt.figure:
+def plot_psi(eq: l2g.equil.EQ, output_path: str = "",
+             plot_midplane: bool = False,
+             save_files: bool = True) -> matplotlib.figure.Figure:
     """Plot the poloidal magnetic flux of an equilibrium.
 
     If for output only the directory is specified, it generates two graphics in
