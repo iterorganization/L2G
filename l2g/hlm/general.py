@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def single_exponential_qpar(drsep: np.ndarray, lambda_q : float,
                             q_parallel: float) -> np.ndarray:
     r"""Applies a parallel single exponential profile to the provided drsep.
@@ -78,3 +79,28 @@ def double_exponential_psol(drsep: np.ndarray, Bt: float, Bpm: float, Rb: float,
 def double_exponential_qpar(*args, **kwargs):
     """Not implemented yet."""
     raise NotImplementedError
+
+def custom(drsep: np.ndarray, points: np.ndarray,
+           profile: np.ndarray) -> np.ndarray:
+    """Applies a custom profile by providing points array and the profile
+    values on the points.
+
+    Returns:
+        q (arr): ELM heat load profile
+
+    Arguments:
+        drsep (arr): 1D array of distances from the midplane. In meters.
+        points (arr): 1D array of X-axis of the numerical ELM profile.
+            In meters.
+        profile (arr): 1D array of numerical values of ELM. In Watts.
+    """
+    from scipy.interpolate import interp1d
+
+    if not(isinstance(drsep, np.ndarray)):
+        if not(isinstance(drsep, list)):
+            drsep = [drsep]
+        drsep = np.array(drsep, dtype=np.float64)
+
+    interp = interp1d(points, profile, fill_value='extrapolate')
+    q = interp(drsep)
+    return q
