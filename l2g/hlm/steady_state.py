@@ -581,7 +581,7 @@ def get_elm_data(conlen_graph_data, generate_graphics=False, output_name="",
     axs[3].text(1e3 * DRSEP, 150, r"$2^{nd} sep$", rotation=90)
     axs[3].legend()
 
-    fig.savefig(f"{output_name}.pdf")
+    fig.savefig(f"{output_name}_elm.pdf")
 
     # Now just a figure with the heat loads profiles.
 
@@ -603,6 +603,10 @@ def get_elm_data(conlen_graph_data, generate_graphics=False, output_name="",
     ax.set_xlim((0, 200.0))
     ax.set_ylim((0.001, 1000.0))
 
-    f.savefig(f"{output_name}_qpar.pdf")
+    f.savefig(f"{output_name}_elm_qpar.pdf")
+
+    f.clf()
+    plt.close(f)
+    del f
 
     return x
