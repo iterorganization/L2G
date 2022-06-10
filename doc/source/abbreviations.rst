@@ -25,3 +25,6 @@ Glossary
 
    RD
      Ramp-Down
+
+   hlm
+     heat load mapping
