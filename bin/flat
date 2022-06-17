@@ -29,19 +29,20 @@ run_subparser = subparsers.add_parser('run', help="Run FLT case")
 run_subparser.add_argument('geometry', help='Name of input data of geometries to be used in the FLT case')
 run_subparser.add_argument('equilibrium', help='Name of the equilibrium data to be used in the FLT case')
 run_subparser.add_argument('hlm', nargs="?", help='Name of the HLM to apply on the FLT data. Optional')
-run_subparser.add_argument('--dry-run', help="Performs dry run.", type=bool,
+run_subparser.add_argument('--dry-run', help="Performs dry run.", action="store_true",
                            default=False)
+run_subparser.add_argument('--out-dir', help="Specify output directory. Default CWD.", type=str)
+run_subparser.add_argument('--rotational-misalignment',
+    help="Activate rotational misalignment. By that it checks if it has the " +
+         "necessary information in the geometry to run a FLT case with " +
+         "rotational misalignment activated.", action='store_true', default=False)
 parser.add_argument('--debug', help="Activate debug prints",
                     action='store_true', default=False)
 print_subparser = subparsers.add_parser('print', help="Print case descriptions")
 
-args = parser.parse_args()
+edit_subparser = subparsers.add_parser('rotate', help="Edit YAML descriptions")
 
-import l2g
-l2g.addStreamHandler()
-l2g.enableLogging()
-if args.debug:
-    l2g.enableDebugging()
+args = parser.parse_args()
 
 import os
 import sys
@@ -57,6 +58,7 @@ if not os.access(args.yaml_file, os.R_OK):
     print(f"File {args.yaml_file} is not readable! Exiting.")
     sys.exit(1)
 
+
 # See if command is specified
 
 # Load the YAML file
@@ -67,6 +69,11 @@ with open(args.yaml_file, 'r') as f:
     yaml_text = f.read()
 
 
+import l2g
+l2g.addStreamHandler()
+l2g.enableLogging()
+if args.debug:
+    l2g.enableDebugging()
 list_of_targets, list_of_equilibriums, list_of_hlms = l2g.workflow.load_yaml_configuration(yaml_text)
 
 # Quickly done commands:
@@ -84,6 +91,27 @@ if args.command == "print":
 
 # DEBUG
 if args.command == "run":
+    output_directory = ""
+
+    # See the environment variable, for instance for L2G_OUTPUT_DIRECTORY
+    if "L2G_OUTPUT_DIRECTORY" in os.environ:
+        output_directory = os.environ["L2G_OUTPUT_DIRECTORY"]
+
+    if args.out_dir:
+        output_directory = args.out_dir
+
+    if output_directory == "":
+        # Finally set it default to CWD, if it is still empty
+        output_directory = os.getcwd()
+
+    output_directory = os.path.abspath(output_directory)
+    if not os.path.exists(output_directory):
+        os.makedirs(output_directory)
+    else:
+        if not os.path.isdir(output_directory):
+            print(f"Path for output directory: {output_directory} is not a directory!")
+            sys.exit(1)
+    print(f"Output directory set to: {output_directory}")
     print("Preparing to run FLT for the following configuration:")
     print(f"Target geometry: {args.geometry}")
     print(f"Equilibrium: {args.equilibrium}")
@@ -123,18 +151,11 @@ if args.command == "run":
 
     print("Configuring case for run.")
     if not args.dry_run:
-        case.prepare_flt_obj()
-    print("Reading target geometry.")
-    if not args.dry_run:
-        case.prepare_result_med()
-
-    print("Amassing equilibrium input data")
-    if not args.dry_run:
-        case.prepare_equil_iterator_obj()
+        case.prepare()
 
     print("Checking if output file contains already the FLT data.")
     if not args.dry_run:
-        case.see_if_results_exists()
+        case.see_if_results_exists(output_directory=output_directory)
 
     print("Creating output result file if necessary")
     if not args.dry_run:
@@ -143,4 +164,77 @@ if args.command == "run":
     print("Running case")
     if not args.dry_run:
         case.main()
+
+    # Check if we do a rotational misalignment
+    if args.rotational_misalignment:
+        print("Running with rotational misalignment. Checking if geometry has")
+        print("information about the axis")
+        if not "rot_axes" in geo_obj.data:
+            print(f"No points specifying the rot_axes for {geo_obj.data['name']}")
+            sys.exit(1)
+        if not "rot_theta" in geo_obj.data:
+            print(f"No points specifying the rot_theta for {geo_obj.data['name']}")
+            sys.exit(1)
+        # Now that we have everything, we need to prepare the 7 cases.
+        # First case is the normal case that you have, while the other 6 cases
+        # are the rotational cases around it's axes.
+
+        print("Now running for different rotations")
+
+        # In total there should be 2 * Number of axes of rotations performed.
+        N = len(geo_obj.data["rot_axes"]) // 2
+
+        # Since we already generated the images, do not generate new images
+        case.create_graphics = False
+        orig_med = case.med_obj
+        output_base_med_name = case.case_name
+        import numpy as np
+        for index in range(N):
+            for j in range(2):
+                # Iterate for each rotation. Twice.
+                p1 = np.array(geo_obj.data["rot_axes"][index * 2])
+                p2 = np.array(geo_obj.data["rot_axes"][index * 2 + 1])
+                angle = (2 * j - 1) * geo_obj.data["rot_theta"]
+                print(f"Rotating for {angle} degrees")
+                # Change the name
+                output_med_name = f"{output_base_med_name}_rot{2*index+j}.med"
+                case.med_obj = orig_med.rotateMesh(p1, p2, angle)
+                # First we need to delete the old target mesh in the Embree
+                # object.
+
+                target_geom_id = -1
+                for pair in case.embree_shadow_geom_ids:
+                    if pair[1] == geo_obj.data["target_mesh"]:
+                        target_geom_id = pair[0]
+                        case.embree_shadow_geom_ids.remove(pair)
+                        break
+                if target_geom_id != -1:
+                    print("Removing target mesh from embree (self-shadowing)")
+                    print("In order to load the rotated mesh")
+                    print(f"Geom ID removed {target_geom_id}")
+                    case.flt_obj.embree_obj.deleteMesh(target_geom_id)
+                print("Now loading the rotated mesh into shadow")
+                points, cells = case.med_obj.getMeshData()
+                case.flt_obj.setTargetData(points, cells)
+                new_geom_id = case.flt_obj.embree_obj.commitMesh(
+                    case.flt_obj.target_vertices * case.flt_obj.parameters.target_dim_mul,
+                    case.flt_obj.target_triangles)
+                print(f"Geom_id of target mesh in self-shadowing is {new_geom_id}")
+                case.embree_shadow_geom_ids.append((new_geom_id, geo_obj.data["target_mesh"]))
+
+                # case.reset_flt_obj()
+                # case.load_target_mesh()
+                # case.load_shadow_meshes()
+                # case.set_flt_objs()
+
+                case.see_if_results_exists(output_directory=output_directory,
+                    med_file_name=output_med_name)
+                # Change the case name, so that the HLM data and everythin else
+                # get's computed only once, but change the result file path.
+                case.result_file_path = os.path.join(output_directory, output_med_name)
+                case.case_name = output_base_med_name
+                case.create_result_file_if_necessary()
+                print("Running case")
+                case.main()
+                print("Done")
     sys.exit(0)
