@@ -415,39 +415,6 @@ cdef class PyFLT:
         """
         self.c_flt.prepareThreadContainers(omp_thread)
 
-    def isHit(self):
-        """Returns the tracing status after following FL.
-
-        This function is used directly from Python, or serial mode.
-
-        Returns:
-            hit (bool): If True, it means that the FL is intersected or
-                        shadowed during tracing, else it isn't.
-        """
-        return self.c_flt.m_hits[0]
-
-    cdef bool c_isHit(self) nogil:
-        """Same as isHit, except it is a
-        Cython function, in order to use in Cython code (no python GIL calls).
-        """
-        return self.c_flt.m_hits[0]
-
-    cdef bool c_isHit_omp(self, int omp_thread) nogil:
-        """Cython function (no Python GIL) for calling the runFLT function from
-        an OpenMP parallel block.
-
-        Returns:
-            hit (bool): Returns the tracing result, performed by an OpenMP
-                        thread with Id omp_thread.
-
-        Arguments:
-            omp_thread (int): Id of the OpenMP thread which calls the runFLT
-                              function. The Id is used as an index for storing
-                              thread local data, which is also managed by
-                              the FLT C++ class.
-        """
-        return self.c_flt.m_hits[omp_thread]
-
     def getConLen(self):
         """Returns the connection length of a traced FL.
 

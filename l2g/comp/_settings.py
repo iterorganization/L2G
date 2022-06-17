@@ -130,7 +130,7 @@ class Parameters(BaseClassOptions):
 
         #: Parameter cutoff_conlen specifies the length at which we consider
         #: that a field line wetts target area. In meters.
-        self.cutoff_conlen = 4.3e3
+        self.cutoff_conlen = 4.3
 
 
         #: IDs of geometries that marks fieldlines as shadowed if they

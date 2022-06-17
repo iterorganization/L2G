@@ -299,6 +299,10 @@ class FieldLineTracer:
             self.target_triangles, self.parameters.num_of_threads,
             self.mesh_results, self.parameters.target_dim_mul)
 
+        # Additionally create the mask which shows the final plasma pattern
+        self.mesh_results.mask = self.applyShadowMask(
+            np.ones(self.mesh_results.conlen.shape))
+
         log.info(f"Finished. It took {perf_counter() - start} seconds.")
 
     def runFltOnPoints(self) -> None:
@@ -579,7 +583,7 @@ class FieldLineTracer:
             self.hlm_results.reset()
 
         # Obtain the arrays from the FLT results
-        drsep = self.mesh_results.drsep * 1e-3
+        drsep = self.mesh_results.drsep # In meters
         Bdot = np.abs(self.mesh_results.Bdot)
         n_cells = drsep.shape[0]
         bfield_mag = np.linalg.norm(self.mesh_results.BVec.reshape((n_cells, 3)), axis=1)
@@ -656,7 +660,7 @@ class FieldLineTracer:
         out = None
 
         out = np.where(
-            self.mesh_results.conlen > self.parameters.cutoff_conlen,
+            self.mesh_results.conlen >= self.parameters.cutoff_conlen,
             array, 0)
 
         # Now for every geom id in parameters.artificial_fl_catcher_geom_id

@@ -50,7 +50,6 @@ cdef extern from "flt.hpp" nogil:
         void runFLT(int ompThread) # For running in OpenMP
 
         # Result containers
-        vector[bool] m_hits
         vector[double] m_conlens
         vector[int] m_geom_hit_ids
 

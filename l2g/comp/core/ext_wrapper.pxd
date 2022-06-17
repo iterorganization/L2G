@@ -60,9 +60,6 @@ cdef class PyFLT:
 
     cdef  void c_prepareThreadContainers(self, int omp_thread=*) nogil
 
-    cdef  bool c_isHit(self) nogil
-    cdef  bool c_isHit_omp(self, int omp_thread) nogil
-
     cdef  double c_getConlen(self) nogil
     cdef  double c_getConlen_omp(self, int omp_thread) nogil
 

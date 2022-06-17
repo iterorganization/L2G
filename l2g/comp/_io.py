@@ -25,9 +25,9 @@ class MEDMeshIO():
 
     def __init__(self):
         #: MED UMESH file for getting data.
-        self.med_umesh_file = None
+        self.med_umesh_file: mc.MEDFileUMesh = None
         #: MED mesh object. Used to tie fields to mesh.
-        self.med_mesh = None
+        self.med_mesh: mc.MEDCouplingUMesh = None
 
         #: Source of the MED mesh. For instance, for results we write a new
         #: MED file, using the target input mesh as source.
@@ -63,6 +63,38 @@ class MEDMeshIO():
         self.med_umesh_file = mc.MEDFileUMesh.New(file)
         self.med_mesh = self.med_umesh_file.getMeshAtLevel(0)
         self.med_mesh_source_file = file
+
+    def rotateMesh(self, p1: np.ndarray, p2: np.ndarray, angle: float) -> 'MEDMeshIO':
+        """Rotates the the mesh data around the provided axes and angle.
+
+        It creates a new MEDMeshIO, since it creates a copy in any case and it
+        is sometimes useful if we retain the original data.
+        """
+
+        if self.med_mesh is None:
+            log.error("Could not read mesh data as no MED file is loaded")
+            return None
+        out = MEDMeshIO()
+
+        # First create a deep copy of the mesh.
+        med_umesh_file: mc.MEDFileUMesh = mc.MEDFileUMesh.New()
+        med_mesh: mc.MEDCouplingUMesh = self.med_mesh.deepCopy()
+
+        out.med_umesh_file = med_umesh_file
+        out.med_mesh = med_mesh
+
+        coords = med_mesh.getCoords().toNumPyArray()
+
+        # Now rotate
+        import l2g.utils.geom
+        new_coords = l2g.utils.geom.rotatePointsAroundAxis(coords, p1, p2,
+                                                           angle)
+
+        med_mesh.setCoords(mc.DataArrayDouble(new_coords))
+
+        med_umesh_file.setMeshAtLevel(0, med_mesh)
+        return out
+
 
     def getMeshData(self):
         """Return the vertices and triangles of the mesh file.
@@ -150,8 +182,8 @@ def load_flt_mesh_results_from_med(mesh_results: L2GResults, med_object: MEDMesh
     if not med_object.med_file_path:
         log.error("No MED file path to load data from")
         return
-    mesh_results.drsep = med_object.getArray("drsep")
-    mesh_results.conlen = med_object.getArray("conlen")
+    mesh_results.drsep = med_object.getArray("drsep") * 1e-3 # Convert to m
+    mesh_results.conlen = med_object.getArray("conlen") * 1e-3 # convert to m
     mesh_results.flux = med_object.getArray("flux")
 
     # Necessary for FL
@@ -173,6 +205,8 @@ def dump_flt_mesh_results_to_med(mesh_results: L2GResults, med_object: MEDMeshIO
         if array is None:
             continue
 
+        scale = 1
+
         if key == "angle":
             # Transform the angle
             array = np.rad2deg(array)
@@ -180,7 +214,7 @@ def dump_flt_mesh_results_to_med(mesh_results: L2GResults, med_object: MEDMeshIO
 
         if key in ["drsep", "drsep2", "conlen"]:
             # Scale to mm from m
-            array *= 1000
+            array = array * 1000
 
         infoOnComponent = None
         if key == 'BVec':

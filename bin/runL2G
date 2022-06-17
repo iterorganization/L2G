@@ -42,12 +42,16 @@ hlm = None
 if len(list_of_hlms):
     hlm = list_of_hlms[0]
 
+# Check if cutoff is in data
+if "cutoff" in target.data:
+    target.data["cutoff"] = target.data["cutoff"] * 1e-3 # Convert to meters
+    target.data["cutoff_conlen"] = target.data["cutoff"] * 1e-3 # Convert to meters
 
 case = l2g.workflow.create_case(target, equilibrium, hlm)
 # Check for any additional parameters to set.
-case.prepare_flt_obj()
+case.prepare()
 l2g.log.info("Reading target geometry.")
-case.prepare_result_med()
+# case.prepare_result_med()
 
 # Custom name
 med_file_name = ""

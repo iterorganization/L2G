@@ -373,7 +373,6 @@ cpdef runFLT(PyFLT flt_obj, float [:] tg_vertices,
                                threadId)
 
             flt_obj.c_runFLT_omp(threadId)
-            mask[i] = flt_obj.c_isHit_omp(threadId)
             conlen[i] = flt_obj.c_getConlen_omp(threadId)
             geom_hit_ids[i] = flt_obj.c_getGeomID_omp(threadId)
 

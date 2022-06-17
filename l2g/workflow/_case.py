@@ -1,8 +1,3 @@
-import l2g
-import l2g.comp
-import l2g.equil
-import l2g.utils
-
 import sys
 import os
 
@@ -59,7 +54,8 @@ class GEOMETRY(DATA_BLOCK):
     """
     required_keys = ["name", "target_mesh", "shadow_meshes"]
     optional_keys = ["cutoff", "parameters", "fl_ids", "exclude_meshes",
-                     "include_target_in_shadow", "afl_catcher_meshes"]
+                     "include_target_in_shadow", "afl_catcher_meshes",
+                     "rot_axes", "rot_theta"]
 
     def __init__(self):
         super(GEOMETRY, self).__init__()
@@ -153,6 +149,8 @@ class CASE(object):
     """Collection of the case data:
     """
     def __init__(self):
+        import l2g.equil
+        import l2g.comp
 
         # Input data
         self.geo_obj: GEOMETRY = None
@@ -161,9 +159,10 @@ class CASE(object):
 
 
         # Interface with L2G
-        self.flt_obj: l2g.comp.FieldLineTracer = None
+        self.flt_obj: l2g.comp.FieldLineTracer = l2g.comp.FieldLineTracer()
+        self.embree_shadow_geom_ids: list = []
         # For calcualting OMP objects.
-        self.omp_obj: l2g.comp.FieldLineTracer = None
+        self.omp_obj: l2g.comp.FieldLineTracer = l2g.comp.FieldLineTracer()
 
         # For storing results
         self.med_obj: l2g.comp.MEDMeshIO = None
@@ -207,14 +206,86 @@ class CASE(object):
         self.equ_obj = equ_obj
         self.hlm_obj = hlm_obj # Can be None
 
-    def prepare_flt_obj(self):
-        self.flt_obj = l2g.comp.FieldLineTracer()
-        l2g.utils.load_flt_settings(self.geo_obj.data, self.flt_obj)
+    def reset_flt_obj(self):
+        import l2g.comp
+        self.flt_obj: l2g.comp.FieldLineTracer = l2g.comp.FieldLineTracer()
+        self.omp_obj: l2g.comp.FieldLineTracer = l2g.comp.FieldLineTracer()
 
+    def load_target_mesh(self):
+        """From the MEDMeshIO load the target data.
+        """
+        vertices, cells = self.med_obj.getMeshData()
+        self.flt_obj.setTargetData(vertices, cells)
+
+    def load_shadow_meshes(self):
+        """From the
+        """
+        import l2g.utils.meshio
+        import glob
+        d = self.geo_obj.data
+        flt = self.flt_obj
+
+        shadowMeshFiles = []
+        for fileName in d["shadow_meshes"]:
+            if '*' in fileName:
+                shadowMeshFiles += glob.glob(fileName)
+            else:
+                shadowMeshFiles.append(fileName)
+
+        if "exclude_meshes" in d:
+            mesh_to_remove = []
+            # Since files are actual paths it is the easiest to just loop the list
+            # and accumulate which meshes to remove
+            for filePath in shadowMeshFiles:
+                fileName = os.path.basename(filePath)
+                if fileName in d["exclude_meshes"]:
+                    mesh_to_remove.append(filePath)
+            #
+            for m in set(mesh_to_remove):
+                shadowMeshFiles.remove(m)
+        geom_ids = []
+
+        if "include_target_in_shadow" in d:
+            if d["include_target_in_shadow"]:
+                if flt.target_vertices is not None:
+                    log.info("Including target to shadowing Embree.")
+                    geom_id = flt.embree_obj.commitMesh(
+                        flt.target_vertices * flt.parameters.target_dim_mul,
+                        flt.target_triangles)
+                    geom_ids.append((geom_id, d["target_mesh"]))
+                else:
+                    log.info("There is no target data to include to Embree.")
+
+        log.info(f"Loading {len(shadowMeshFiles)} mesh/es to Embree.")
+        for filePath in shadowMeshFiles:
+            fileName = os.path.basename(filePath)
+            v, t = l2g.utils.meshio.readMesh(filePath)
+            geom_id = flt.embree_obj.commitMesh(v * 1e-3, t)
+            geom_ids.append((geom_id, filePath))
+
+        if "afl_catcher_meshes" in d:
+            afl_catcher_meshes = d["afl_catcher_meshes"]
+            log.info(f"Loading {len(afl_catcher_meshes)} meshes, for catching " +
+                     "and marking FLs as shadowed")
+            for filePath in afl_catcher_meshes:
+                v, t = l2g.utils.meshio.readMesh(filePath)
+                geom_id = flt.embree_obj.commitMesh(v * 1e-3, t)
+                flt.parameters.artificial_fl_catcher_geom_id.add(geom_id)
+                fileName = os.path.basename(filePath)
+                log.info(f"Loaded {fileName} as {geom_id}")
+
+        log.info("Done.")
+        self.embree_shadow_geom_ids = geom_ids
+
+    def set_flt_objs(self):
+        import l2g.workflow
+        l2g.workflow.set_parameters_and_options(self.geo_obj.data,
+                                                self.flt_obj)
+        # Now set the mesh data.
         self.fl_ids = self.geo_obj.data["fl_ids"]
         # Propagate the HLM parameters to the fl object
 
-        l2g.utils.check_if_in_slurm_job(self.flt_obj)
+        l2g.workflow.check_if_in_slurm_job(self.flt_obj)
         log.info("Parameters set to FieldLineTracer:")
         log.info(self.flt_obj.parameters.dump())
         log.info(self.flt_obj.options.dump())
@@ -228,24 +299,38 @@ class CASE(object):
 
         if self.hlm_obj.data["hlm_type"] == "elm":
             self.omp_obj = l2g.comp.FieldLineTracer()
-            l2g.utils.load_elm_settings(self.hlm_obj.data, self.omp_obj)
+            l2g.workflow.load_elm_settings(self.hlm_obj.data, self.omp_obj)
 
             # Also set the same number of parallel threads.
             self.omp_obj.parameters.num_of_threads = \
                 self.flt_obj.parameters.num_of_threads
 
             # Additionally check if run in SLURM job
-            l2g.utils.check_if_in_slurm_job(self.omp_obj)
+            l2g.workflow.check_if_in_slurm_job(self.omp_obj)
             log.info("Parameters set for OMP FieldLineTracer")
             log.info(self.flt_obj.parameters.dump())
             log.info(self.flt_obj.options.dump())
 
-    def prepare_result_med(self):
+    def create_target_medio(self):
+        import l2g.comp
         self.med_obj = l2g.comp.MEDMeshIO()
         log.info(f"Reading target mesh data from: {self.geo_obj.data['target_mesh']}")
         self.med_obj.readMeshFromMedFile(self.geo_obj.data["target_mesh"])
 
+    def prepare(self):
+        # It just sets the input file
+        self.create_target_medio()
+        # From the target medio get the mesh data
+        self.load_target_mesh()
+        # Now load the shadow mesh data.
+        self.load_shadow_meshes()
+        # Set the options and parameters
+        self.set_flt_objs()
+        # Now the eqdsk
+        self.prepare_equil_iterator_obj()
+
     def prepare_equil_iterator_obj(self):
+        import l2g.equil
         self.ite_obj = l2g.equil.EquilibriumIterator()
 
         correct_helicity = True
@@ -263,7 +348,6 @@ class CASE(object):
             self.custom_wall_limiter = self.equ_obj.data["custom_wall_limiter"]
             self.wall_limiter_r = self.equ_obj.data["wall_limiter_r"]
             self.wall_limiter_z = self.equ_obj.data["wall_limiter_z"]
-
 
     def see_if_results_exists(self, output_directory: str = "",
             med_file_name: str = ""):
@@ -431,7 +515,7 @@ class CASE(object):
                     self.flt_obj.mesh_results, self.med_obj)
 
             else:
-                # Now we already have the FLT results, so we need to laod themn
+                # Now we already have the FLT results, so we need to load them
                 l2g.comp.load_flt_mesh_results_from_med(
                     self.flt_obj.mesh_results, self.med_obj)
 
@@ -662,7 +746,7 @@ class CASE(object):
             Rb, _, Btotal, Bpm = self.omp_obj.eq.getOWL_midplane()
 
             graphics_output_name = os.path.join(self.output_directory,
-                f"{self.case_name.name}{associated_time}")
+                f"{self.case_name}{associated_time}")
             qelm_data = l2g.hlm.steady_state.get_elm_data(conlen_data,
                 generate_graphics=True, output_name=graphics_output_name,
                 Rb=Rb, Btot=Btotal, Bpm=Bpm,
