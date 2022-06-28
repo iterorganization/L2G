@@ -176,8 +176,7 @@ setup(
     data_files = [('', getDataFiles())],
     python_requires=">=3.6",
     scripts = ['bin/runL2G', 'bin/submitL2G', 'bin/flat', 'bin/submitFLAT',
-               'bin/L2G.sbatch', 'bin/FLAT.sbatch', 'bin/get_elm_data',
-               'bin/get_owl_conlen_graph', 'bin/apply_elm_hlm',
-               'bin/apply_exp_hlm', 'bin/imas2eqdsk', 'bin/mkEqdskMovie',
-               'bin/mkImasMovie', 'bin/med2mat', 'bin/plot_IMAS_slice']
+               'bin/L2G.sbatch', 'bin/FLAT.sbatch', 'bin/imas2eqdsk',
+               'bin/mkEqdskMovie', 'bin/mkImasMovie', 'bin/med2mat',
+               'bin/plotImasSlice']
 )
