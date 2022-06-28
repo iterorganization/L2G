@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Converts fields of a MED file to MATLAB format.
 
 import medcoupling as mc
@@ -11,9 +12,6 @@ if len(sys.argv) > 1:
 if med_file == '':
     print("No MED file specified!")
     sys.exit(1)
-
-FLT_FIELDS = ["drsep", "angle", "conlen", "BVec", "BVecCyln", "BDot",
-    "normals", "flux", "baryCent", "triangles", "vertices", "q_perp"]
 
 # Get all fields
 fieldNames = mc.GetAllFieldNames(med_file)

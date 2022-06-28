@@ -37,7 +37,7 @@ done
 SCRIPTPATH="$( cd -- "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 
 #JOB_NAME=$(echo ${CONF_FILE} | python3 -c "import sys,l2g.workflow; print(l2g.workflow.json_loads(open(sys.stdin.read().strip(), 'r').read())['name'])")
-JOB_NAME="${flatopts[1]}" # The second command relates to the geometry
+JOB_NAME="${flatopts[1]}-${flatopts[2]}" # The second command relates to the geometry
 JOB_NAME=${JOB_NAME:-"L2G-job"}
 echo "Running job ${JOB_NAME}"
 LOG_DIR=$(realpath ${CONF_FILE} | xargs dirname)/log

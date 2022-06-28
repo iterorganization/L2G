@@ -651,8 +651,19 @@ class FieldLineTracer:
 
         Several criteria are used for determining if a certain area is wetted:
 
-         * Connection length of a field line: if conlen > cutoff = True else False
-         * Geometries which mark fieldlines as shadowed.
+         * Connection length of a field line:
+           if conlen > cutoff = True else False
+         * Geometries which mark fieldlines as shadowed. This is mainly used in
+           regions where the FLs escape the chamber and are not captured by
+           anything.
+
+        Arguments:
+            array (np.ndarray): A 1D array with N_cells elements on which the
+                mask is applied
+
+        Returns:
+            masked_array (np.ndarray): A copy of the input array with the mask.
+
         """
 
         # First apply the connection length criteria

@@ -98,6 +98,8 @@ class L2GResults:
 
 
     def generate_vtk_object(self):
+        """From the data it generates a VTK object.
+        """
         if self.triangles is None or self.vertices is None:
             log.error("No data to dump")
             return
@@ -139,7 +141,7 @@ class L2GResults:
                 array = np.rad2deg(array)
                 array = np.where(array > 90.0, array - 90.0, 90.0 - array)
 
-            if key in ["drsep", "conlen"]:
+            if key in ["drsep", "drsep2", "conlen"]:
                 # Scale to mm from m
                 array = np.array(array, copy=True) * 1000
 

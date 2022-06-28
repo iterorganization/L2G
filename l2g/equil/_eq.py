@@ -722,6 +722,7 @@ class EQ:
         # plt.plot(solver.y[0], solver.y[1])
         # plt.axis('equal')
         # plt.show()
+        self._lcfs_points_1 = solver.y.T
         for i in range(len(solver.y[0])):
             # print(solver.y[0, i], end='asd')
             t = checkIfPointInPoly(RLIM, ZLIM, solver.y[0, i], solver.y[1, i])
@@ -731,7 +732,6 @@ class EQ:
                 return False, None, None
 
         # So for so good, let's save the lcfs points
-        self._lcfs_points_1 = solver.y.T
 
         # Now the other direction. Sign changed at valx and valy
         sign = -1 # Now follow in the other direction

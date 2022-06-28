@@ -7,7 +7,7 @@ pwd; hostname; date
 
 # Check if L2G is in the environment
 if [ ! -x "$(command -v flat)" ]; then
-    echo "runL2G not found!"
+    echo "flat not found!"
     echo "L2G is not in the environment!"
     echo "Load the environment by either module load or sourcing the environment script!"
     exit 1
