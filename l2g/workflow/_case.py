@@ -55,7 +55,7 @@ class GEOMETRY(DATA_BLOCK):
     required_keys = ["name", "target_mesh", "shadow_meshes"]
     optional_keys = ["cutoff", "parameters", "fl_ids", "exclude_meshes",
                      "include_target_in_shadow", "afl_catcher_meshes",
-                     "rot_axes", "rot_theta"]
+                     "rot_axes", "rot_theta", "align_lcfs"]
 
     def __init__(self):
         super(GEOMETRY, self).__init__()
@@ -65,7 +65,9 @@ class GEOMETRY(DATA_BLOCK):
 class EQUILIBRIUM(DATA_BLOCK):
     required_keys: list = ["name", "equilibrium_type"]
     optional_keys: list = ["eqdsk_files", "imas", "custom_wall_limiter",
-                           "wall_limiter_r", "wall_limiter_z"]
+                           "wall_limiter_r", "wall_limiter_z",
+                           "wall_silh_r_shift", "wall_silh_z_shift",
+                           "plasma_r_displ", "plasma_z_displ"]
     def __init__(self):
         super(EQUILIBRIUM, self).__init__()
         self.data: dict = {"custom_wall_limiter": False}
@@ -90,9 +92,7 @@ class EQUILIBRIUM(DATA_BLOCK):
 
 class HLM(DATA_BLOCK):
     required_keys: list = ["name", "hlm_type"]
-    optional_keys: list = ["ip_transition", "r_break", "parameters", "p_sol",
-                           "lambda_q", "lambda_q_near", "lambda_q_main",
-                           "ratio"]
+    optional_keys: list = ["ip_transition", "r_break", "parameters", "ratio"]
     elm_required: list = ["shadow_meshes"]
     single_required: list = ["p_sol", "lambda_q"]
     double_required: list = ["p_sol", "lambda_q_near", "lambda_q_main"]
@@ -180,6 +180,14 @@ class CASE(object):
         self.custom_wall_limiter: bool = False
         self.wall_limiter_r: list = False
         self.wall_limiter_z: list = False
+
+        # Plasma displacement
+        self.plasma_r_displ: float = 0.0
+        self.plasma_z_displ: float = 0.0
+
+        # Wall silhouette displacement
+        self.wall_silh_r_shift: float = 0.0
+        self.wall_silh_z_shift: float = 0.0
 
         # Align LCFS
         self.align_lcfs: bool = False
@@ -289,6 +297,13 @@ class CASE(object):
         log.info("Parameters set to FieldLineTracer:")
         log.info(self.flt_obj.parameters.dump())
         log.info(self.flt_obj.options.dump())
+
+        # Check align_lcfs
+        if "align_lcfs" in self.geo_obj.data:
+            flag = self.geo_obj.data["align_lcfs"]
+            log.info(f"Align lcfs in case of limiter: {flag}")
+            self.align_lcfs = flag
+
         if self.hlm_obj is None:
             self.apply_heat_load = False
             self.plot_heat_loads = False
@@ -346,8 +361,23 @@ class CASE(object):
 
         if self.equ_obj.data["custom_wall_limiter"]:
             self.custom_wall_limiter = self.equ_obj.data["custom_wall_limiter"]
+            log.info(f"Custom wall limiter: {self.custom_wall_limiter}")
             self.wall_limiter_r = self.equ_obj.data["wall_limiter_r"]
             self.wall_limiter_z = self.equ_obj.data["wall_limiter_z"]
+            log.info(f"Loaded {len(self.wall_limiter_r)} R points")
+            log.info(f"Loaded {len(self.wall_limiter_z)} Z points")
+
+        if "plasma_r_displ" in self.equ_obj.data:
+            self.plasma_r_displ = self.equ_obj.data["plasma_r_displ"]
+        if "plasma_z_displ" in self.equ_obj.data:
+            self.plasma_z_displ = self.equ_obj.data["plasma_z_displ"]
+
+        if "wall_silh_r_shift" in self.equ_obj.data:
+            self.wall_silh_r_shift = self.equ_obj.data["wall_silh_r_shift"]
+        if "wall_silh_z_shift" in self.equ_obj.data:
+            self.wall_silh_z_shift = self.equ_obj.data["wall_silh_z_shift"]
+        self.ite_obj.applyWallSilhouetteShift(self.wall_silh_r_shift,
+                                              self.wall_silh_z_shift)
 
     def see_if_results_exists(self, output_directory: str = "",
             med_file_name: str = ""):

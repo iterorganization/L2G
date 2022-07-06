@@ -25,6 +25,11 @@ def plot_psi_to_mpl_ax(ax, eq: l2g.equil.EQ):
     psi_axis = eq._eq.psi_axis
     psi_boundary = eq.psiLCFS
     psi_2nd_boundary = eq.psiLCFS2 # In case of limiter this is None
+    equ_type = eq.type_
+    if equ_type == "div" and psi_2nd_boundary is None:
+        # Diverted with single X point
+        equ_type = "lim"
+
     psi_outside = eq._psi_spline.ev(grid_r[-1], eq._eq.mag_axis_z)
 
     def truncate_colormap(cmap, minval=0.0, maxval=1.0, n=100):
@@ -39,7 +44,7 @@ def plot_psi_to_mpl_ax(ax, eq: l2g.equil.EQ):
 
     # Create intervals
     cmap_vacc = truncate_colormap(base_cmap_vacc, minval=0.8, maxval=1.0, n=10)
-    if eq.type_ == "div":
+    if equ_type == "div":
         # VACUUM
         ax.contour(grid_r, grid_z, psi,
                    levels=np.linspace(psi_2nd_boundary, psi_outside, 10),
@@ -91,7 +96,7 @@ def plot_psi_to_mpl_ax(ax, eq: l2g.equil.EQ):
         return lines
 
     lcfs1 = eq.getContourPaths(flux=eq.psiLCFS)
-    if eq.type_ == 'div':
+    if equ_type == 'div':
         plotPolyLine(ax, lcfs1, label=r"$1^{st}$", color='g', linewidth=1.5)
         lcfs2 = eq.getContourPaths(flux=eq.psiLCFS2)
         plotPolyLine(ax, lcfs2, label=r"$2^{nd}$", color='b', linewidth=1.5)

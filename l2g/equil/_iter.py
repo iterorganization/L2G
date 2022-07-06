@@ -1,4 +1,5 @@
-from l2g.equil import getEquilibriumFromIMAS, getEquilibriumFromEQDSKG, EQDSKIO
+from l2g.equil import (getEquilibriumFromIMAS, getEquilibriumFromEQDSKG,
+                       EQDSKIO, Equilibrium)
 import imas
 import glob
 import os
@@ -8,6 +9,8 @@ import logging
 log = logging.getLogger(__name__)
 
 import math
+
+from typing import List
 
 def truncate(number: float, digits: int) -> float:
     """Truncate number decimal places to the number of digits.
@@ -23,7 +26,7 @@ class EquilibriumIterator(object):
         self.type = None
 
         #: List for storing :pyclass:`l2g.equil.Equilibrium` objects.
-        self._equilibriums = []
+        self._equilibriums: List[Equilibrium] = []
 
         #: List of associated times.
         self._times = []
@@ -169,3 +172,9 @@ class EquilibriumIterator(object):
 
     def __getitem__(self, i):
         return i, self._times[i], self._equilibriums[i]
+
+    def applyWallSilhouetteShift(self, r_shift: float, z_shift: float):
+        for equilibrium in self._equilibriums:
+            # Modify the wall silhouette points
+            equilibrium.wall_contour_r = [_ + r_shift for _ in equilibrium.wall_contour_r]
+            equilibrium.wall_contour_z = [_ + z_shift for _ in equilibrium.wall_contour_z]

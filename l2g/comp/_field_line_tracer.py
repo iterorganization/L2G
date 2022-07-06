@@ -476,10 +476,13 @@ class FieldLineTracer:
             else: # owl
                 Rb, _, _, Bpm = self.eq.getOWL_midplane(lcfs=self.eq.psiLCFS2)
 
-            drsep2 = (self.mesh_results.flux - self.eq.psiLCFS2) / (Rb * Bpm)
-            drsep2 *= self.equilibrium.psi_sign
+            if self.eq.psiLCFS2:
+                drsep2 = (self.mesh_results.flux - self.eq.psiLCFS2) / (Rb * Bpm)
+                drsep2 *= self.equilibrium.psi_sign
+                self.mesh_results.drsep2 = drsep2
+            else:
+                self.mesh_results.drsep2 = np.zeros(drsep.shape)
 
-            self.mesh_results.drsep2 = drsep2
 
     def createMidplanePoints(self, which:str='owl', length:float=0.3,
             radialPoints:int=2000, toroidalSegments:int=360,

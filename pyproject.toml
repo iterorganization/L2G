@@ -1,5 +1,6 @@
 [build-system]
 requires = [
+    "setuptools",
     "Cython>=0.29.21",
     "matplotlib>=3.3.0",
     "numpy>=1.19.5",
@@ -8,3 +9,4 @@ requires = [
     "wheel",
     "medcoupling"
 ]
+build-backend = "setuptools.build_meta"
