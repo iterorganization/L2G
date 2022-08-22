@@ -42,7 +42,16 @@ JOB_NAME=${JOB_NAME:-"L2G-job"}
 echo "Running job ${JOB_NAME}"
 LOG_DIR=$(realpath ${CONF_FILE} | xargs dirname)/log
 mkdir -p ${LOG_DIR}
-LOG_NAME=${LOG_DIR}/${JOB_NAME}_slurm.log
+
+
+LOG_NAME=${LOG_DIR}/${JOB_NAME}
+
+# Add time stamp if date command exists
+if hash date 2>/dev/null; then
+    LOG_NAME="${LOG_NAME}_$(date +%d-%m-%y_%T)"
+fi
+
+LOG_NAME="${LOG_NAME}_slurm.log"
 # Defaults to gen10_ib
 PARTITION_NAME=${PARTITION_NAME:-"gen10_ib"}
 
