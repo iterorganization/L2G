@@ -58,9 +58,8 @@ cdef extern from "flt.hpp" nogil:
         void getBCyln(double r, double z, vector[double] &out)
         void getBCart(double r, double z, double phi, vector[double] &out)
         double getPoloidalFlux(double r, double z)
-        double getFPol(double r, double z)
-        double getFPol(double flux)
         double getVacuumFPOL()
+        void debug_getValues(double r, double z, double &val, double &valdx, double &valdy, int ompThread)
 
         void setEmbreeObj(EmbreeAccell* accellObj)
 

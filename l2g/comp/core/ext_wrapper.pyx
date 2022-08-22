@@ -487,6 +487,26 @@ cdef class PyFLT:
         """
         self.c_flt.getBCart(r, z, phi, out)
 
+    def PY_getBCart(self, double r, double z, double phi):
+        """Gets the Magnetic field vector in Cartesian coordinate system. Used
+        when processing data on a geometry (getting quantities).
+
+        Result is written in the out variable. (Bx, By, Bz)
+        """
+        cdef vector[double] out
+        out.resize(3)
+        self.c_flt.getBCart(r, z, phi, out)
+        return <object> out
+
+    def PY_getValues(self, double r, double z):
+        """Gets the magnetic poloidal flux values and it's derivative in the
+        R, Z point.
+        """
+        cdef double val, valdx, valdy
+        self.c_flt.debug_getValues(r, z, val, valdx, valdy, 0)
+        return val, valdx, valdy
+
+
     cdef void getBCyln(self, double r, double z, vector[double] &out) nogil:
         """Gets the Magnetic field vector (poloidal and toroidal component)
         in Cylindrical coordinate system. Used when processing data on a
@@ -514,21 +534,6 @@ cdef class PyFLT:
         """
         cdef double value
         value = self.c_flt.getPoloidalFlux(r, z)
-        return value
-
-    cdef double getFPol(self, double flux) nogil:
-        """Gets the poloidal current function (FPol = Bt R) value. Used when
-        processing data on a geometry (getting quantities).
-
-        Returns:
-            fpol (double): FPol value. In m T.
-
-        Arguments:
-            flux (double): Magnetic poloidal flux value at which we wish to
-                           obtain FPol.
-        """
-        cdef double value
-        value = self.c_flt.getFPol(flux)
         return value
 
     def applyRT(self, PyEmbreeAccell obj):

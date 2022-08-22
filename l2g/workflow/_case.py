@@ -323,8 +323,8 @@ class CASE(object):
             # Additionally check if run in SLURM job
             l2g.workflow.check_if_in_slurm_job(self.omp_obj)
             log.info("Parameters set for OMP FieldLineTracer")
-            log.info(self.flt_obj.parameters.dump())
-            log.info(self.flt_obj.options.dump())
+            log.info(self.omp_obj.parameters.dump())
+            log.info(self.omp_obj.options.dump())
 
     def create_target_medio(self):
         import l2g.comp

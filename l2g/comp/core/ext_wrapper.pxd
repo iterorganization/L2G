@@ -70,8 +70,3 @@ cdef class PyFLT:
     cdef  void getBCart(self, double r, double z, double phi, vector[double] &out) nogil
     cdef  void getBCyln(self, double r, double z, vector[double] &out) nogil
     cdef  double getPoloidalFlux(self, double r, double z) nogil
-    cdef  double getFPol(self, double flux) nogil
-
-
-
-

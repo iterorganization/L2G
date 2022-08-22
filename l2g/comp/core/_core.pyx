@@ -14,6 +14,7 @@ cimport numpy as np
 
 # Std stuff
 from libcpp cimport bool
+from libc.stdio cimport printf
 from libcpp.vector cimport vector
 from libc.math cimport sqrt, atan2, acos
 
@@ -146,7 +147,8 @@ cpdef processDataOnPoints(PyFLT flt_obj, float [:] tg_vertices,
     vacuumFPolSign = valSign(flt_obj.getVacuumFPOL())
     vecBuff.resize(3)
     vecBuff2.resize(2)
-
+    # For naive implementation this is required!
+    flt_obj.c_prepareThreadContainers()
     for i in range(N_vertices):
         iS = 3 * i
 
@@ -256,11 +258,14 @@ cpdef processData(PyFLT flt_obj, float [:] tg_vertices,
     vecBuff2.resize(3)
     vecBuff3.resize(2)
     vacuumFPolSign = valSign(flt_obj.getVacuumFPOL())
+    # For naive implementation this is required!
+    flt_obj.c_prepareThreadContainers()
     for i in range(N_cells):
         iS = 3 * i
         p1 = 3 * tg_cells[i * 3]
         p2 = 3 * tg_cells[i * 3 + 1]
         p3 = 3 * tg_cells[i * 3 + 2]
+
 
         trianglePoints[0] = tg_vertices[p1]
         trianglePoints[1] = tg_vertices[p1 + 1]
