@@ -178,5 +178,5 @@ setup(
     scripts = ['bin/runL2G', 'bin/submitL2G', 'bin/flat', 'bin/submitFLAT',
                'bin/L2G.sbatch', 'bin/FLAT.sbatch', 'bin/imas2eqdsk',
                'bin/mkEqdskMovie', 'bin/mkImasMovie', 'bin/med2mat',
-               'bin/plotImasSlice']
+               'bin/plotMFlux']
 )
