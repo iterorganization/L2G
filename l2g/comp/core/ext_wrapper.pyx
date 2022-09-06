@@ -502,9 +502,9 @@ cdef class PyFLT:
         """Gets the magnetic poloidal flux values and it's derivative in the
         R, Z point.
         """
-        cdef double val, valdx, valdy
-        self.c_flt.debug_getValues(r, z, val, valdx, valdy, 0)
-        return val, valdx, valdy
+        cdef double val, valdx, valdy, valdxdy
+        self.c_flt.debug_getValues(r, z, val, valdx, valdy, valdxdy, 0)
+        return val, valdx, valdy, valdxdy
 
 
     cdef void getBCyln(self, double r, double z, vector[double] &out) nogil:
