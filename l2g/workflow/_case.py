@@ -609,9 +609,14 @@ class CASE(object):
                     f"{self.case_name}_{associated_time}")
 
                 if self.plot_psi_maps:
-                    l2g.plot.plot_psi(eq=self.flt_obj.eq,
-                        output_path=base_name, save_files=True,
-                        plot_midplane=True)
+                    figure = l2g.plot.plot_psi(eq=self.flt_obj.eq,
+                                               output_path=base_name,
+                                               save_files=True,
+                                               plot_midplane=True)
+                    # To avoid the "more than 20 figures open" matplotlib
+                    # warning.
+                    plt.close(figure)
+                    del figure
 
                 if self.plot_heat_loads:
                     # See if hlm is ELM.
