@@ -1,27 +1,41 @@
+if __name__ != "__main__":
+    import sys
+    sys.exit(0)
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
 from mpl_toolkits.mplot3d import Axes3D
 from scipy.spatial import Delaunay
 
+#Construct the 'poloidal flux map'
 N = 100
 x = np.linspace(0, 4, N)
 y = np.linspace(0, 4, N)
 xx, yy = np.meshgrid(x, y)
 
+# Simple square function positioned in point (2, 2)
+
 z = 5*(xx - 2)**2 + 3.5*(yy - 2)**2
 
-# z = 20 * np.exp(-(xx - 2)**2) * np.exp(-(yy - 2)**2)
-
-
+# Set the strength of the FPOL value. (F=R Bt)
 FPOL_vaccuum = 5.3
-fpolArray = np.array([FPOL_vaccuum for i in range(N)], dtype=np.float64)
+# Usually we only need one value, since the central solenoid magnetic field
+# corresponds with 1 / r.
 
+# Dummy value filled just for completeness. Otherwise it contains the
+# information of the poloidal current function inside the plasma core.
+
+fpolArray = np.array([FPOL_vaccuum for _ in range(N)], dtype=np.float64)
+
+# Plot how the poloidal flux map looks
 plt.contour(x, y, z, 30)
+plt.xlabel("X[m]")
+plt.ylabel("Z[m]")
+plt.title("Synthetic poloidal flux map")
 plt.show()
 
 def createTarget():
-
     """Creates a target, spanning 20 degrees toroidally (-10, to 10). Angle
     resolution is 0.1 degree.
 
@@ -108,7 +122,6 @@ def createShadow():
 tg_points, tg_tri = createTarget()
 sh_points, sh_tri = createShadow()
 
-
 # f = plt.figure()
 # ax = f.add_subplot(111, projection="3d")
 # ax.scatter(tg_points[:, 0], tg_points[:, 1], tg_points[:, 2]) #tg_tri.simplices.reshape(len(tg_tri.simplices) * 3))
@@ -125,81 +138,84 @@ sh_points, sh_tri = createShadow()
 # plt.show()
 
 from l2g.comp.core import PyEmbreeAccell
-from l2g.comp import FieldLineTracer
-from l2g.equil import EQDSKIO
+import l2g.comp
+import l2g.equil
 import l2g
 l2g.enableLogging()
 
-# Construct fake EQDSK
-eqdsk = EQDSKIO()
-eqdsk.setNH(100)
-eqdsk.setNW(100)
+# Construct fake Equilibrium
 
-eqdsk.setRLEFT(0)
-eqdsk.setRDIM(4)
+equilibrium = l2g.equil.Equilibrium()
 
-eqdsk.setZMID(2)
-eqdsk.setZDIM(4)
+# Grid and poloidal data
+equilibrium.grid_dim_r = 100
+equilibrium.grid_dim_z = 100
 
-eqdsk.setPSIRZ(z)
-eqdsk.setFPOL(fpolArray)
+equilibrium.grid_r = np.linspace(0, 4, 100)
+equilibrium.grid_z = np.linspace(0, 4, 100)
+equilibrium.psi = z
 
-# Necessary values
+# Toroidal component
+equilibrium.fpol = fpolArray
+equilibrium.fpol_flux = fpolArray
+equilibrium.fpol_vacuum = FPOL_vaccuum
+
+# Custom wall silhouette.
+# Spanning in radial direction from 1 - 5 units and heigh of -2 to 8
+equilibrium.wall_contour_r = [1.0, 1.0, 5.0, 5.0]
+equilibrium.wall_contour_z = [-2, 8, 8, -2]
+
 # Boundary flux value
-eqdsk.setSIBRY(1.0)
+equilibrium.psi_boundary = 1.0
 # Flux at magnetic axis
-eqdsk.setSIMAG(0.0)
+equilibrium.psi_axis = 0.0
 # Position of magnetic axis
-eqdsk.setRMAXIS(2)
-eqdsk.setZMAXIS(2)
+equilibrium.mag_axis_r = 2
+equilibrium.mag_axis_z = 2
 
-case = FieldLineTracer()
+case = l2g.comp.FieldLineTracer()
 case.name = "synthetic"
 
 # set target data
 case.setTargetData(tg_points.flatten(), tg_tri.flatten())
 
 # Set equilibrium data
-case.eqdskio = eqdsk
-case.eq.setEqdsk(case.eqdskio)
+case.setEquilibrium(equilibrium)
 
 # Construct shadow
 embreeObj = PyEmbreeAccell()
+# Add the shadow and target meshes to Embree.
 embreeObj.commitMesh(sh_points.flatten(), sh_tri.flatten())
 embreeObj.commitMesh(tg_points.flatten(), tg_tri.flatten())
 
+# Attach the Embree object to the case.
 case.setEmbreeObj(embreeObj)
 
 case.parameters.time_step = 0.01 # toroidal angle resolution
 case.parameters.time_end = 2.5 # in radians, toroidally
 # Shadow dimension multiplier to be used when processing data
-case.parameters.target_dim_mul = 1 # default
 case.parameters.num_of_threads = 4 # Number of OMP threads default
 # On which side do we take the LCFS parameters. Inner midplane or outer
 case.parameters.side = "iwl"
-case.parameters.P_sol = 7.5e6
-case.parameters.F_split = 0.5 # default
-case.parameters.q_parallel = None # Deactivated as we have P_sol
-case.parameters.lambda_q_main = 0.012 # Main lambda, also default
+case.hlm_params.hlm_type = "single_exp"
+case.hlm_params.p_sol = 7.5e6
+case.hlm_params.lambda_q = 0.012 # Main lambda, also default
 case.parameters.self_intersection_avoidance_length = 0.0005
 case.parameters.time_end = 30
 
-
-# Custom wall silhouette.
-# Spanning in radial direction from 1 - 5 units and heigh of -2 to 8
-
-case.eq.setCustomLimiterSilhouette([1.0, 1.0, 5.0, 5.0], [-2, 8, 8, -2])
+# Target is already in meters!
+case.parameters.target_dim_mul = 1
+case.parameters.shadow_dim_mul = 1
 
 # Finally, to commit changes
 case.applyParameters() # Propagates parameters
 case.loadEq() # Loads the equilibrium data to the FLT kernel
 
-
 # Run FLT
 case.runFltOnMesh()
 
-# Save results
-case.saveMeshToVTK(f"{case.name}.vtu")
+# Save results to vtk
+l2g.comp.save_results_to_vtk(case.mesh_results, f"{case.name}.vtu")
 
 
 # FL ids
@@ -210,4 +226,4 @@ case.options.switch_getFL_with_FLT = False # This is the default setting
 # Same settings as before, nothing to change. Now let's get those Fls
 case.getFL()
 
-case.saveFlToVTK(f"{case.name}_fls.vtk")
+l2g.comp.save_results_to_vtk(case.fl_results, f"{case.name}_fls.vtk")
