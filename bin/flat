@@ -36,6 +36,11 @@ run_subparser.add_argument('--rotational-misalignment',
     help="Activate rotational misalignment. By that it checks if it has the " +
          "necessary information in the geometry to run a FLT case with " +
          "rotational misalignment activated.", action='store_true', default=False)
+
+# The no graphics is in reverse as this is actually flag to creating the
+# images.
+run_subparser.add_argument('--no-graphics', help='Do not create pictures.', action="store_false",
+                            default=True)
 parser.add_argument('--debug', help="Activate debug prints",
                     action='store_true', default=False)
 print_subparser = subparsers.add_parser('print', help="Print case descriptions")
@@ -148,6 +153,7 @@ if args.command == "run":
         sys.exit(1)
 
     case = l2g.workflow.create_case(geo_obj, equ_obj, hlm_obj)
+    case.create_graphics = args.no_graphics
 
     print("Configuring case for run.")
     if not args.dry_run:

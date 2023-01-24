@@ -48,6 +48,21 @@ class DATA_BLOCK:
         self.set_required_attr(data)
         self.set_optional_attr(data)
 
+    def __repr__(self):
+        msg = "Required keys:\n"
+        for key in self.required_keys:
+            end = ""
+            if key in self.data:
+                end = f": {self.data[key]}"
+            msg += f"\t{key}{end}\n"
+
+        msg += "Optional keys:\n"
+        for key in self.optional_keys:
+            end = ""
+            if key in self.data:
+                end = f": {self.data[key]}"
+            msg += f"\t{key}{end}\n"
+        return msg
 
 class GEOMETRY(DATA_BLOCK):
     """Class for storing information on FLT to be used
@@ -783,7 +798,8 @@ class CASE(object):
             graphics_output_name = os.path.join(self.output_directory,
                 f"{self.case_name}{associated_time}")
             qelm_data = l2g.hlm.steady_state.get_elm_data(conlen_data,
-                generate_graphics=True, output_name=graphics_output_name,
+                generate_graphics=self.create_graphics,
+                output_name=graphics_output_name,
                 Rb=Rb, Btot=Btotal, Bpm=Bpm,
                 r_break=self.omp_obj.parameters.r_break,
                 drsep=self.omp_obj.eq.drsep)
