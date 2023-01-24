@@ -52,6 +52,7 @@ class L2GResults:
         "drsep",
         "drsep2",
         "geom_hit_ids",
+        "prim_hit_ids",
         "vertices",
         "triangles",
         "empty"]
@@ -70,6 +71,7 @@ class L2GResults:
         "drsep",
         "drsep2",
         "geom_hit_ids",
+        "prim_hit_ids",
         "vertices",
         "triangles"
         ]
@@ -91,6 +93,7 @@ class L2GResults:
         self.drsep:         Optional[np.ndarray] = None
         self.drsep2:        Optional[np.ndarray] = None
         self.geom_hit_ids:  Optional[np.ndarray] = None
+        self.prim_hit_ids:  Optional[np.ndarray] = None
 
         self.vertices:      Optional[np.ndarray] = None
         self.triangles:     Optional[np.ndarray] = None
@@ -132,7 +135,7 @@ class L2GResults:
 
         cellData = data.GetCellData()
         for key in self.arrays_to_dump:
-            array = self.__dict__[key]
+            array = getattr(self, key)
             if array is None:
                 continue
 
@@ -147,7 +150,9 @@ class L2GResults:
 
             if len(array) == N_cells * 3:
                 # Vector field
-                scalarField = numpy_support.numpy_to_vtk(array.reshape(N_cells,
+                tmp_buff = np.asarray(array)
+                scalarField = numpy_support.numpy_to_vtk(tmp_buff.reshape(N_cells,
+
                                                          3))
             else:
                 scalarField = numpy_support.numpy_to_vtk(array)
@@ -225,11 +230,15 @@ class L2GFLs:
     """Class that holds calculated FLs on given target triangles.
     """
 
-    __slots__ = ["points"]
+    __slots__ = ["points", "target_dim_mul"]
 
     def __init__(self):
         # List of Ids
         self.points: Optional[np.ndarray] = None
+        self.target_dim_mul: Optional[int] = 1.0 # What inverse scale to use to
+                                                 # transform to the same
+                                                 # unit dimension as used
+                                                 # target.
 
     def generate_vtk_object(self):
         if self.points is None:
@@ -262,8 +271,8 @@ class L2GFLs:
         lengths = []
 
         for line in self.points:
-            r = np.asarray(line[::3]) * 1000
-            z = np.asarray(line[1::3]) * 1000
+            r = np.asarray(line[::3]) / self.target_dim_mul
+            z = np.asarray(line[1::3]) / self.target_dim_mul
             phi = np.asarray(line[2::3])
             x = r * np.cos(phi)
             y = r * np.sin(phi)

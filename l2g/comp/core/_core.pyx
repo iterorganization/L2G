@@ -226,6 +226,7 @@ cpdef processData(PyFLT flt_obj, float [:] tg_vertices,
     results.angle = np.empty(N_cells, np.float)
     results.direction = np.empty(N_cells, np.int32)
     results.geom_hit_ids = np.empty(N_cells, np.int32)
+    results.prim_hit_ids = np.empty(N_cells, np.int32)
 
     # Assign the target_verices and target_cells to results
     results.vertices = tg_vertices
@@ -360,6 +361,7 @@ cpdef runFLT(PyFLT flt_obj, float [:] tg_vertices,
         double [:] conlen = results.conlen
         int [:] direction = results.direction
         int [:] geom_hit_ids = results.geom_hit_ids
+        int [:] prim_hit_ids = results.prim_hit_ids
         double [:] initial_value
 
     flt_obj.c_prepareThreadContainers(user_num_threads)
@@ -380,6 +382,7 @@ cpdef runFLT(PyFLT flt_obj, float [:] tg_vertices,
             flt_obj.c_runFLT_omp(threadId)
             conlen[i] = flt_obj.c_getConlen_omp(threadId)
             geom_hit_ids[i] = flt_obj.c_getGeomID_omp(threadId)
+            prim_hit_ids[i] = flt_obj.c_getPrimID_omp(threadId)
 
 @cython.boundscheck(False)
 @cython.wraparound(False)

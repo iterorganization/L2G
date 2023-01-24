@@ -52,6 +52,7 @@ cdef extern from "flt.hpp" nogil:
         # Result containers
         vector[double] m_conlens
         vector[int] m_geom_hit_ids
+        vector[int] m_prim_hit_ids
 
         void r8_flt(double t, double y[2])
 

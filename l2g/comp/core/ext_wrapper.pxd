@@ -66,6 +66,9 @@ cdef class PyFLT:
     cdef  int c_getGeomID(self) nogil
     cdef  int c_getGeomID_omp(self, int omp_thread) nogil
 
+    cdef int c_getPrimID(self) nogil
+    cdef int c_getPrimID_omp(self, int omp_thread) nogil
+
 
     cdef  void getBCart(self, double r, double z, double phi, vector[double] &out) nogil
     cdef  void getBCyln(self, double r, double z, vector[double] &out) nogil

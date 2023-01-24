@@ -479,6 +479,35 @@ cdef class PyFLT:
         """
         return self.c_flt.m_geom_hit_ids[omp_thread]
 
+    def getPrimID(self):
+        """Gets the Id of the primitive with which the FL intersected.
+
+        Returns:
+            primId (int): Id of intersected primitive.
+        """
+        return self.c_flt.m_prim_hit_ids[0]
+
+    cdef int c_getPrimID(self) nogil:
+        """Same as getPrimID, except it is a
+        Cython function, in order to use in Cython code (no python GIL calls).
+        """
+        return self.c_flt.m_prim_hit_ids[0]
+
+    cdef int c_getPrimID_omp(self, int omp_thread) nogil:
+        """Cython function (no Python GIL) for calling the runFLT function from
+        an OpenMP parallel block.
+
+        Returns:
+            geomId (int): Id of intersected geometry.
+
+        Arguments:
+            omp_thread (int): Id of the OpenMP thread which calls the runFLT
+                              function. The Id is used as an index for storing
+                              thread local data, which is also managed by
+                              the FLT C++ class.
+        """
+        return self.c_flt.m_prim_hit_ids[omp_thread]
+
     cdef void getBCart(self, double r, double z, double phi, vector[double] &out) nogil:
         """Gets the Magnetic field vector in Cartesian coordinate system. Used
         when processing data on a geometry (getting quantities).
