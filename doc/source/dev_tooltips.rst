@@ -20,6 +20,7 @@ Currently the python module structure of the L2G package is as following:
     - hlm
     - plot
     - utils
+    - settings
 
 In the directories we can see python files that have an ``_`` prefix or not.
 Files with ``_`` prefix contains classes, which are then imported or exposed
@@ -67,6 +68,10 @@ names, but long enough for the user to understand the role:
 
     + Utility functions, helpers for setting up cases, handling lower levels of
       i/o and the handling of files which describe cases.
+ - settings
+
+    + Contains the switches, options and parameters used when running a FLT
+      case.
 
 ***********
 Adding code

@@ -27,5 +27,5 @@ library:
   - `Embree <https://www.embree.org/>`_, used for intersection tests
   - `Cython <https://cython.org/>`_, used for wrapping and enabling the use of
     external C++ libraries, enabling the use of OpenMP multithreading.
-  - `ALGLIB <https://www.alglib.net/>`_, used for 2D spline interpolation of
-    axisymmetric equilibrium data.
+  - Implementaion of `bicubic interpolation <https://en.wikipedia.org/wiki/Bicubic_interpolation/>`_,
+  - used for 2D spline interpolation of axisymmetric equilibrium data.

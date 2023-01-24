@@ -2,20 +2,181 @@
 Examples
 ########
 
-This section houses a myriad of examples on how to run l2g. From the simple
-"hello world" approach to examples showing the available features and
-functionalities.
+This section shows examples of how to use the code. They are not complete
+examples.
 
-*********
-Hello FLT
-*********
+To find complete examples, check the synthetic case, where the whole case is
+done inside the python file:
 
+.. literalinclude:: ../../examples/synthetic_case.py
+   :language: python
 
 ************************************
-JSON structure for describing a case
+YAML structure for describing a case
 ************************************
 
-The command ``runL2G`` and ``submitL2G`` uses a JSON file, which describes a
+The commands ``flat`` and ``submitFLAT`` uses a YAML type file as input, where
+the input data is described in different YAML documents with the following type
+fields:
+
+ - geometry
+ - equilibrium
+ - hlm
+
+To obtain the list of all fields that could be filled in these yaml blocks:
+
+.. code-block:: python
+
+   import l2g.settings
+
+   # For obtaining Parameters fields, to be filled in the Geometry block under
+   # the parameters field
+   print(l2g.settings.Parameters().dump())
+
+   # For obtaining Options fields, to be filled in the Geometry block under
+   # the parameters field
+   print(l2g.settings.Options().dump())
+
+   # And to obtain the YAML fields
+   import l2g.workflow
+   print(l2g.workflow.GEOMETRY())
+   print(l2g.workflow.EQUILIBRIUM())
+   print(l2g.workflow.HLM())
+
+   # For more information check the code directly
+
+Geometry
+========
+
+The geometry document describes what input meshes to be used as the target,
+shadowing and the meshes for filtering out fieldlines that escape the tokamak
+chambre (also called artificial fieldlines). Additionally parameters and
+options are set in this block for setting the tracing tool.
+
+Example YAML geometry block:
+
+.. code-block:: yaml
+
+   ---
+   type: geometry
+   name: name_for_target
+   target_mesh: /path/to/target/mesh.med
+   shadow_meshes:
+    - /path/to/shadowing/mesh1.med
+    - /path/to/shadowing/mesh2.med
+    - ...
+   afl_catchers_meshes:
+    - /path/to/afl/catching/mesh1.med
+    - /path/to/afl/catching/mesh2.med
+    - ...
+   cutoff_conlen: 4.3
+   parameters:
+       time_step: 0.01
+       time_end: 31.41 # 5 full revolutions
+       max_connection_length: 10000 # in meters
+       self_intersection_avoidance_length: 0.001 # in meters
+       side: owl
+   ...
+
+Equilibrium
+===========
+
+The equilibrium block specifies the input data of the equilibrium data. Usually
+this only means either a list of EQDSK files or parameters to the IMAS
+database. The equilibrium_type field specifies in what form is the equilibrium
+data stored.
+
+Example of YAML equilibrium:
+
+.. code-block:: yaml
+
+   ---
+   type: equilibrium
+   equilibrium_type: eqdsk_files
+   name: collection_of_equilibriums
+   eqdsk_files:
+    - /path/to/eqdsk/file1.eqdsk
+    - /path/to/eqdsk/file2.eqdsk
+    - ...
+   ...
+   ---
+   type: equilibrium
+   equilibrium_type: imas
+   name: equilibrium_from_imas
+   imas:
+     user: public
+     shot: 135013
+     run: 2
+     device: iter
+     version: '3'
+     time_start: 630
+     time_end: 673
+   ...
+
+Hlm
+===
+
+The hlm block specifies what heat load mapping to apply to the study:
+
+.. code-block:: yaml
+
+   ---
+   type: hlm
+   name: ramp-down
+   hlm_type: ramp-down
+   ip_transition: 10.e+6 # Default
+   ...
+
+   ---
+   type: hlm
+   name: flat-top
+   hlm_type: elm
+   shadow_meshes:
+     - /home/ITER/simicg/MESH_DIRECTORY/FULL_BLANKET_MESH/FullTokamak.med
+     - /home/ITER/simicg/MESH_DIRECTORY/DIVERTOR/Divertor.med
+   parameters:
+     max_connection_length: 1000 # default
+     time_step: 0.01
+     abs_error: 0.0001
+     rel_error: 0.0001
+   r_break: 0.025 # default
+   ...
+
+   ---
+   type: hlm
+   name: single_exponential
+   hlm_type: single
+   p_sol: 7.5E+6
+   lambda_q: 0.012
+   ...
+
+   ---
+   type: hlm
+   name: double_exponential
+   hlm_type: double
+   p_sol: 7.5E+6
+   lambda_q_near: 0.005
+   lambda_q_main: 0.17
+   ratio: 4
+   ...
+
+   ---
+   type: hlm
+   hlm_type: custom
+   name: list_of_custom_profiles
+   profile_files:
+     - /path/to/profile/file1.txt
+     - /path/to/profile/file2.txt
+     - /path/to/profile/file3.txt
+     - /path/to/profile/file4.txt
+     - /path/to/profile/file5.txt
+     - /path/to/profile/file6.txt
+     - /path/to/profile/file7.txt
+     - /path/to/profile/file8.txt
+     - /path/to/profile/file9.txt
+   ...
+
+The command ``flat`` and ``submitFLAT`` uses a JSON file, which describes a
 FLT case to run. In this JSON format file we describe the case, the input
 files, parameters, ... The commands parse the file, runs the case and if all
 goes well produces a result file along the auxiliary data files and images.
@@ -177,39 +338,58 @@ block
 
 See the following example on the custom :term:`hlm` blocks.
 
-.. code-block:: json
 
-   // Example, Custom profile
-   "custom-hlm-example-1": // Start blocks with "custom-hlm-" and add your own name for the profile
-   {
-       "type": "single-exp", // or "double-exp", ...
-       "P_sol": 10e6, // In watts. One can specify P_sol or directly
-       "lambda_q": 0.050 // In meters.
-   },
-   "custom-hlm-example-2": // Start blocks with "custom-hlm-" and add your own name for the profile
-   {
-       "type": "single-exp", // or "double-exp", ...
-       "q_parallel": 10e6, // In W/m^2.
-       "lambda_q": 0.050 // In meters.
-   },
-   "custom-hlm-example-3": // Start blocks with "custom-hlm-" and add your own name for the profile
-   {
-       "type": "double-exp", // or "double-exp", ...
-       "q_parallel": 10e6, // In W/m^2.
-       "lambda_q_main": 0.050 // In meters.
-       "lambda_q_near": 0.050 // In meters.
-       "Rq": 4 // No units.
-   },
-   "custom-hlm-example-4": // Start blocks with "custom-hlm-" and add your own name for the profile
-   {
-       "type": "double-exp", // or "double-exp", ...
-       "q_parallel": 10e6, // In W/m^2.
-       "lambda_q_main": 0.050 // In meters.
-       "lambda_q_near": 0.050 // In meters.
-       "Rq": 4 // No units.
-   },
+.. code-block:: yaml
 
-
+   ---
+   type: geometry
+   name: name_for_target
+   target_mesh: /path/to/target/mesh.med
+   shadow_meshes:
+    - /path/to/shadowing/mesh1.med
+    - /path/to/shadowing/mesh2.med
+    - ...
+   afl_catchers_meshes:
+    - /path/to/afl/catching/mesh1.med
+    - /path/to/afl/catching/mesh2.med
+    - ...
+   cutoff_conlen: 4.3
+   parameters:
+       time_step: 0.01
+       time_end: 31.41 # 5 full revolutions
+       max_connection_length: 10000 # in meters
+       self_intersection_avoidance_length: 0.001 # in meters
+       side: owl
+   ...
+   ---
+   type: equilibrium
+   equilibrium_type: eqdsk_files
+   name: collection_of_equilibriums
+   eqdsk_files:
+    - /path/to/eqdsk/file1.eqdsk
+    - /path/to/eqdsk/file2.eqdsk
+    - ...
+   ...
+   ---
+   type: equilibrium
+   equilibrium_type: imas
+   name: equilibrium_from_imas
+   imas:
+     user: public
+     shot: 135013
+     run: 2
+     device: iter
+     version: '3'
+     time_start: 630
+     time_end: 673
+   ...
+   ---
+   type: hlm
+   name: name_for_heat_load_mapping
+   hlm_type: single
+   p_sol: 7.5E+6
+   lambda_q: 0.012
+   ...
 
 
 wall_limiter
@@ -228,100 +408,3 @@ by a fixed major radius offset or something else. In this case the user can
 specify inside the JSON file the points of the wall silhouette which will be
 used then for equilibrium analysis.
 
-
-Example JSON
-------------
-
-.. _example json:
-
-.. code-block:: json
-   :caption: "JSON example"
-
-   {
-       "name": "case_name",
-       "output_directory": "/path/for/output/files",
-
-       // If we have eqdsk files
-       "eq_type": "eqdsk",
-       "eqdsk_files":
-       [
-           "/path/to/eqdsk1",
-           "/path/to/eqdsk2",
-       ],
-
-       // If we have IMAS
-       "eq_type": "imas",
-       "imas":
-       {
-           "user": "public",
-           "shot": 999999,
-           "run": 1,
-           "device": "iter",
-           "version": "3",
-           "time_series": true,
-           "time_start": 630,
-           "time_end": 673
-       },
-
-       "parameters": {}, // Change parameters defined at :class:`Settings`
-       "options": {}, // Change options defined at :class:`Options`
-
-       // Specify HLM profiles
-       // Example, flat-top steady state
-       "elm":
-       {
-            "shadow_meshes": // List of meshes used for OWL connection length graph
-            [
-                "/path/to/mesh1",
-                "/path/to/mesh2",
-                ...
-            ]
-            "parameters": {}, // Change parameter options, similar to FLT parameters
-            "r_break": 0.025 // Specify the breakpoint position in meters.
-       },
-
-       // Example, Ramp-Down profile
-       "ramp-down":
-       {
-            "Ip transition": 10e6
-       },
-
-       // Example, Start-Up
-       "start-up":
-       {
-            "lambda_q_main": 0.17,
-            "lambda_q_near": 0.005,
-            "Rq": 4,
-            "p_sol": 6e6
-       },
-
-       // Example, Custom profile
-       "custom-hlm-example-1": // Start blocks with "custom-hlm-" and add your own name for the profile
-       {
-           "type": "single-exp", // or "double-exp", ...
-           "P_sol": 10e6, // In watts. One can specify P_sol or directly
-           "lambda_q": 0.050 // In meters.
-       },
-       "custom-hlm-example-2": // Start blocks with "custom-hlm-" and add your own name for the profile
-       {
-           "type": "single-exp", // or "double-exp", ...
-           "q_parallel": 10e6, // In W/m^2.
-           "lambda_q": 0.050 // In meters.
-       },
-       "custom-hlm-example-3": // Start blocks with "custom-hlm-" and add your own name for the profile
-       {
-           "type": "double-exp", // or "double-exp", ...
-           "q_parallel": 10e6, // In W/m^2.
-           "lambda_q_main": 0.050 // In meters.
-           "lambda_q_near": 0.050 // In meters.
-           "Rq": 4 // No units.
-       },
-       "custom-hlm-example-4": // Start blocks with "custom-hlm-" and add your own name for the profile
-       {
-           "type": "double-exp", // or "double-exp", ...
-           "q_parallel": 10e6, // In W/m^2.
-           "lambda_q_main": 0.050 // In meters.
-           "lambda_q_near": 0.050 // In meters.
-           "Rq": 4 // No units.
-       },
-   }

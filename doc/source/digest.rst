@@ -1,16 +1,16 @@
 
-#############
-Digesting L2G
-#############
+##################
+Digesting the code
+##################
 
 ********
 Workflow
 ********
 
-The way L2G is structured is to have a singular python interface, providing all
-the tools a user needs or might need in order to perform their FLT studies.
-From the, obviously, running a :term:`FLT` case to plotting utilities for
-intermediate data and diagnostics of their input equilibrium data.
+The way the code is structured is to have a singular python interface,
+providing all the tools a user needs or might need in order to perform their
+FLT studies. From the, obviously, running a :term:`FLT` case to plotting
+utilities for intermediate data and diagnostics of their input equilibrium data.
 
 Python is used for interface due to it's availability and broad specter of
 libraries, which brings functionality and relatively high productivity.
@@ -46,7 +46,6 @@ in :ref:`why_openmp`.
         input_mesh [label="Mesh data", shape="box3d"]
 
         ext_embree [label="Embree", shape="component", href="https://www.embree.org/", target="_blank"]
-        ext_alglib [label="Alglib++", shape="component", href="https://www.alglib.net/", target="_blank"]
         ext_rkf45 [label="RKF45", shape="component"]
 
         py_plot [label="Plotting", shape="component"]
@@ -79,7 +78,7 @@ in :ref:`why_openmp`.
         subgraph cluster_3 {
             color=lightgreen;
 
-            {ext_embree ext_alglib ext_rkf45};
+            {ext_embree ext_rkf45};
             label="External libraries";
         }
 
@@ -134,13 +133,6 @@ library, with an impressive performance and simple API to use in code.
 
    Benchmark Embree performance in order to justify the word impressive
    performance.
-
-Alglib
-------
-
-For tracing a field-line interpolation methods are used on the input data,
-mainly the poloidal magnetic flux map. The 2D bicubic interpolation method of
-Alglib is used in this regard.
 
 RKF45
 -----

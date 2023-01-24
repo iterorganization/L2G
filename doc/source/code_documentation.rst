@@ -156,13 +156,13 @@ This module contains functions for input output handling of FLT result data.
    :undoc-members:
    :private-members:
 
-l2g.comp._settings
-==================
+l2g.settings._settings
+======================
 
 This module holds all settings that are and will be introduced to control the
 flow of a FLT study.
 
-.. automodule:: l2g.comp._settings
+.. automodule:: l2g.settings._settings
    :members:
    :undoc-members:
    :private-members:
