@@ -1,6 +1,3 @@
-"""These are not global settings for the whole package. This file contains
-classes for setting a FLT study.
-"""
 import logging
 
 log = logging.getLogger(__name__)
@@ -69,7 +66,8 @@ class Parameters(BaseClassOptions):
         #: radians.
         self.time_end = 1.0
         #: Time step is the resolution at which the solver checks the FL path
-        #: for intersections. In other words toroidal resolution for solver
+        #: for intersections. In other words toroidal resolution for solver.
+        #: In radians.
         self.time_step = 0.01
         #: Maximum connection length when activating traces where we want to
         #: follow a FL until the desired length. In meters.

@@ -8,6 +8,5 @@ from l2g.comp._io import (MEDMeshIO, dump_flt_mesh_results_to_med,
                           save_fls_to_vtk, save_mesh_to_vtk,
                           save_results_to_vtk)
 
-from l2g.comp._settings import Parameters, Options, HLM
 # Order matters, FieldLineTracer should be last
 from l2g.comp._field_line_tracer import FieldLineTracer
