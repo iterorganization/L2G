@@ -1,8 +1,6 @@
 import os
 import re
 
-import numpy as np
-
 import logging
 log = logging.getLogger(__name__)
 
@@ -633,6 +631,7 @@ class EQDSKIO(object):
         Arguments:
             a (array): Array of floats holding the R or Z values.
         """
+        import numpy as np
         order = int(np.log10(max([abs(el) for el in a])))
         if order == 2:
             # Hopefully centimeters

@@ -1,6 +1,5 @@
 from l2g.equil import (getEquilibriumFromIMAS, getEquilibriumFromEQDSKG,
                        EQDSKIO, Equilibrium)
-import imas
 import glob
 import os
 import numpy as np
@@ -120,6 +119,7 @@ class EquilibriumIterator(object):
         # interpolation = imas.imasdef.INTERPOLATION
         # Closest interpolation.
         # interpolation = imas.imasdef.CLOSEST_SAMPLE
+        import imas
         interpolation = imas.imasdef.CLOSEST_INTERP
 
         # New API

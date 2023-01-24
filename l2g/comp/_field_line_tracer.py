@@ -1,7 +1,6 @@
 """This file holds the FieldLineTracer class which helps the user setup the
 case.
 """
-import l2g.comp.core
 import l2g.comp
 import l2g.utils.meshio
 import l2g.equil
@@ -21,8 +20,8 @@ class FieldLineTracer:
 
     Attributes:
         name (str): Name of the case.
-        parameters (l2g.comp.Parameters): Holds parameters for the tracer.
-        options (l2g.comp.Options): Options on what to run.
+        parameters (l2g.settings.Parameters): Holds parameters for the tracer.
+        options (l2g.settings.Options): Options on what to run.
         flt_obj (l2g.comp.core.PyFLT): Cython wrapper over C++ kernel.
         embree_obj (l2g.comp.core.PyEmbreeAccell): Cython wrapper over C++
             Embree.
@@ -50,10 +49,11 @@ class FieldLineTracer:
     """
     def __init__(self):
         self.name = "L2G_flt_case-1"
-
-        self.hlm_params: l2g.comp.HLM                 = l2g.comp.HLM()
-        self.parameters: l2g.comp.Parameters          = l2g.comp.Parameters()
-        self.options:    l2g.comp.Options             = l2g.comp.Options()
+        import l2g.settings
+        self.hlm_params: l2g.settings.HLM                 = l2g.settings.HLM()
+        self.parameters: l2g.settings.Parameters          = l2g.settings.Parameters()
+        self.options:    l2g.settings.Options             = l2g.settings.Options()
+        import l2g.comp.core
         self.flt_obj:    l2g.comp.core.PyFLT          = l2g.comp.core.PyFLT()
         self.embree_obj: l2g.comp.core.PyEmbreeAccell = l2g.comp.core.PyEmbreeAccell()
         self.equilibrium:l2g.equil.Equilibrium        = l2g.equil.Equilibrium()
@@ -218,6 +218,7 @@ class FieldLineTracer:
 
         start = perf_counter()
         log.info("Processing data on mesh...")
+        import l2g.comp.core
         l2g.comp.core.processData(flt_obj=self.flt_obj,
             tg_vertices=self.target_vertices,
             tg_cells=self.target_triangles, results=self.mesh_results,
@@ -234,6 +235,7 @@ class FieldLineTracer:
 
         start = perf_counter()
         log.info("Processing data on points...")
+        import l2g.comp.core
         l2g.comp.core.processDataOnPoints(flt_obj=self.flt_obj,
             tg_vertices=self.target_points, results=self.point_results,
             dim_mul=self.parameters.target_dim_mul)
@@ -268,14 +270,19 @@ class FieldLineTracer:
 
         log.info("Getting FLs...")
         start = perf_counter()
+        import l2g.comp.core
         self.fl_results = l2g.comp.core.getFL(self.flt_obj, self.target_vertices,
             self.target_triangles, self.fl_ids, self.mesh_results,
             self.parameters.target_dim_mul, self.options.switch_getFL_with_FLT)
+        self.fl_results.target_dim_mul = self.parameters.target_dim_mul
+        # Now scale the R, Z, depending on the target dim_mul, so that the
+        # generated VTK has the same units as the target mesh.
         log.info(f"Finished getting FLs in {perf_counter() - start} seconds.")
 
     def getFLOnPoint(self, R: float, Z: float, Theta: float) -> list:
         """Obtain FL points that goes through the input parameters R, Z, Theta.
         """
+        import l2g.comp.core
         points = l2g.comp.core.getFLOnPoint(self.flt_obj, R, Z, Theta,
                                             self.options.switch_getFL_with_FLT)
 
@@ -295,6 +302,7 @@ class FieldLineTracer:
 
         log.info("Starting FLT on mesh...")
         start = perf_counter()
+        import l2g.comp.core
         l2g.comp.core.runFLT(self.flt_obj, self.target_vertices,
             self.target_triangles, self.parameters.num_of_threads,
             self.mesh_results, self.parameters.target_dim_mul)
@@ -314,6 +322,7 @@ class FieldLineTracer:
 
         log.info("Starting FLT on points...")
         start = perf_counter()
+        import l2g.comp.core
         l2g.comp.core.runFLTonPoints(flt_obj=self.flt_obj,
             tg_vertices=self.target_points,
             user_num_threads=self.parameters.num_of_threads,
