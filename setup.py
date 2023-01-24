@@ -32,9 +32,6 @@ def get_include_directories():
         embree3
     """
     out = []
-    error = False
-    error_msg = []
-    # Get
 
     out.append(os.path.join(os.environ['L2G_CPP_ROOT_DIR'], 'include', 'flt'))
     out.append(os.path.join(os.environ['EMBREE_ROOT_DIR'], 'include'))
@@ -70,12 +67,12 @@ def get_extra_compile_args():
     out = []
 
     if sys.platform == "win32":
-        out.append("/O2")
+        out.append("/O3")
         if useOpenMP:
             out.append("/openmp")
 
     else:
-        out.append("-O2")
+        out.append("-O3")
         out.append("-march=native")
         out.append("-Wall")
         if useOpenMP:
@@ -172,7 +169,7 @@ setup(
         "Programming Language :: C++",
     ],
     packages = ["l2g", "l2g.comp", "l2g.comp.core", "l2g.equil", "l2g.hlm",
-                "l2g.plot",  "l2g.utils", "l2g.workflow"],
+                "l2g.plot",  "l2g.utils", "l2g.settings", "l2g.workflow"],
     data_files = [('', getDataFiles())],
     python_requires=">=3.6",
     scripts = ['bin/runL2G', 'bin/submitL2G', 'bin/flat', 'bin/submitFLAT',
