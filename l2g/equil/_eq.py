@@ -819,6 +819,19 @@ class EQ:
             spl, z, value = args
             return spl.ev(r, z) - value
 
+        # First manually check if drsep can be calculated.
+        f1 = fun(self.oPoint[0], self._psi_spline, Z, sep1)
+        f2 = fun(self._eq.grid_r[-1], self._psi_spline, Z, sep1)
+
+        if f1 * f2 > 0.0:
+            return 0.0
+
+        f1 = fun(self.oPoint[0], self._psi_spline, Z, sep2)
+        f2 = fun(self._eq.grid_r[-1], self._psi_spline, Z, sep2)
+
+        if f1 * f2 > 0.0:
+            return 0.0
+
         Rsep1 = bisect(fun, self.oPoint[0], self._eq.grid_r[-1],
                        args=(self._psi_spline, Z, sep1))
         Rsep2 = bisect(fun, self.oPoint[0], self._eq.grid_r[-1],
