@@ -196,7 +196,11 @@ class L2GPointResults:
         "qpar",
         "conlenUp",
         "conlenDown",
-        "empty"
+        "empty",
+        "geom_hit_ids_up",
+        "prim_hit_ids_up",
+        "geom_hit_ids_down",
+        "prim_hit_ids_down"
     ]
 
     arrays_to_dump = [
@@ -208,7 +212,11 @@ class L2GPointResults:
         "q",
         "qpar",
         "conlenUp",
-        "conlenDown"
+        "conlenDown",
+        "geom_hit_ids_up",
+        "prim_hit_ids_up",
+        "geom_hit_ids_down",
+        "prim_hit_ids_down"
     ]
 
     def __init__(self):
@@ -225,6 +233,10 @@ class L2GPointResults:
         self.conlenUp:      Optional[np.ndarray] = None
         self.conlenDown:    Optional[np.ndarray] = None
         self.empty:                         bool = True
+        self.geom_hit_ids_up:  Optional[np.ndarray] = None
+        self.prim_hit_ids_up:  Optional[np.ndarray] = None
+        self.geom_hit_ids_down:  Optional[np.ndarray] = None
+        self.prim_hit_ids_down:  Optional[np.ndarray] = None
 
 class L2GFLs:
     """Class that holds calculated FLs on given target triangles.

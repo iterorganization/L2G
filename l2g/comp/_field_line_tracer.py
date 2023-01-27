@@ -283,11 +283,11 @@ class FieldLineTracer:
         """Obtain FL points that goes through the input parameters R, Z, Theta.
         """
         import l2g.comp.core
-        points = l2g.comp.core.getFLOnPoint(self.flt_obj, R, Z, Theta,
+        points = l2g.comp.core.getFlOnPoint(self.flt_obj, R, Z, Theta,
                                             self.options.switch_getFL_with_FLT)
 
         # Now let's order them.
-        points = points[0] + points[1][::-1]
+        # points = points[0][::-1] + points[1]
         return points
 
     def runFltOnMesh(self) -> None:

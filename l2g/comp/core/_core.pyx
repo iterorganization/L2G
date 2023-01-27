@@ -134,6 +134,11 @@ cpdef processDataOnPoints(PyFLT flt_obj, float [:] tg_vertices,
     results.conlenUp = np.empty(N_vertices, dtype=np.float)
     results.conlenDown = np.empty(N_vertices, dtype=np.float)
 
+    results.geom_hit_ids_up = np.empty(N_vertices, dtype=np.int32)
+    results.prim_hit_ids_up = np.empty(N_vertices, dtype=np.int32)
+    results.geom_hit_ids_down = np.empty(N_vertices, dtype=np.int32)
+    results.prim_hit_ids_down = np.empty(N_vertices, dtype=np.int32)
+
     cdef:
         double [:] points = results.points
         double [:] BVec = results.BVec
@@ -434,6 +439,10 @@ cpdef runFLTonPoints(PyFLT flt_obj, float [:] tg_vertices, int user_num_threads=
         double [:] conlenUp = results.conlenUp
         double [:] conlenDown = results.conlenDown
         int [:] direction_map = results.direction
+        int [:] geom_hit_ids_up = results.geom_hit_ids_up
+        int [:] prim_hit_ids_up = results.prim_hit_ids_up
+        int [:] geom_hit_ids_down = results.geom_hit_ids_down
+        int [:] prim_hit_ids_down = results.prim_hit_ids_down
 
     flt_obj.c_prepareThreadContainers(user_num_threads)
 
@@ -449,6 +458,8 @@ cpdef runFLTonPoints(PyFLT flt_obj, float [:] tg_vertices, int user_num_threads=
                                threadId)
             flt_obj.c_runFLT_omp(threadId)
             conlenDown[i] = flt_obj.c_getConlen_omp(threadId)
+            geom_hit_ids_down[i] = flt_obj.c_getGeomID_omp(threadId)
+            prim_hit_ids_down[i] = flt_obj.c_getPrimID_omp(threadId)
             # Next go Up!
             direction = direction_map[i]
             flt_obj.c_setDirection_omp(direction, threadId)
@@ -457,6 +468,8 @@ cpdef runFLTonPoints(PyFLT flt_obj, float [:] tg_vertices, int user_num_threads=
 
             flt_obj.c_runFLT_omp(threadId)
             conlenUp[i] = flt_obj.c_getConlen_omp(threadId)
+            geom_hit_ids_up[i] = flt_obj.c_getGeomID_omp(threadId)
+            prim_hit_ids_up[i] = flt_obj.c_getPrimID_omp(threadId)
     return results
 
 def getFL(PyFLT flt_obj, float [:] tg_vertices, unsigned int [:] tg_cells,
