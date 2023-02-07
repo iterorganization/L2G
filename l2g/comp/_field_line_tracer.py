@@ -336,7 +336,7 @@ class FieldLineTracer:
         FLs on the midplane.
         """
 
-        radial_points = 2000
+        radial_points = 500
         toroidal_points = 360
 
         points = self.createMidplanePoints(radialPoints=radial_points,
@@ -345,18 +345,18 @@ class FieldLineTracer:
         # Reset result on points.
         self.point_results.reset()
 
-        R_points = points[:3*2000:3]
+        R_points = points[:3*radial_points:3]
 
         log.info("Obtaining OWL connection length graph")
         # Getting the outer wall midplane profile.
         self.runFltOnPoints()
 
-        radial_points = 2000
+        radial_points = 500
         toroidal_points = 360
 
         psiLcfs = self.eq.psiLCFS
         Rb, _, _, Bpm = self.eq.getOWL_midplane()
-        flux = self.point_results.flux[:2000]
+        flux = self.point_results.flux[:radial_points]
         # Calculate drsep
         drsep = np.abs((flux - psiLcfs) / (Rb * Bpm))
 
@@ -629,8 +629,18 @@ class FieldLineTracer:
                 points=self.hlm_params.points, profile=self.hlm_params.profile)
             q_par = interELM + elm
 
+            Te = l2g.hlm.general.custom(drsep=drsep,
+                points=self.hlm_params.additional_points[0],
+                profile=self.hlm_params.additional_profiles[0])
+
+            Ti = l2g.hlm.general.custom(drsep=drsep,
+                points=self.hlm_params.additional_points[1],
+                profile=self.hlm_params.additional_profiles[1])
+
             self.hlm_results.additional_arrays.append(elm)
             self.hlm_results.additional_arrays.append(interELM)
+            self.hlm_results.additional_arrays.append(self.applyShadowMask(Te))
+            self.hlm_results.additional_arrays.append(self.applyShadowMask(Ti))
         elif self.hlm_params.hlm_type == "ramp-down":
             # P_sol taken from IMAS, hopefully.
             Ip = self.equilibrium.Ip

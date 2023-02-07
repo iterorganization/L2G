@@ -101,6 +101,8 @@ def correct_equilibrium_helicity(eq_obj: Equilibrium) -> None:
 
     In most convention we wish to have the gradient of the poloidal
     magnetic flux showing out.
+
+    Relevant IDM document: GGKFNP
     """
 
     # if eq_obj.psi_axis is None:

@@ -600,9 +600,9 @@ class CASE(object):
                 self.med_obj.writeArray(array=self.flt_obj.hlm_results.flux_expansion,
                     array_name="Total_flux expansion")
                 self.med_obj.writeArray(array=self.flt_obj.hlm_results.q_inc,
-                    array_name=r"$q_{inc}\;\;[\frac{W}{m^2}]$")
+                    array_name=r"$q_{\perp}\;\;[\frac{W}{m^2}]$")
                 self.med_obj.writeArray(array=self.flt_obj.hlm_results.q_par,
-                    array_name=r"$q_{par}\;\;[\frac{W}{m^2}]$")
+                    array_name=r"$q_{\parallel}\;\;[\frac{W}{m^2}]$")
 
                 if hlm_type == "elm":
                     # Writing additional arrays
@@ -613,6 +613,12 @@ class CASE(object):
                     self.med_obj.writeArray(
                         array=self.flt_obj.hlm_results.additional_arrays[1],
                         array_name=r"$q_{\parallel}\;\;[\frac{W}{m^2}]$ inter-ELM")
+                    self.med_obj.writeArray(
+                        array=self.flt_obj.hlm_results.additional_arrays[2],
+                        array_name=r"$T_e$ [eV]")
+                    self.med_obj.writeArray(
+                        array=self.flt_obj.hlm_results.additional_arrays[3],
+                        array_name=r"$T_i$ [eV]")
                 elif hlm_type == "ramp-down":
                     lambda_q = self.flt_obj.hlm_results.additional_arrays[0]
                     log.info(f'[RAMP DOWN]: i={index} t={associated_time:.3f} lq={lambda_q:.2f} Ip={self.flt_obj.equilibrium.Ip:.2e}')
@@ -708,6 +714,7 @@ class CASE(object):
                     ax.semilogy(drsep * 1e3, q_par, color="blue", label=label)
                     ax.grid(b=True, axis="both")
                     ax.set_xlabel(r"$r-r_{sep}[mm]$")
+                    ax.set_ylabel(r"$q_{\parallel}")
                     ax.set_title(self.case_name)
 
                     # Additional plots, in case of Steady-State
@@ -804,14 +811,19 @@ class CASE(object):
                 r_break=self.omp_obj.parameters.r_break,
                 drsep=self.omp_obj.eq.drsep)
             np.savetxt(elm_qpar_file_path, qelm_data,
-                header="drsep [m], elm PLM [MW/m^2]")
+                header="drsep [m], elm PLM [MW/m^2], R [m], Te [eV], Ti [eV]")
 
         elm_data_r = qelm_data[:, 0]
         elm_data_q = qelm_data[:, 1] * 1e6
+        elm_data_r2 = qelm_data[:, 2]
+        elm_data_e = qelm_data[:, 3]
+        elm_data_i = qelm_data[:, 4]
 
         # Now set the profile data to the main flt object.
         self.flt_obj.hlm_params.points = elm_data_r
         self.flt_obj.hlm_params.profile = elm_data_q
+        self.flt_obj.hlm_params.additional_points = [elm_data_r2, elm_data_r2]
+        self.flt_obj.hlm_params.additional_profiles = [elm_data_e, elm_data_i]
 
     def load_custom_profile(self, index):
         """Load a custom profile.

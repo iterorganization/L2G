@@ -508,9 +508,12 @@ def get_elm_data(conlen_graph_data, generate_graphics=False, output_name="",
                                                rlim=max(r_out))
 
 
-    x = np.empty((len(data_jnme[0]), 2), np.float64)
+    x = np.empty((len(data_jnme[0]), 5), np.float64)
     x[:, 0] = data_jnme[0]
     x[:, 1] = data_jnme[1]
+    x[:, 2] = r_out
+    x[:, 3] = Te.UNNORM
+    x[:, 4] = Ti.UNNORM
     log.info("Finished calculating ELM profile")
 
     if not generate_graphics:

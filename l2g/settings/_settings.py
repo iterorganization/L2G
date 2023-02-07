@@ -148,14 +148,15 @@ class HLM(BaseClassOptions):
     # Ramp - Down
     __slots__ = ["hlm_type", "p_sol", "lambda_q", "lambda_q_main",
                  "lambda_q_near", "ratio", "r_break", "ip_transition",
-                 "Rb", "Z", "Btotal", "points", "profile"]
+                 "Rb", "Z", "Btotal", "points", "profile", "additional_points",
+                 "additional_profiles"]
 
     # Lists for each scenario
     flat_top = ["r_break"]
     ramp_down = ["ip_transition"]
     single_exp = ["p_sol", "lambda_q"]
     double_exp = ["p_sol", "lambda_q_main", "lambda_q_near", "ratio"]
-    custom = ["points", "profile"]
+    custom = ["points", "profile", "additional_points", "additional_profiles"]
 
     acceptable_types = ["flat_top", "ramp_down", "single_exp",
                         "double_exp", "custom"]
@@ -172,6 +173,8 @@ class HLM(BaseClassOptions):
 
         self.points: list = []
         self.profile: list = []
+        self.additional_points: list = []
+        self.additional_profiles: list = []
         # Not user set
         self.Rb: float = 0
         self.Z: float = 0 #
