@@ -29,13 +29,16 @@ run_subparser = subparsers.add_parser('run', help="Run FLT case")
 run_subparser.add_argument('geometry', help='Name of input data of geometries to be used in the FLT case')
 run_subparser.add_argument('equilibrium', help='Name of the equilibrium data to be used in the FLT case')
 run_subparser.add_argument('hlm', nargs="?", help='Name of the HLM to apply on the FLT data. Optional')
-run_subparser.add_argument('--dry-run', help="Performs dry run.", action="store_true",
-                           default=False)
 run_subparser.add_argument('--out-dir', help="Specify output directory. Default CWD.", type=str)
 run_subparser.add_argument('--rotational-misalignment',
     help="Activate rotational misalignment. By that it checks if it has the " +
          "necessary information in the geometry to run a FLT case with " +
          "rotational misalignment activated.", action='store_true', default=False)
+run_subparser.add_argument('--longwave-misalignment',
+    help="Activate longwave misalignment. By that it checks if the case file" +
+         " has the necessary information (vectors and length) to run a FLT" +
+         " case with the longwave misalignment.", action='store_true',
+         default=False)
 
 # The no graphics is in reverse as this is actually flag to creating the
 # images.
@@ -156,31 +159,30 @@ if args.command == "run":
     case.create_graphics = args.no_graphics
 
     print("Configuring case for run.")
-    if not args.dry_run:
-        case.prepare()
+    case.prepare()
 
     print("Checking if output file contains already the FLT data.")
-    if not args.dry_run:
-        case.see_if_results_exists(output_directory=output_directory)
+    case.see_if_results_exists(output_directory=output_directory)
 
     print("Creating output result file if necessary")
-    if not args.dry_run:
-        case.create_result_file_if_necessary()
+    case.create_result_file_if_necessary()
 
     print("Running case")
-    if not args.dry_run:
-        case.main()
+    case.main()
 
     # Check if we do a rotational misalignment
     if args.rotational_misalignment:
         print("Running with rotational misalignment. Checking if geometry has")
-        print("information about the axis")
-        if not "rot_axes" in geo_obj.data:
-            print(f"No points specifying the rot_axes for {geo_obj.data['name']}")
+        print("information about the axes")
+        rot_mis_dict = geo_obj.data["rotational_misalignment"]
+        if not "vectors" in geo_obj.data:
+            print(f"No vectors entry in rotational_misalignment!")
             sys.exit(1)
-        if not "rot_theta" in geo_obj.data:
-            print(f"No points specifying the rot_theta for {geo_obj.data['name']}")
+        rotational_vectors = rot_mis_dict["vectors"]
+        if not "angles" in geo_obj.data:
+            print(f"No angles entry in rotational_misalignment!")
             sys.exit(1)
+        rotational_angles = rot_mis_dict["angles"]
         # Now that we have everything, we need to prepare the 7 cases.
         # First case is the normal case that you have, while the other 6 cases
         # are the rotational cases around it's axes.
@@ -188,7 +190,7 @@ if args.command == "run":
         print("Now running for different rotations")
 
         # In total there should be 2 * Number of axes of rotations performed.
-        N = len(geo_obj.data["rot_axes"]) // 2
+        N = len(rotational_vectors) // 2
 
         # Since we already generated the images, do not generate new images
         case.create_graphics = False
@@ -196,43 +198,96 @@ if args.command == "run":
         output_base_med_name = case.case_name
         import numpy as np
         for index in range(N):
-            for j in range(2):
-                # Iterate for each rotation. Twice.
-                p1 = np.array(geo_obj.data["rot_axes"][index * 2])
-                p2 = np.array(geo_obj.data["rot_axes"][index * 2 + 1])
-                angle = (2 * j - 1) * geo_obj.data["rot_theta"]
-                print(f"Rotating for {angle} degrees")
-                # Change the name
-                output_med_name = f"{output_base_med_name}_rot{2*index+j}.med"
-                case.med_obj = orig_med.rotateMesh(p1, p2, angle)
-                # First we need to delete the old target mesh in the Embree
-                # object.
+            for angle in rotational_angles:
+                for j in range(2):
+                    # Iterate for each rotation. Twice.
+                    p1 = np.array(rotational_vectors[index * 2])
+                    p2 = np.array(rotational_vectors[index * 2 + 1])
+                    angle = (2 * j - 1) * geo_obj.data["rot_theta"]
+                    print(f"Rotating for {angle} degrees")
+                    # Change the name
+                    output_med_name = f"{output_base_med_name}_rot{2*index+j}_{angle:.2f}_degree.med"
+                    case.med_obj = orig_med.rotateMesh(p1, p2, angle)
+                    # First we need to delete the old target mesh in the Embree
+                    # object.
 
-                target_geom_id = -1
-                for pair in case.embree_shadow_geom_ids:
-                    if pair[1] == geo_obj.data["target_mesh"]:
-                        target_geom_id = pair[0]
-                        case.embree_shadow_geom_ids.remove(pair)
-                        break
-                if target_geom_id != -1:
-                    print("Removing target mesh from embree (self-shadowing)")
-                    print("In order to load the rotated mesh")
-                    print(f"Geom ID removed {target_geom_id}")
-                    case.flt_obj.embree_obj.deleteMesh(target_geom_id)
-                print("Now loading the rotated mesh into shadow")
-                points, cells = case.med_obj.getMeshData()
-                case.flt_obj.setTargetData(points, cells)
-                new_geom_id = case.flt_obj.embree_obj.commitMesh(
-                    case.flt_obj.target_vertices * case.flt_obj.parameters.target_dim_mul,
-                    case.flt_obj.target_triangles)
-                print(f"Geom_id of target mesh in self-shadowing is {new_geom_id}")
-                case.embree_shadow_geom_ids.append((new_geom_id, geo_obj.data["target_mesh"]))
+                    target_geom_id = -1
+                    for pair in case.embree_shadow_geom_ids:
+                        if pair[1] == geo_obj.data["target_mesh"]:
+                            target_geom_id = pair[0]
+                            case.embree_shadow_geom_ids.remove(pair)
+                            break
+                    if target_geom_id != -1:
+                        print("Removing target mesh from embree (self-shadowing)")
+                        print("In order to load the rotated mesh")
+                        print(f"Geom ID removed {target_geom_id}")
+                        case.flt_obj.embree_obj.deleteMesh(target_geom_id)
+                    print("Now loading the rotated mesh into shadow")
+                    points, cells = case.med_obj.getMeshData()
+                    case.flt_obj.setTargetData(points, cells)
+                    new_geom_id = case.flt_obj.embree_obj.commitMesh(
+                        case.flt_obj.target_vertices * case.flt_obj.parameters.target_to_m,
+                        case.flt_obj.target_triangles)
+                    print(f"Geom_id of target mesh in self-shadowing is {new_geom_id}")
+                    case.embree_shadow_geom_ids.append((new_geom_id, geo_obj.data["target_mesh"]))
 
-                # case.reset_flt_obj()
-                # case.load_target_mesh()
-                # case.load_shadow_meshes()
-                # case.set_flt_objs()
+                    # case.reset_flt_obj()
+                    # case.load_target_mesh()
+                    # case.load_shadow_meshes()
+                    # case.set_flt_objs()
 
+                    case.see_if_results_exists(output_directory=output_directory,
+                        med_file_name=output_med_name)
+                    # Change the case name, so that the HLM data and everythin else
+                    # get's computed only once, but change the result file path.
+                    case.result_file_path = os.path.join(output_directory, output_med_name)
+                    case.case_name = output_base_med_name
+                    case.create_result_file_if_necessary()
+                    print("Running case")
+                    case.main()
+                    print("Done")
+
+    if args.longwave_misalignment:
+        # In this case we have to load the whole case again, with the meshes,
+        # since we are moving *all* meshes along a vector.
+        if "longwave_misalignment" not in geo_obj.data:
+            print("No longwave_misalignment entry in yaml file! Stopping")
+            sys.exit(1)
+
+        lw_mis_dict = geo_obj.data["longwave_misalignment"]
+        # Now get the vectors
+        if "vectors" not in lw_mis_dict:
+            print("No vectors entry in longwave_misalignment! Stopping")
+            sys.exit(1)
+        longwave_vectors = lw_mis_dict["vectors"]
+
+        if "lengths" not in lw_mis_dict:
+            print("No lengths entry in longwave_misalignment! Stopping")
+            sys.exit(1)
+        longwave_lengths = lw_mis_dict["lengths"]
+
+        # Now we loop by vector and then by lengths
+        import numpy as np
+        output_base_med_name = case.case_name
+        for i, lw_vector in enumerate(longwave_vectors):
+            for lw_length in longwave_lengths:
+                print("Running case for longwave misalignment with directional vector:")
+                print(lw_vector)
+                print(f"With the length: {lw_length} mm.")
+
+                output_med_name = f"{output_base_med_name}_lw_{i}_{lw_length}_mm.med"
+                # Create a new case!
+                case = l2g.workflow.create_case(geo_obj, equ_obj, hlm_obj)
+                case.create_graphics = False
+
+                case.longwave_misalignment = True
+                # Add the vector.
+                case.longwave_vector = list(np.array(lw_vector) * lw_length)
+
+                print("Configuring case for run for longwave misalignment.")
+                case.prepare()
+
+                print("Checking if output file contains already the FLT data.")
                 case.see_if_results_exists(output_directory=output_directory,
                     med_file_name=output_med_name)
                 # Change the case name, so that the HLM data and everythin else
@@ -240,7 +295,13 @@ if args.command == "run":
                 case.result_file_path = os.path.join(output_directory, output_med_name)
                 case.case_name = output_base_med_name
                 case.create_result_file_if_necessary()
+
+                print("Creating output result file if necessary")
+                case.create_result_file_if_necessary()
+
                 print("Running case")
                 case.main()
-                print("Done")
+
+        pass
+
     sys.exit(0)
