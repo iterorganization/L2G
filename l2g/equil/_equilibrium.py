@@ -68,8 +68,8 @@ class Equilibrium(object):
         self.wall_contour_r: list = []
         self.wall_contour_z: list = []
 
-        self.mag_axis_r: int = -1
-        self.mag_axis_z: int = -1
+        self.mag_axis_r: float = -1.0
+        self.mag_axis_z: float = -1.0
 
         self.grid_dim_r: int = -1
         self.grid_dim_z: int = -1
