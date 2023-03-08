@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 
 from l2g.equil import Equilibrium, EQ
-import numpy as np
-
-from typing import Tuple
 
 from l2g.plot._plot_psi import plot_psi
 
@@ -135,7 +132,7 @@ def createLcfsMovie(equilibriums, labels, legend_name='Legend',
             while lines:
                 lines.pop(0).remove()
 
-            eq.setEquilibrioum(equilibriums[i])
+            eq.setEquilibrium(equilibriums[i])
             eq.evaluate()
             path = eq.getContourPaths(flux=eq.psiLCFS)
             lines += plotPolyLine(ax, path, label=labels[i], color='b')
