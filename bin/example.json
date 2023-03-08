@@ -38,7 +38,7 @@
         "max_connection_length": 50, // in meters
         "self_intersection_avoidance_length": 0.01,
         "num_of_threads": 4,
-        "target_dim_mul": 1e-3
+        "target_to_m": 1e-3
     },
     "options":{
         "switch_runFLT": 1
