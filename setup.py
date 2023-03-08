@@ -142,8 +142,10 @@ def prepare_cython_extensions(pyx_files: List[Path], root_path):
             language="c++",
         )
 
-        # Cythonize returns a list
-        extensions += cythonize(ext, annotate=True)
+        # Cythonize returns a list.
+        # Add embedsignature so that the functions are visible by Sphinx.
+        extensions += cythonize(ext, annotate=True,
+                                compiler_directives={'embedsignature': True})
 
     return extensions
 
