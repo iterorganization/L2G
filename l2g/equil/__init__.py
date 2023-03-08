@@ -2,11 +2,17 @@ from ._equilibrium import Equilibrium, correct_equilibrium_helicity
 from ._eqdskg import EQDSKIO
 from ._eq import EQ
 
+def getEquilibriumFromEQFile(eqdsk_file: str, correct_helicity: bool = True) -> Equilibrium:
+    """Gather the data required from an EQDSKIO object and populate the
+    Equilibrium class.
+    """
+
+    eqdsk = EQDSKIO(eqdsk_file)
+    return getEquilibriumFromEQDSKG(eqdsk)
+
 def getEquilibriumFromEQDSKG(eqdsk_obj: EQDSKIO, correct_helicity=True) -> Equilibrium:
     """Gather the data required from an EQDSKIO object and populate the
     Equilibrium class.
-
-    Note
     """
     import numpy as np
     obj = Equilibrium()
@@ -56,8 +62,28 @@ def getEquilibriumFromEQDSKG(eqdsk_obj: EQDSKIO, correct_helicity=True) -> Equil
 
     return obj
 
+def getEquilibriumFromIMASSlice(shot: int, run: int, user: str = "public",
+        machine: str = "iter", time: float = 0.0, data_version: str = "3",
+        correct_helicity: bool = True) -> Equilibrium:
+
+    import imas
+    import imas.imasdef
+    db_entry = imas.DBEntry(shot=shot, run=run, user_name=user,
+        db_name=machine, backend_id=imas.imasdef.MDSPLUS_BACKEND,
+        data_version=data_version)
+    db_entry.open()
+    summary_ids = db_entry.get("summary")
+    wall_ids = db_entry.get("wall")
+
+    equilibrium_ids = db_entry.get_slice("equilibrium", time,
+                                         imas.imasdef.CLOSEST_INTERP)
+
+    equilibrium =  getEquilibriumFromIMAS(equilibrium_ids.time_slice[0],
+        wall_ids, summary_ids, correct_helicty=correct_helicity)
+    return equilibrium
+
 def getEquilibriumFromIMAS(equilibrium_ids_time_slice, wall_ids,
-                           summary_ids=None, correct_helicty=True):
+                           summary_ids=None, correct_helicty=True) -> Equilibrium:
     """Populate the Equilibrium class with relevant data.
 
     Optional:
