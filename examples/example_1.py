@@ -38,4 +38,12 @@ flt.setEquilibrium(equilibrium)
 flt.setTargetData(vertices, cells)
 flt.setEmbreeObj(embree_obj)
 
+# Change parameters or options here.
+# flt.parameters...
+# flt.options...
+
+# Finally, to commit changes
+case.applyParameters() # Propagates parameters to the C++ code
+case.loadEq() # Loads the equilibrium data to the FLT kernel
+
 flt.runFltOnMesh()

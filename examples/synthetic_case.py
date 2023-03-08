@@ -204,8 +204,8 @@ case.parameters.self_intersection_avoidance_length = 0.0005
 case.parameters.time_end = 30
 
 # Target is already in meters!
-case.parameters.target_dim_mul = 1
-case.parameters.shadow_dim_mul = 1
+case.parameters.target_to_m = 1
+case.parameters.shadow_to_m = 1
 
 # Finally, to commit changes
 case.applyParameters() # Propagates parameters
