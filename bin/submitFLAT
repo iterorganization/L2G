@@ -62,3 +62,4 @@ export MPLBACKEND=Agg
 
 CPUS_PER_TASK=${CPUS_PER_TASK:-$(sinfo -p ${PARTITION_NAME} -O "cpus" --noheader)}
 sbatch --job-name=${JOB_NAME} --output=${LOG_NAME} --partition=${PARTITION_NAME} --cpus-per-task=${CPUS_PER_TASK} --nodes=1 ${SCRIPTPATH}/FLAT.sbatch "${CONF_FILE}" "${flatopts[@]}"
+echo "Log file: ${LOG_NAME}"
