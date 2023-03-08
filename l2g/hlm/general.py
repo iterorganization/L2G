@@ -85,14 +85,18 @@ def custom(drsep: np.ndarray, points: np.ndarray,
     """Applies a custom profile by providing points array and the profile
     values on the points.
 
+    Essentially it is a typical interpolation function that takes 3 arrays,
+    two of which is used to create a 1D Spline interpolant and then another
+    array of points where we wish to calculate the interpolated values.
+
     Returns:
         q (arr): ELM heat load profile
 
     Arguments:
-        drsep (arr): 1D array of distances from the midplane. In meters.
-        points (arr): 1D array of X-axis of the numerical ELM profile.
-            In meters.
-        profile (arr): 1D array of numerical values of ELM. In Watts.
+        drsep (arr): 1D array of distances from the midplane.
+        points (arr): 1D array of points where we wish to interpolate the
+            values of the profile function.
+        profile (arr): 1D array of numerical values of the profile function.
     """
     from scipy.interpolate import interp1d
 
