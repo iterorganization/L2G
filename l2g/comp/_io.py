@@ -10,7 +10,7 @@ import os
 import logging
 log = logging.getLogger(__name__)
 
-from typing import Union
+from typing import Union, Optional
 
 class MEDMeshIO():
     """Wrapper class for IO of MED object/files. Also to hold the
@@ -95,6 +95,31 @@ class MEDMeshIO():
         med_umesh_file.setMeshAtLevel(0, med_mesh)
         return out
 
+    def translateMesh(self, vector: np.ndarray, copy: bool=False) -> Optional['MEDMeshIO']:
+        """Translate the mesh data along the provided vector.
+
+        It creates a new MEDMeshIO, since it creates a copy in any case and it
+        is sometimes useful if we retain the original data.
+        """
+        if self.med_mesh is None:
+            log.error("Could not read mesh data as no MED file is loaded")
+            return None
+
+        if not copy:
+            self.med_mesh.translate(vector)
+            return
+        else:
+            out = MEDMeshIO()
+            # First create a deep copy of the mesh.
+            med_umesh_file: mc.MEDFileUMesh = mc.MEDFileUMesh.New()
+            med_mesh: mc.MEDCouplingUMesh = self.med_mesh.deepCopy()
+
+            out.med_umesh_file = med_umesh_file
+            out.med_mesh = med_mesh
+
+            med_mesh.translate(vector)
+            med_umesh_file.setMeshAtLevel(0, med_mesh)
+            return out
 
     def getMeshData(self):
         """Return the vertices and triangles of the mesh file.
@@ -185,6 +210,9 @@ def load_flt_mesh_results_from_med(mesh_results: L2GResults, med_object: MEDMesh
     mesh_results.drsep = med_object.getArray("drsep") * 1e-3 # Convert to m
     mesh_results.conlen = med_object.getArray("conlen") * 1e-3 # convert to m
     mesh_results.flux = med_object.getArray("flux")
+
+    # Necessary for the mask.
+    mesh_results.geom_hit_ids = med_object.getArray("geom_hit_ids")
 
     # Necessary for FL
     # Necessary to flatten!
