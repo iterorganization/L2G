@@ -242,12 +242,12 @@ class L2GFLs:
     """Class that holds calculated FLs on given target triangles.
     """
 
-    __slots__ = ["points", "target_dim_mul"]
+    __slots__ = ["points", "target_to_m"]
 
     def __init__(self):
         # List of Ids
         self.points: Optional[np.ndarray] = None
-        self.target_dim_mul: Optional[int] = 1.0 # What inverse scale to use to
+        self.target_to_m: Optional[int] = 1.0 # What inverse scale to use to
                                                  # transform to the same
                                                  # unit dimension as used
                                                  # target.
@@ -283,8 +283,8 @@ class L2GFLs:
         lengths = []
 
         for line in self.points:
-            r = np.asarray(line[::3]) / self.target_dim_mul
-            z = np.asarray(line[1::3]) / self.target_dim_mul
+            r = np.asarray(line[::3]) / self.target_to_m
+            z = np.asarray(line[1::3]) / self.target_to_m
             phi = np.asarray(line[2::3])
             x = r * np.cos(phi)
             y = r * np.sin(phi)

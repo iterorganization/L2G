@@ -70,7 +70,8 @@ class GEOMETRY(DATA_BLOCK):
     required_keys = ["name", "target_mesh", "shadow_meshes"]
     optional_keys = ["cutoff", "parameters", "fl_ids", "exclude_meshes",
                      "include_target_in_shadow", "afl_catcher_meshes",
-                     "rot_axes", "rot_theta", "align_lcfs"]
+                     "rot_axes", "rot_theta", "align_lcfs",
+                     "longwave_misalignment", "rotational_misalignment"]
 
     def __init__(self):
         super(GEOMETRY, self).__init__()
@@ -82,7 +83,8 @@ class EQUILIBRIUM(DATA_BLOCK):
     optional_keys: list = ["eqdsk_files", "imas", "custom_wall_limiter",
                            "wall_limiter_r", "wall_limiter_z",
                            "wall_silh_r_shift", "wall_silh_z_shift",
-                           "plasma_r_displ", "plasma_z_displ"]
+                           "plasma_r_displ", "plasma_z_displ",
+                           "custom_lcfs_values"]
     def __init__(self):
         super(EQUILIBRIUM, self).__init__()
         self.data: dict = {"custom_wall_limiter": False}
@@ -207,7 +209,7 @@ class CASE(object):
         # Align LCFS
         self.align_lcfs: bool = False
         # Custom LCFS values
-        self.custom_lcfs_values: bool = False
+        self.custom_lcfs_values: list = []
         self.lcfs_values: List[float] = []
 
         # For obtaining FLs.
@@ -217,6 +219,9 @@ class CASE(object):
         self.get_field_lines: bool = True
         self.apply_heat_load: bool = True
         self.create_graphics: bool = True
+
+        self.longwave_misalignment: bool = False
+        self.longwave_vector: np.ndarray = np.array([])
 
         # Sub-graphics
         self.plot_heat_loads: bool = True
@@ -273,7 +278,7 @@ class CASE(object):
                 if flt.target_vertices is not None:
                     log.info("Including target to shadowing Embree.")
                     geom_id = flt.embree_obj.commitMesh(
-                        flt.target_vertices * flt.parameters.target_dim_mul,
+                        flt.target_vertices * flt.parameters.target_to_m,
                         flt.target_triangles)
                     geom_ids.append((geom_id, d["target_mesh"]))
                 else:
@@ -281,18 +286,39 @@ class CASE(object):
 
         log.info(f"Loading {len(shadowMeshFiles)} mesh/es to Embree.")
         for filePath in shadowMeshFiles:
-            fileName = os.path.basename(filePath)
-            v, t = l2g.utils.meshio.readMesh(filePath)
-            geom_id = flt.embree_obj.commitMesh(v * 1e-3, t)
+            if not os.access(filePath, os.R_OK | os.F_OK):
+                log.error(f"File {filePath} either does not exist or cannot be read!")
+                raise IOError
+
+            log.info(f"Loading {filePath}...")
+            med_obj = l2g.comp.MEDMeshIO()
+            med_obj.readMeshFromMedFile(filePath)
+
+            if self.longwave_misalignment:
+                log.info("Applying longwave_misalignment to mesh.")
+                med_obj.translateMesh(self.longwave_vector)
+
+            v, t = med_obj.getMeshData()
+            geom_id = flt.embree_obj.commitMesh(v * flt.parameters.shadow_to_m, t)
             geom_ids.append((geom_id, filePath))
+
 
         if "afl_catcher_meshes" in d:
             afl_catcher_meshes = d["afl_catcher_meshes"]
             log.info(f"Loading {len(afl_catcher_meshes)} meshes, for catching " +
                      "and marking FLs as shadowed")
+            import l2g.comp
             for filePath in afl_catcher_meshes:
-                v, t = l2g.utils.meshio.readMesh(filePath)
-                geom_id = flt.embree_obj.commitMesh(v * 1e-3, t)
+                log.info(f"Loading {filePath}...")
+                med_obj = l2g.comp.MEDMeshIO()
+                med_obj.readMeshFromMedFile(filePath)
+                # v, t = l2g.utils.meshio.readMesh(filePath)
+                if self.longwave_misalignment:
+                    log.info("Applying longwave_misalignment to mesh.")
+                    med_obj.translateMesh(self.longwave_vector)
+
+                v, t = med_obj.getMeshData()
+                geom_id = flt.embree_obj.commitMesh(v * flt.parameters.shadow_to_m, t)
                 flt.parameters.artificial_fl_catcher_geom_id.add(geom_id)
                 fileName = os.path.basename(filePath)
                 log.info(f"Loaded {fileName} as {geom_id}")
@@ -346,6 +372,9 @@ class CASE(object):
         self.med_obj = l2g.comp.MEDMeshIO()
         log.info(f"Reading target mesh data from: {self.geo_obj.data['target_mesh']}")
         self.med_obj.readMeshFromMedFile(self.geo_obj.data["target_mesh"])
+        if self.longwave_misalignment:
+            log.info("Applying longwave_misalignment to mesh.")
+            self.med_obj.translateMesh(self.longwave_vector)
 
     def prepare(self):
         # It just sets the input file
@@ -386,6 +415,7 @@ class CASE(object):
             self.plasma_r_displ = self.equ_obj.data["plasma_r_displ"]
         if "plasma_z_displ" in self.equ_obj.data:
             self.plasma_z_displ = self.equ_obj.data["plasma_z_displ"]
+        self.ite_obj.applyPlasmaShift(self.plasma_r_displ, self.plasma_z_displ)
 
         if "wall_silh_r_shift" in self.equ_obj.data:
             self.wall_silh_r_shift = self.equ_obj.data["wall_silh_r_shift"]

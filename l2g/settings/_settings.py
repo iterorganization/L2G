@@ -43,7 +43,7 @@ class Parameters(BaseClassOptions):
                "wall_silh_z_displ", "time_end",
                "time_step", "max_connection_length",
                "self_intersection_avoidance_length", "abs_error", "rel_error",
-               "target_dim_mul", "shadow_dim_mul", "num_of_threads",
+               "target_to_m", "shadow_to_m", "num_of_threads",
                "side", #"P_sol", "F_split", "q_parallel", "lambda_q_main",
                # "lambda_q_near", "R_q",
                "rd_ip_transition",
@@ -82,9 +82,9 @@ class Parameters(BaseClassOptions):
         self.abs_error = 1e-4
         self.rel_error = 1e-4
 
-        #: The following targetDimMul is used to transform the units of mesh
+        #: The following target_to_m is used to transform the units of mesh
         #: data to meters.
-        self.target_dim_mul = 1e-3
+        self.target_to_m = 1e-3
 
         #: The following shadoDimMul is used to transform the units of
         #: coordinates of a ray when ray tracing into the same units that is the
@@ -92,7 +92,7 @@ class Parameters(BaseClassOptions):
         #: I.e. : shadowing geometry has mm, while rays are in meters, therefore
         #: we multiple the points of a ray to meters by multiplying with this
         #: factor.
-        self.shadow_dim_mul = 1000
+        self.shadow_to_m = 1e-3
 
         #: Parameter for specifying number of CPU threads. For use with Cython
         #: OpenMP.

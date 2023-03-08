@@ -24,8 +24,11 @@ def load_yaml_configuration(yaml_text: str) -> Tuple[List[GEOMETRY], List[EQUILI
             FLT component, a list of equilibriums and a list of heat load
             mappings.
     """
-
-    data = yaml.safe_load_all(yaml_text)
+    try:
+        data = yaml.safe_load_all(yaml_text)
+    except Exception:
+        log.error("Something went wrong with reading the YAML file. Check the syntax!")
+        raise Exception
 
     geometry_objects: List[GEOMETRY] = []
     equilibrium_objects: List[EQUILIBRIUM] = []
@@ -350,6 +353,17 @@ def load_flt_settings(d: dict, flt) -> None:
         else:
             shadowMeshFiles.append(fileName)
 
+    # Check if files exist
+    non_existing_meshes = []
+    for file in shadowMeshFiles:
+        if not os.access(file, os.R_OK | os.F_OK):
+            non_existing_meshes.append(file)
+    if len(non_existing_meshes) > 0:
+        log.error("One or more shadow meshes does not exist or cannot be read!")
+        log.error(f"List of files: {non_existing_meshes}")
+        sys.exit(-1)
+
+
     if "exclude_meshes" in d:
         mesh_to_remove = []
         # Since files are actual paths it is the easiest to just loop the list
@@ -367,7 +381,7 @@ def load_flt_settings(d: dict, flt) -> None:
         log.info("Including target to shadowing Embree.")
         if d["include_target_in_shadow"]:
             geom_id = flt.embree_obj.commitMesh(
-                verticesTarget * flt.parameters.target_dim_mul,
+                verticesTarget * flt.parameters.target_to_m,
                 trianglesTarget)
             geom_ids.append((geom_id, d["target_mesh"]))
 
@@ -405,7 +419,7 @@ def load_elm_settings(d: dict, flt: 'FieldLineTracer') -> None:
     flt.parameters.time_end = 2 * 3.141592653
     flt.parameters.max_connection_length = 1000
     flt.options.switch_runFLT = 1
-    flt.parameters.target_dim_mul = 1
+    flt.parameters.target_to_m = 1
 
     set_parameters_and_options(d, flt)
 

@@ -222,7 +222,7 @@ class FieldLineTracer:
         l2g.comp.core.processData(flt_obj=self.flt_obj,
             tg_vertices=self.target_vertices,
             tg_cells=self.target_triangles, results=self.mesh_results,
-            dim_mul=self.parameters.target_dim_mul)
+            dim_mul=self.parameters.target_to_m)
         log.info(f"Processing done in {perf_counter() - start:.2f} seconds")
 
     def processDataOnPoints(self) -> None:
@@ -238,7 +238,7 @@ class FieldLineTracer:
         import l2g.comp.core
         l2g.comp.core.processDataOnPoints(flt_obj=self.flt_obj,
             tg_vertices=self.target_points, results=self.point_results,
-            dim_mul=self.parameters.target_dim_mul)
+            dim_mul=self.parameters.target_to_m)
         log.info(f"Processing done in {perf_counter() - start:.2f} seconds")
 
     def getFL(self) -> None:
@@ -273,8 +273,8 @@ class FieldLineTracer:
         import l2g.comp.core
         self.fl_results = l2g.comp.core.getFL(self.flt_obj, self.target_vertices,
             self.target_triangles, self.fl_ids, self.mesh_results,
-            self.parameters.target_dim_mul, self.options.switch_getFL_with_FLT)
-        self.fl_results.target_dim_mul = self.parameters.target_dim_mul
+            self.parameters.target_to_m, self.options.switch_getFL_with_FLT)
+        self.fl_results.target_to_m = self.parameters.target_to_m
         # Now scale the R, Z, depending on the target dim_mul, so that the
         # generated VTK has the same units as the target mesh.
         log.info(f"Finished getting FLs in {perf_counter() - start} seconds.")
@@ -305,7 +305,7 @@ class FieldLineTracer:
         import l2g.comp.core
         l2g.comp.core.runFLT(self.flt_obj, self.target_vertices,
             self.target_triangles, self.parameters.num_of_threads,
-            self.mesh_results, self.parameters.target_dim_mul)
+            self.mesh_results, self.parameters.target_to_m)
 
         # Additionally create the mask which shows the final plasma pattern
         self.mesh_results.mask = self.applyShadowMask(
@@ -327,7 +327,7 @@ class FieldLineTracer:
             tg_vertices=self.target_points,
             user_num_threads=self.parameters.num_of_threads,
             results=self.point_results,
-            dim_mul=self.parameters.target_dim_mul)
+            dim_mul=self.parameters.target_to_m)
 
         log.info(f"Finished. It took {perf_counter() - start} seconds.")
 
