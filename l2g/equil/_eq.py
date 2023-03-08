@@ -48,12 +48,16 @@ class SplineInterpolator(object):
         return self.Interp.ev(z - self.z_displ, r - self.r_displ, dx=dz, dy=dr)
 
 
-def checkIfOnEdge(ex: list, ey: list, tx: float, ty: float) -> bool:
-    """Checks if point (tx, ty) lies on the edge.
+def checkIfOnEdge(px1: float, py1: float, px2: float, py2: float, tx: float,
+                   ty: float) -> bool:
+    """Checks if point (tx, ty) lies on the edge. Using cross product instead
+    of square root methods, which is much slower.
 
     Arguments:
-        ex (list) : X values of edge vertices
-        ey (list) : Y values of edge vertices
+        px1 (float) : X values of an edge vertice
+        py1 (float) : Y values of an edge vertice
+        px1 (float) : X values of an edge vertice
+        py1 (float) : Y values of an edge vertice
         tx (float): X position of test point
         ty (float): Y position of test point
 
@@ -62,10 +66,13 @@ def checkIfOnEdge(ex: list, ey: list, tx: float, ty: float) -> bool:
     """
     c = False
 
-    d1 = np.sqrt((ex[0] - tx)**2 +  (ey[0] - ty)**2)
-    d2 = np.sqrt((ex[1] - tx)**2 +  (ey[1] - ty)**2)
-    D = np.sqrt((ex[0] - ex[1])**2 +  (ey[0] - ey[1])**2)
-    if np.allclose(d1 + d2, D):
+    dx1 = tx - px1
+    dy1 = ty - py1
+
+    dx2 = px2 - px1
+    dy2 = py2 - py1
+
+    if np.allclose(dx1 * dy2 - dx2 * dy1, 0):
         c = True
 
     return c
@@ -90,13 +97,17 @@ def checkIfPointInPoly(polyX: list, polyY: list, tx: float, ty: float) -> bool:
     j = N - 1
     for i in range(N):
         # First check if point is on the edge of these two points.
-        if checkIfOnEdge([polyX[i], polyX[j]], [polyY[i], polyY[j]], tx, ty):
+        px1 = polyX[i]
+        py1 = polyY[i]
+        px2 = polyX[j]
+        py2 = polyY[j]
+        if checkIfOnEdge(px1, py1, px2, py2, tx, ty):
             return True
 
         # Use the recipe for Ray-Casting method, taken from:
         # https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html
-        if (polyY[i] > ty) != (polyY[j] > ty) and \
-           (tx < (polyX[j] - polyX[i]) * (ty - polyY[i]) / (polyY[j] - polyY[i]) + polyX[i]):
+        if (py1 > ty) != (py2 > ty) and \
+           (tx < (px2 - px1) * (ty - py1) / (py2 - py1) + px1):
            c = not c
         j = i
     return c
@@ -747,6 +758,8 @@ class EQ:
         # plt.show()
         log.info("Surface tracked, now to see if the points of the surface " +
                  "lies inside the tokamak.")
+        # Ok now save the other points of the LCFS contour
+        self._lcfs_points_2 = solver.y.T
         for i in range(len(solver.y[0])):
             # print(solver.y[0, i], end='asd')
             t = checkIfPointInPoly(RLIM, ZLIM, solver.y[0, i], solver.y[1, i])
@@ -755,8 +768,6 @@ class EQ:
                          "diverted equilibrium.")
                 return False, None, None
 
-        # Ok now save the other points of the LCFS contour
-        self._lcfs_points_2 = solver.y.T
 
         log.info("Surface lies inside tokamak. Limiter configuration.")
 
