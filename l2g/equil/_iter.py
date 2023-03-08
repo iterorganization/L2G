@@ -2,7 +2,6 @@ from l2g.equil import (getEquilibriumFromIMAS, getEquilibriumFromEQDSKG,
                        EQDSKIO, Equilibrium)
 import glob
 import os
-import numpy as np
 
 import logging
 log = logging.getLogger(__name__)
@@ -178,3 +177,21 @@ class EquilibriumIterator(object):
             # Modify the wall silhouette points
             equilibrium.wall_contour_r = [_ + r_shift for _ in equilibrium.wall_contour_r]
             equilibrium.wall_contour_z = [_ + z_shift for _ in equilibrium.wall_contour_z]
+
+    def applyPlasmaShift(self, r_shift: float | List[float], z_shift: float | List[float]):
+        if isinstance(r_shift, list):
+            if not len(r_shift) == len(self):
+                log.error('You have applied a list of radial and vertical shifts to the plasma')
+
+            for i,equilibrium in enumerate(self._equilibriums):
+                equilibrium.mag_axis_r += r_shift[i]
+                equilibrium.mag_axis_z += z_shift[i]
+                equilibrium.grid_r += r_shift[i]
+                equilibrium.grid_z += z_shift[i]
+        else:
+            for equilibrium in self._equilibriums:
+                # Apply shift to the equilibrium
+                equilibrium.mag_axis_r += r_shift
+                equilibrium.mag_axis_z += z_shift
+                equilibrium.grid_r += r_shift
+                equilibrium.grid_z += z_shift
