@@ -109,7 +109,7 @@ class EQUILIBRIUM(DATA_BLOCK):
 
 class HLM(DATA_BLOCK):
     required_keys: list = ["name", "hlm_type"]
-    optional_keys: list = ["ip_transition", "r_break", "parameters", "ratio"]
+    optional_keys: list = ["ip_transition", "r_break", "parameters", "ratio", "p_sol"]
     elm_required: list = ["shadow_meshes"]
     single_required: list = ["p_sol", "lambda_q"]
     double_required: list = ["p_sol", "lambda_q_near", "lambda_q_main"]
@@ -649,6 +649,12 @@ class CASE(object):
                     self.med_obj.writeArray(
                         array=self.flt_obj.hlm_results.additional_arrays[3],
                         array_name=r"$T_i$ [eV]")
+                    self.med_obj.writeArray(
+                        array=self.flt_obj.hlm_results.additional_arrays[4],
+                        array_name=r"$q_{\perp}\;\;[\frac{W}{m^2}]$ ELM")
+                    self.med_obj.writeArray(
+                        array=self.flt_obj.hlm_results.additional_arrays[5],
+                        array_name=r"$q_{\perp}\;\;[\frac{W}{m^2}]$ inter-ELM")
                 elif hlm_type == "ramp-down":
                     lambda_q = self.flt_obj.hlm_results.additional_arrays[0]
                     log.info(f'[RAMP DOWN]: i={index} t={associated_time:.3f} lq={lambda_q:.2f} Ip={self.flt_obj.equilibrium.Ip:.2e}')

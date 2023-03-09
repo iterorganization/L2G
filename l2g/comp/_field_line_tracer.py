@@ -624,7 +624,7 @@ class FieldLineTracer:
         elif self.hlm_params.hlm_type == "elm":
             # The ELM data is loaded with an extra step.
             interELM = l2g.hlm.steady_state.inter_ELM(drsep, Rb, Btotal, Bpm,
-                    Rb=self.hlm_params.r_break)
+                    Rb=self.hlm_params.r_break, P_sol=self.hlm_params.p_sol)
             elm = l2g.hlm.general.custom(drsep=drsep,
                 points=self.hlm_params.points, profile=self.hlm_params.profile)
             q_par = interELM + elm
@@ -657,10 +657,15 @@ class FieldLineTracer:
             self.hlm_results.additional_arrays = [lambda_q]
         else:
             q_par = np.zeros(drsep.shape)
+
         expansion = bfield_mag / Btotal
         q_inc = q_par * Bdot / Btotal
 
         q_inc = self.applyShadowMask(q_par * Bdot / Btotal)
+        if self.hlm_params.hlm_type == "elm":
+            # Also put incident arrays for the inter-ELM and ELM
+            self.hlm_results.additional_arrays.append(self.applyShadowMask(elm * Bdot / Btotal))
+            self.hlm_results.additional_arrays.append(self.applyShadowMask(interELM * Bdot / Btotal))
 
         self.hlm_results.q_inc = q_inc
         self.hlm_results.q_par = q_par
