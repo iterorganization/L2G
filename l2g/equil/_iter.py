@@ -102,6 +102,12 @@ class EquilibriumIterator(object):
         time_start = int(d['time_start'])
         time_end = int(d['time_end'])
 
+        times = None
+        if "times" in d:
+            times = d["times"]
+            if not isinstance(d["times"], list):
+                times = [times]
+
         # OLD API
         # self._ids = imas.ids(shot, run)
         # self._ids.open_env(user, device, version)
@@ -135,13 +141,18 @@ class EquilibriumIterator(object):
         self._ids_summary = self._ids.get("summary")
 
         # Get times
-        times = self._ids_summary.time
+        if times is None:
+
+            times_indexes = np.where(np.logical_and(
+                time_start <= self._ids_summary.time,
+                self._ids_summary <= time_end))[0]
+            times = self._ids_summary.time[times_indexes]
+
+        # Extract the times
 
         log.info(f"In total {len(times)} slices.")
 
         for t in times:
-            if  t > time_end or t < time_start:
-                continue
             log.info(f"Loading time slice {t}")
             self._ids_equilibrium = self._ids.get_slice("equilibrium", t,
                 interpolation)
