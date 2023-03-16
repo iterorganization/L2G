@@ -99,8 +99,13 @@ class EquilibriumIterator(object):
         #     time_slices = np.linspace(d['time_start'], d['time_end'], n_steps)
 
         # Ignore times, time_step and focus on time_start and time_end
-        time_start = int(d['time_start'])
-        time_end = int(d['time_end'])
+        time_start = None
+        if "time_start" in d:
+            time_start = d["time_start"]
+
+        time_end = None
+        if "time_end" in d:
+            time_end = d["time_end"]
 
         times = None
         if "times" in d:
@@ -126,6 +131,7 @@ class EquilibriumIterator(object):
         # interpolation = imas.imasdef.CLOSEST_SAMPLE
         import imas
         interpolation = imas.imasdef.CLOSEST_INTERP
+        import numpy as np
 
         # New API
         self._ids = imas.DBEntry(backend_id=imas.imasdef.MDSPLUS_BACKEND,
