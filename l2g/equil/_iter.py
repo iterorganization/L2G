@@ -151,7 +151,7 @@ class EquilibriumIterator(object):
 
             times_indexes = np.where(np.logical_and(
                 time_start <= self._ids_summary.time,
-                self._ids_summary <= time_end))[0]
+                self._ids_summary.time <= time_end))[0]
             times = self._ids_summary.time[times_indexes]
 
         # Extract the times
