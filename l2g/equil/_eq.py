@@ -66,6 +66,12 @@ def checkIfOnEdge(px1: float, py1: float, px2: float, py2: float, tx: float,
     """
     c = False
 
+    # In the case the p1 and p2 is the same, ignore it.
+    if np.allclose(px1, px2) and np.allclose(py1, py2):
+        if np.allclose(tx, px1) and np.allclose(ty, py1):
+            return True
+        return False
+
     dx1 = tx - px1
     dy1 = ty - py1
 
