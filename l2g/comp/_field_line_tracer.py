@@ -283,9 +283,13 @@ class FieldLineTracer:
         """Obtain FL points that goes through the input parameters R, Z, Theta.
         """
         import l2g.comp.core
-        points = l2g.comp.core.getFlOnPoint(self.flt_obj, R, Z, Theta,
-                                            self.options.switch_getFL_with_FLT)
-
+        points = []
+        points += l2g.comp.core.getFlOnPoint(self.flt_obj, R, Z, Theta,
+                                            self.options.switch_getFL_with_FLT,
+                                            1)
+        points += l2g.comp.core.getFlOnPoint(self.flt_obj, R, Z, Theta,
+                                            self.options.switch_getFL_with_FLT,
+                                            -1)
         # Now let's order them.
         # points = points[0][::-1] + points[1]
         return points
@@ -350,9 +354,6 @@ class FieldLineTracer:
         log.info("Obtaining OWL connection length graph")
         # Getting the outer wall midplane profile.
         self.runFltOnPoints()
-
-        radial_points = 500
-        toroidal_points = 360
 
         psiLcfs = self.eq.psiLCFS
         Rb, _, _, Bpm = self.eq.getOWL_midplane()

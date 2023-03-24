@@ -536,32 +536,25 @@ def getFL(PyFLT flt_obj, float [:] tg_vertices, unsigned int [:] tg_cells,
     return fl_results
 
 def getFlOnPoint(PyFLT flt_obj, float R, float Z, float Theta,
-                 bool with_flt):
+                 bool with_flt, int direction):
     """Obtain FL points using an origin point R, Z, Theta. Tracing in both
     directions.
     """
 
     cdef :
-        vector[vector[double]] fl_results
         vector[double] fl_buffer
 
+    fl_buffer.clear()
     # Prepare the thread containers
     flt_obj.c_prepareThreadContainers()
 
     # Set initial parameters
     flt_obj.c_setIV(R, Z, Theta)
     # Set upward direction.
-    flt_obj.c_setDirection(1)
+    flt_obj.c_setDirection(direction)
 
-    fl_buffer.clear()
     flt_obj.c_getFL(fl_buffer, with_flt)
-    fl_results.push_back(fl_buffer)
 
-    # Set downward direction
-    flt_obj.c_setDirection(-1)
-
-    fl_buffer.clear()
-    flt_obj.c_getFL(fl_buffer, with_flt)
-    fl_results.push_back(fl_buffer)
-
-    return <object> fl_results
+    # Do not cast <object> on fl_buffer. Cython automatically casts and
+    # transforms the object to a python object.
+    return fl_buffer
