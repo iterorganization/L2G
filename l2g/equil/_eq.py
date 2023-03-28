@@ -740,7 +740,26 @@ class EQ:
         # plt.axis('equal')
         # plt.show()
         self._lcfs_points_1 = solver.y.T
-        for i in range(len(solver.y[0])):
+
+        # Experimental: find if the calculated trajectory make loops
+        def get_loop_index(points: np.ndarray, atol: float=1e-3) -> int:
+            index = -1
+            diff_x = points[:, 0] - points[0, 0]
+            diff_y = points[:, 1] - points[0, 1]
+            diff = diff_x**2 + diff_y**2
+
+            for i in range(1, len(diff)):
+                if np.allclose(diff[i], 0.0, atol=atol):
+                    index = i
+                    break
+
+            return index
+
+        loop_index = get_loop_index(solver.y.T)
+        if loop_index == -1:
+            loop_index = len(solver.y[0])
+
+        for i in range(loop_index):
             # print(solver.y[0, i], end='asd')
             t = checkIfPointInPoly(RLIM, ZLIM, solver.y[0, i], solver.y[1, i])
             if not t:
@@ -766,7 +785,11 @@ class EQ:
                  "lies inside the tokamak.")
         # Ok now save the other points of the LCFS contour
         self._lcfs_points_2 = solver.y.T
-        for i in range(len(solver.y[0])):
+
+        loop_index = get_loop_index(solver.y.T)
+        if loop_index == -1:
+            loop_index = len(solver.y[0])
+        for i in range(loop_index):
             # print(solver.y[0, i], end='asd')
             t = checkIfPointInPoly(RLIM, ZLIM, solver.y[0, i], solver.y[1, i])
             if not t:
