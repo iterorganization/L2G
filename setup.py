@@ -18,11 +18,26 @@ except ImportError:
     sys.exit("Numpy not found. Numpy is needed to build the extension "
              "modules.")
 
-if "L2G_CPP_ROOT_DIR" not in os.environ:
-    sys.exit("L2G_CPP_ROOT_DIR is not set! L2G_cpp is required!")
+# Find L2G_CPP_ROOTDIR
 
-if "EMBREE_ROOT_DIR" not in os.environ:
-    sys.exit("EMBREE_ROOT_DIR is not set! Embree is required!")
+L2G_CPP_ROOTDIR=None
+if "L2G_CPP_ROOT_DIR" in os.environ:
+    L2G_CPP_ROOTDIR = os.environ["L2G_CPP_ROOT_DIR"]
+elif "EBROOTL2G_CPP" in os.environ:
+    L2G_CPP_ROOTDIR = os.environ["EBROOTL2G_CPP"]
+
+
+if L2G_CPP_ROOTDIR is None:
+    sys.exit("L2G_CPP_ROOT_DIR or EBROOTL2G_CPP are not set! L2G_cpp is required!")
+
+EMBREE_ROOTDIR=None
+if "EMBREE_ROOT_DIR" in os.environ:
+    EMBREE_ROOTDIR = os.environ["EMBREE_ROOT_DIR"]
+elif "EBROOTEMBREE" in os.environ:
+    EMBREE_ROOTDIR = os.environ["EBROOTEMBREE"]
+
+if EMBREE_ROOTDIR is None:
+    sys.exit("EMBREE_ROOT_DIR or EBROOTEMBREE are not set! Embree is required!")
 
 useOpenMP = True
 
@@ -33,8 +48,10 @@ def get_include_directories():
     """
     out = []
 
-    out.append(os.path.join(os.environ['L2G_CPP_ROOT_DIR'], 'include', 'flt'))
-    out.append(os.path.join(os.environ['EMBREE_ROOT_DIR'], 'include'))
+    out.append(os.path.join(L2G_CPP_ROOTDIR, 'include', 'flt'))
+    out.append(os.path.join(EMBREE_ROOTDIR, 'include'))
+
+
 
     out.append(np.get_include())
 
@@ -56,10 +73,10 @@ def get_library_dirs():
     out = []
 
     if sys.platform == "win32":
-        out.append(os.path.join(os.environ['L2G_CPP_ROOT_DIR'], 'lib'))
-        out.append(os.path.join(os.environ['EMBREE_ROOT_DIR'], 'lib'))
+        out.append(os.path.join(L2G_CPP_ROOTDIR, 'lib'))
+        out.append(os.path.join(EMBREE_ROOTDIR, 'lib'))
     else:
-        out.append(os.path.join(os.environ['L2G_CPP_ROOT_DIR'], 'lib'))
+        out.append(os.path.join(L2G_CPP_ROOTDIR, 'lib'))
 
     return out
 
@@ -95,9 +112,9 @@ def getDataFiles():
 
     if sys.platform == "win32":
         # Gather the required DLLs
-        out.append(os.path.join(os.environ['L2G_CPP_ROOT_DIR'], 'bin', 'flt.dll'))
-        out.append(os.path.join(os.environ['EMBREE_ROOT_DIR'], 'bin', 'embree3.dll'))
-        out.append(os.path.join(os.environ['EMBREE_ROOT_DIR'], 'bin', 'tbb12.dll'))
+        out.append(os.path.join(L2G_CPP_ROOTDIR, 'bin', 'flt.dll'))
+        out.append(os.path.join(EMBREE_ROOTDIR, 'bin', 'embree3.dll'))
+        out.append(os.path.join(EMBREE_ROOTDIR, 'bin', 'tbb12.dll'))
 
     return out
 
