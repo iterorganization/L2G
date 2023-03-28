@@ -26,7 +26,7 @@ from l2g.equil import EQDSKIO, getEquilibriumFromEQDSKG
 # eqdskFiles.sort()
 eqdsks = [EQDSKIO(_) for _ in eqdskFiles]
 labels = [_.getName() for _ in eqdsks]
-equilibriums = [L2G.eq.getEquilibriumFromEQDSKG(_) for _ in eqdsks]
+equilibriums = [getEquilibriumFromEQDSKG(_) for _ in eqdsks]
 
 print('Making the movie... It can take a few minutes.')
 l2g.plot.createLcfsMovie(
