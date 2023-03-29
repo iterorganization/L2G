@@ -114,6 +114,8 @@ class HLM(DATA_BLOCK):
     single_required: list = ["p_sol", "lambda_q"]
     double_required: list = ["p_sol", "lambda_q_near", "lambda_q_main"]
     custom_required: list = ["profile_files"]
+    custom_optional: list = ["extrapolate", "outside_value"]
+
     def __init__(self):
         super(HLM, self).__init__()
         self.data = {}

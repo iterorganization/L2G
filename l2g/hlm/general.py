@@ -81,7 +81,8 @@ def double_exponential_qpar(*args, **kwargs):
     raise NotImplementedError
 
 def custom(drsep: np.ndarray, points: np.ndarray,
-           profile: np.ndarray) -> np.ndarray:
+           profile: np.ndarray, extrapolate: bool=True,
+           outside_value: float=0.0) -> np.ndarray:
     """Applies a custom profile by providing points array and the profile
     values on the points.
 
@@ -104,7 +105,10 @@ def custom(drsep: np.ndarray, points: np.ndarray,
         if not(isinstance(drsep, list)):
             drsep = [drsep]
         drsep = np.array(drsep, dtype=np.float64)
-
-    interp = interp1d(points, profile, fill_value='extrapolate')
+    if extrapolate:
+        interp = interp1d(points, profile, fill_value='extrapolate')
+    else:
+        interp = interp1d(points, profile, fill_value=outside_value,
+                          bounds_error=False)
     q = interp(drsep)
     return q

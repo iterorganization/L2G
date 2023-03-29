@@ -621,7 +621,9 @@ class FieldLineTracer:
         elif self.hlm_params.hlm_type == "custom":
             # We have points and profile
             q_par = l2g.hlm.general.custom(drsep=drsep,
-                points=self.hlm_params.points, profile=self.hlm_params.profile)
+                points=self.hlm_params.points, profile=self.hlm_params.profile,
+                extrapolate=self.hlm_params.extrapolate,
+                outside_value=self.hlm_params.outside_value)
         elif self.hlm_params.hlm_type == "elm":
             # The ELM data is loaded with an extra step.
             interELM = l2g.hlm.steady_state.inter_ELM(drsep, Rb, Btotal, Bpm,
