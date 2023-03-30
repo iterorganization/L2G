@@ -191,8 +191,7 @@ setup(
                 "l2g.plot",  "l2g.utils", "l2g.settings", "l2g.workflow"],
     data_files = [('', getDataFiles())],
     python_requires=">=3.6",
-    scripts = ['bin/runL2G', 'bin/submitL2G', 'bin/flat', 'bin/submitFLAT',
-               'bin/L2G.sbatch', 'bin/FLAT.sbatch', 'bin/imas2eqdsk',
-               'bin/mkEqdskMovie', 'bin/mkImasMovie', 'bin/med2mat',
-               'bin/plotMFlux']
+    scripts = ['bin/flat', 'bin/submitFLAT', 'bin/FLAT.sbatch',
+               'bin/imas2eqdsk', 'bin/mkEqdskMovie', 'bin/mkImasMovie',
+               'bin/med2mat', 'bin/plotMFlux']
 )
