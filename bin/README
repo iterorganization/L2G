@@ -1,1 +1,14 @@
-Folder containing scripts for running a L2G case.
+Folder containing scripts for convenience:
+
+ - flat
+   - A python command line script for running YAML described FLT cases.
+ - imas2eqdsk
+   - A convenience script that reads equilibrium data from an IMAS equilibrium time slice and saves it in EQDSKG format.
+ - med2mat
+   - A convenience script that saves the FLT data from MED file format to Matlab format
+ - mkEqdskMovie
+   - A convenience scripts that creates a movie of how the boundary changes from a provided set of EQDSK files.
+ - mkImasMovie
+   - A convenience script that creates a movie of how the boundary changed from a provided IMAS database.
+ - plotMFlux
+   - A convenience script for creation of interactive plots of the poloidal magnetic flux from an equilibrium source (IMAS, EQDSK)
