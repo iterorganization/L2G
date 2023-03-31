@@ -714,6 +714,14 @@ class CASE(object):
                             drsep=drsep, R_bdry=Rb, B_total=Btotal, B_pol=Bpm,
                             Rb=self.flt_obj.hlm_params.r_break)
                         q_par = elm_par + interELM_par
+                    elif hlm_type == "l_mod":
+                        label = "L-mod"
+                        q_par = l2g.hlm.steady_state.inter_ELM(drsep=drsep,
+                            R_bdry=Rb, B_total=Btotal, B_pol=Bpm,
+                            Rb=self.flt_obj.hlm_params.r_break,
+                            P_sol=self.flt_obj.hlm_params.p_sol,
+                            lambda_n=self.flt_obj.hlm_params.lambda_q_near,
+                            lambda_m=self.flt_obj.hlm_params.lambda_q_main)
                     elif hlm_type == "single":
                         q_par = l2g.hlm.general.single_exponential_psol(
                             drsep=drsep, Bt=Btotal, Bpm=Bpm, Rb=Rb,
