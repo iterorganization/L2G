@@ -161,6 +161,9 @@ class HLM(BaseClassOptions):
 
     acceptable_types = ["flat_top", "ramp_down", "single_exp",
                         "double_exp", "custom"]
+    # L-mod flat-top is similar to H-mod flat-top, except we use the scaling
+    # law to determine the lambda_q_near and also use it as a r_break!
+    l_mod = ["r_break", "p_sol", "lambda_q_near", "lambda_q_main"]
 
     def __init__(self):
         self.hlm_type: str = ""
