@@ -644,6 +644,13 @@ class FieldLineTracer:
             self.hlm_results.additional_arrays.append(interELM)
             self.hlm_results.additional_arrays.append(self.applyShadowMask(Te))
             self.hlm_results.additional_arrays.append(self.applyShadowMask(Ti))
+        elif self.hlm_params.hlm_type == "l_mod":
+            q_par = l2g.hlm.steady_state.inter_ELM(drsep=drsep,
+                R_bdry=Rb, B_total=Btotal, B_pol=Bpm,
+                Rb=self.hlm_params.r_break, P_sol=self.hlm_params.p_sol,
+                lambda_n=self.hlm_params.lambda_q_near,
+                lambda_m=self.hlm_params.lambda_q_main)
+
         elif self.hlm_params.hlm_type == "ramp-down":
             # P_sol taken from IMAS, hopefully.
             Ip = self.equilibrium.Ip
