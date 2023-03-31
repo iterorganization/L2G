@@ -115,6 +115,7 @@ class HLM(DATA_BLOCK):
     double_required: list = ["p_sol", "lambda_q_near", "lambda_q_main"]
     custom_required: list = ["profile_files"]
     custom_optional: list = ["extrapolate", "outside_value"]
+    l_mod_required: list = ["p_sol", "lambda_q_near", "lambda_q_main", "r_break"]
 
     def __init__(self):
         super(HLM, self).__init__()
@@ -130,6 +131,8 @@ class HLM(DATA_BLOCK):
             pass
         elif hlm_type == "elm":
             super(HLM, self).check_data(data, self.elm_required)
+        elif hlm_type == "l_mod":
+            super(HLM, self).check_data(data, self.l_mod_required)
         elif hlm_type == "custom":
             super(HLM, self).check_data(data, self.custom_required)
             # Now check if the files exist
@@ -515,6 +518,8 @@ class CASE(object):
                 log.info("Applying single exponential plasma profile")
             elif hlm_type == "double":
                 log.info("Applying double exponential plasma profile")
+            elif hlm_type == "l_mod":
+                log.info("Applying L-mod diverted plasma profile")
             elif hlm_type == "custom":
                 log.info("Applying custom profile")
             else:
