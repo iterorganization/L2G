@@ -219,8 +219,8 @@ class EQ:
         maxZ = np.max(self._eq.grid_z)
 
         halfR = (maxR + minR) * 0.5
-        lowerZ = minZ + 0.25 * (maxZ - minZ)
-        upperZ = minZ + 0.75 * (maxZ - minZ)
+        lowerZ = minZ + 0.15 * (maxZ - minZ)
+        upperZ = minZ + 0.85 * (maxZ - minZ)
         # Lower initial guess.
         self._initialGuessXPoint = [halfR ,lowerZ]
 
@@ -383,9 +383,6 @@ class EQ:
                          'values')
             return -1, -1, -1, -1
 
-        def fun_bis(r, *args):
-            spl, z, value = args
-            return spl.ev(r, z) - value
 
         # Initial position we start from on the boundary separatrix
         Z = self.oPoint[1] # Height of magnetic axis
@@ -399,58 +396,85 @@ class EQ:
             b = self._eq.grid_r[-1]
         else:
             log.info(f'Wrong side specified: {which}')
-            return
+            return -1, -1, -1, -1
 
+        def fun_bis(r, *args):
+            spl, z, value = args
+            return spl.ev(r, z) - value
+        # Now find the interval so that we have valid border conditions for the
+        # bisection method.
+
+        r_points = np.linspace(a, b, 100)
+        vals = [fun_bis(_, self._psi_spline, Z, lcfs) for _ in r_points]
+        where_diff_sign = np.where(np.diff(np.sign(vals)) != 0)[0]
+
+        if len(where_diff_sign) == 0:
+            log.error("Cannot find boundary on the midplane!")
+            return -1, -1, -1, -1
+
+        if side == 'iwl':
+            # Get the last hit
+            a = r_points[where_diff_sign[-1] - 1]
+            b = r_points[where_diff_sign[-1]]
+        else:
+            # Get the first hit
+            a = r_points[where_diff_sign[0]]
+            b = r_points[where_diff_sign[0] + 1]
+
+        # Now accurately get the radial position!
         Rb = bisect(fun_bis, a, b, args=(self._psi_spline, Z, lcfs))
 
 
-        # Now lets follow the contour somewhat. Perpendicular the gradient
-        # of the magnetic field.
-        def fun_fl(t, p, *args):
-            R, Z = p
-            I_psi, sign = args
-            valdr = -sign * I_psi.ev(R, Z, dz=1)
-            valdz =  sign * I_psi.ev(R, Z, dr=1)
-            #norm = np.sqrt(valx * valx + valy * valy)
+        # Ignore searching the apex of the curve, use standard way of setting
+        # the midplane on magnetic axis height.
 
-            return valdr, valdz
+        # # Now lets follow the contour somewhat. Perpendicular the gradient
+        # # of the magnetic field.
+        # def fun_fl(t, p, *args):
+        #     R, Z = p
+        #     I_psi, sign = args
+        #     valdr = -sign * I_psi.ev(R, Z, dz=1)
+        #     valdz =  sign * I_psi.ev(R, Z, dr=1)
+        #     #norm = np.sqrt(valx * valx + valy * valy)
 
-        # Extremely important to use a high precision method with high
-        # precision demand. If we do not perfectly lie on the magnetic surface
-        # then we will be inside the separatrix, meaning our drsep will not
-        # start at 0, but at a negative value.
+        #     return valdr, valdz
 
-        # One direction
-        sol_1 = solve_ivp(fun=fun_fl, t_span=(0, 0.25 * np.pi), y0=(Rb, Z),
-                          method='DOP853', t_eval=np.linspace(0,0.25*np.pi,500),
-                          atol=1e-8, rtol=1e-8,
-                          args=[self._psi_spline, 1])
-        # Other direction: Provided with extra arg
-        sol_2 = solve_ivp(fun=fun_fl, t_span=(0, 0.25 * np.pi), y0=(Rb, Z),
-                          method='DOP853', t_eval=np.linspace(0,0.25*np.pi,500),
-                          atol=1e-8, rtol=1e-8,
-                          args=[self._psi_spline, -1])
+        # # Extremely important to use a high precision method with high
+        # # precision demand. If we do not perfectly lie on the magnetic surface
+        # # then we will be inside the separatrix, meaning our drsep will not
+        # # start at 0, but at a negative value.
 
-        # On the Outer wall we are searching for point with max major radius
-        if which == 'owl':
-            maxR_index1 = np.argmax(sol_1.y[0,:])
-            maxR_index2 = np.argmax(sol_2.y[0,:])
+        # # One direction
+        # sol_1 = solve_ivp(fun=fun_fl, t_span=(0, 0.25 * np.pi), y0=(Rb, Z),
+        #                   method='DOP853', t_eval=np.linspace(0,0.25*np.pi,500),
+        #                   atol=1e-8, rtol=1e-8,
+        #                   args=[self._psi_spline, 1])
+        # # Other direction: Provided with extra arg
+        # sol_2 = solve_ivp(fun=fun_fl, t_span=(0, 0.25 * np.pi), y0=(Rb, Z),
+        #                   method='DOP853', t_eval=np.linspace(0,0.25*np.pi,500),
+        #                   atol=1e-8, rtol=1e-8,
+        #                   args=[self._psi_spline, -1])
 
-            if sol_1.y[0, maxR_index1] > sol_2.y[0, maxR_index2]:
-                Rb = sol_1.y[0, maxR_index1]
-                Z = sol_1.y[1, maxR_index1]
-            else:
-                Rb = sol_2.y[0, maxR_index2]
-                Z = sol_2.y[1, maxR_index2]
-        else: # iwl
-            minR_index1 = np.argmin(sol_1.y[0,:])
-            minR_index2 = np.argmin(sol_2.y[0,:])
-            if sol_1.y[0, minR_index1] < sol_2.y[0, minR_index2]:
-                Z = sol_1.y[1, minR_index1]
-                Rb = sol_1.y[0, minR_index1]
-            else:
-                Z = sol_2.y[1, minR_index2]
-                Rb = sol_2.y[0, minR_index2]
+        # # On the Outer wall we are searching for point with max major radius
+        # if which == 'owl':
+        #     maxR_index1 = np.argmax(sol_1.y[0,:])
+        #     maxR_index2 = np.argmax(sol_2.y[0,:])
+
+        #     if sol_1.y[0, maxR_index1] > sol_2.y[0, maxR_index2]:
+        #         Rb = sol_1.y[0, maxR_index1]
+        #         Z = sol_1.y[1, maxR_index1]
+        #     else:
+        #         Rb = sol_2.y[0, maxR_index2]
+        #         Z = sol_2.y[1, maxR_index2]
+        # else: # iwl
+        #     minR_index1 = np.argmin(sol_1.y[0,:])
+        #     minR_index2 = np.argmin(sol_2.y[0,:])
+        #     if sol_1.y[0, minR_index1] < sol_2.y[0, minR_index2]:
+        #         Z = sol_1.y[1, minR_index1]
+        #         Rb = sol_1.y[0, minR_index1]
+        #     else:
+        #         Z = sol_2.y[1, minR_index2]
+        #         Rb = sol_2.y[0, minR_index2]
 
         # Now calculate the Bpm and Btot
 
@@ -503,9 +527,23 @@ class EQ:
             spl, z, value = args
             return spl.ev(r, z) - value
 
-        Z = self.oPoint[1] # Hight of magnetic axis
-        Rb = bisect(fun, self.oPoint[0], self._eq.grid_r[-1],
-                    args=(self._psi_spline, Z, lcfs))
+        # Get the flux values on a line, set at magnetic axis height and
+        # spanning from the mag axis to end of R domain.
+
+        Z = self.oPoint[1] # Height of magnetic axis
+        r_points = np.linspace(self.oPoint[0], self._eq.grid_r[-1], 20)
+        vals = [fun(_, self._psi_spline, Z, lcfs) for _ in r_points]
+        # The values should either descend or fall!
+        where_diff_sign = np.where(np.diff(np.sign(vals)) != 0)[0]
+
+        if len(where_diff_sign) == 0:
+            # TODO: Address if this happens
+            log.error("Could not find borders for the bisection method!!")
+            return
+
+        Rb = bisect(fun, r_points[where_diff_sign[0]],
+                         r_points[where_diff_sign[0] + 1],
+                         args=(self._psi_spline, Z, lcfs))
         Bvec = self.getBCart(Rb, Z, 0)
 
         Btotal = np.linalg.norm(Bvec)
