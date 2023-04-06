@@ -412,11 +412,11 @@ class EQ:
             log.error("Cannot find boundary on the midplane!")
             return -1, -1, -1, -1
 
-        if side == 'iwl':
+        if which == 'iwl':
             # Get the last hit
-            a = r_points[where_diff_sign[-1] - 1]
-            b = r_points[where_diff_sign[-1]]
-        else:
+            a = r_points[where_diff_sign[-1]]
+            b = r_points[where_diff_sign[-1] + 1]
+        else: #owl
             # Get the first hit
             a = r_points[where_diff_sign[0]]
             b = r_points[where_diff_sign[0] + 1]
