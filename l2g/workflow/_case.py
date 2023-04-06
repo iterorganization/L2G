@@ -765,7 +765,7 @@ class CASE(object):
                     ax.semilogy(drsep * 1e3, q_par, color="blue", label=label)
                     ax.grid(b=True, axis="both")
                     ax.set_xlabel(r"$r-r_{sep}[mm]$")
-                    ax.set_ylabel(r"$q_{\parallel}")
+                    ax.set_ylabel(r"$q_{\parallel}\;\;[\frac{W}{m^2}]$")
                     ax.set_title(self.case_name)
 
                     # Additional plots, in case of Steady-State
@@ -800,14 +800,15 @@ class CASE(object):
             ax_twin: matplotlib.axes.Axes = ax.twinx()
 
             # Plot on left Y-axis Psol and Ip
-            p1 = ax.plot(time_array, psol_array / 1e6, color="g", label=r"P_{sol}")
-            p2 = ax.plot(time_array, ip_array / 1e6, color="r", label=r"I_{p}")
+            p1 = ax.plot(time_array, psol_array / 1e6, color="g", label=r"$P_{sol}$")
+            p2 = ax.plot(time_array, ip_array / 1e6, color="r", label=r"$I_{p}$")
             ax.set_ylabel(r"$I_p$ [MA], $P_{sol}$ [MW]")
             ax.set_xlabel("Time [s]")
             ax.grid()
 
             p3 = ax_twin.plot(time_array, lambdaq_array, color="b",
                               label=r"$\lambda_q$")
+            ax_twin.set_ylabel(r'$\lambda_q [mm]$')
             plots = p1 + p2 + p3
             labels = [_.get_label() for _ in plots]
             ax.legend(plots, labels)
