@@ -545,8 +545,6 @@ def getFlOnPoint(PyFLT flt_obj, float R, float Z, float Theta,
         vector[double] fl_buffer
 
     fl_buffer.clear()
-    # Prepare the thread containers
-    flt_obj.c_prepareThreadContainers()
 
     # Set initial parameters
     flt_obj.c_setIV(R, Z, Theta)

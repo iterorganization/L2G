@@ -284,12 +284,12 @@ class FieldLineTracer:
         """
         import l2g.comp.core
         points = []
-        points += l2g.comp.core.getFlOnPoint(self.flt_obj, R, Z, Theta,
+        points.append(l2g.comp.core.getFlOnPoint(self.flt_obj, R, Z, Theta,
                                             self.options.switch_getFL_with_FLT,
-                                            1)
-        points += l2g.comp.core.getFlOnPoint(self.flt_obj, R, Z, Theta,
+                                            1))
+        points.append(l2g.comp.core.getFlOnPoint(self.flt_obj, R, Z, Theta,
                                             self.options.switch_getFL_with_FLT,
-                                            -1)
+                                            -1))
         # Now let's order them.
         # points = points[0][::-1] + points[1]
         return points
