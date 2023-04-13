@@ -532,7 +532,7 @@ cdef class PyFLT:
         R, Z point.
         """
         cdef double val, valdx, valdy, valdxdy
-        self.c_flt.debug_getValues(r, z, val, valdx, valdy, valdxdy, 0)
+        self.c_flt.getPFValues(r, z, val, valdx, valdy, valdxdy, 0)
         return val, valdx, valdy, valdxdy
 
 
