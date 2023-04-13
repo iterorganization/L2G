@@ -424,60 +424,6 @@ class EQ:
         # Now accurately get the radial position!
         Rb = bisect(fun_bis, a, b, args=(self._psi_spline, Z, lcfs))
 
-
-        # Ignore searching the apex of the curve, use standard way of setting
-        # the midplane on magnetic axis height.
-
-        # # Now lets follow the contour somewhat. Perpendicular the gradient
-        # # of the magnetic field.
-        # def fun_fl(t, p, *args):
-        #     R, Z = p
-        #     I_psi, sign = args
-        #     valdr = -sign * I_psi.ev(R, Z, dz=1)
-        #     valdz =  sign * I_psi.ev(R, Z, dr=1)
-        #     #norm = np.sqrt(valx * valx + valy * valy)
-
-        #     return valdr, valdz
-
-        # # Extremely important to use a high precision method with high
-        # # precision demand. If we do not perfectly lie on the magnetic surface
-        # # then we will be inside the separatrix, meaning our drsep will not
-        # # start at 0, but at a negative value.
-
-        # # One direction
-        # sol_1 = solve_ivp(fun=fun_fl, t_span=(0, 0.25 * np.pi), y0=(Rb, Z),
-        #                   method='DOP853', t_eval=np.linspace(0,0.25*np.pi,500),
-        #                   atol=1e-8, rtol=1e-8,
-        #                   args=[self._psi_spline, 1])
-        # # Other direction: Provided with extra arg
-        # sol_2 = solve_ivp(fun=fun_fl, t_span=(0, 0.25 * np.pi), y0=(Rb, Z),
-        #                   method='DOP853', t_eval=np.linspace(0,0.25*np.pi,500),
-        #                   atol=1e-8, rtol=1e-8,
-        #                   args=[self._psi_spline, -1])
-
-        # # On the Outer wall we are searching for point with max major radius
-        # if which == 'owl':
-        #     maxR_index1 = np.argmax(sol_1.y[0,:])
-        #     maxR_index2 = np.argmax(sol_2.y[0,:])
-
-        #     if sol_1.y[0, maxR_index1] > sol_2.y[0, maxR_index2]:
-        #         Rb = sol_1.y[0, maxR_index1]
-        #         Z = sol_1.y[1, maxR_index1]
-        #     else:
-        #         Rb = sol_2.y[0, maxR_index2]
-        #         Z = sol_2.y[1, maxR_index2]
-        # else: # iwl
-        #     minR_index1 = np.argmin(sol_1.y[0,:])
-        #     minR_index2 = np.argmin(sol_2.y[0,:])
-        #     if sol_1.y[0, minR_index1] < sol_2.y[0, minR_index2]:
-        #         Z = sol_1.y[1, minR_index1]
-        #         Rb = sol_1.y[0, minR_index1]
-        #     else:
-        #         Z = sol_2.y[1, minR_index2]
-        #         Rb = sol_2.y[0, minR_index2]
-
-        # Now calculate the Bpm and Btot
-
         Bvec = self.getBCart(Rb, Z, 0)
 
         Btotal = np.linalg.norm(Bvec)
@@ -495,111 +441,14 @@ class EQ:
         return Rb, Z, Btotal, Bpm
 
     def getOWL_midplane(self, lcfs=None) -> Tuple[float, float, float, float]:
-        """Return the physical position of the artifically determined midplane
-        on OWL. The height of the midplane is the same as the height of the
-        plasma center.
-
-        Calculates the Rb, Z, Btotal and Bpm. Z is the height of the midplane
-        and it is always set to the height of the magnetic axis.
-
-        If no flux value is provided (boundary value) then the return result is
-        a tuple of four -1 values.
-
-        Returns:
-            (tuple): tuple containing:
-
-              - Rb (float): Starting position in the major radius.
-              - Z (float): Height of the midplane.
-              - Btotal (float): Total magnetic field magnitude at start of the
-                midplane
-              - Bpm (float): Poloidal component at start of the midplane
+        """See :py:meth:`get_midplane_info`
         """
-
-        if lcfs is None:
-            lcfs = self.psiLCFS
-        if lcfs is None:
-            log.info('No flux value provided to determine boundary ' +
-                         'values')
-            return -1, -1, -1, -1
-
-        # Get (R, Z) point of midplane for given lcfs
-        def fun(r, *args):
-            spl, z, value = args
-            return spl.ev(r, z) - value
-
-        # Get the flux values on a line, set at magnetic axis height and
-        # spanning from the mag axis to end of R domain.
-
-        Z = self.oPoint[1] # Height of magnetic axis
-        r_points = np.linspace(self.oPoint[0], self._eq.grid_r[-1], 20)
-        vals = [fun(_, self._psi_spline, Z, lcfs) for _ in r_points]
-        # The values should either descend or fall!
-        where_diff_sign = np.where(np.diff(np.sign(vals)) != 0)[0]
-
-        if len(where_diff_sign) == 0:
-            # TODO: Address if this happens
-            log.error("Could not find borders for the bisection method!!")
-            return
-
-        Rb = bisect(fun, r_points[where_diff_sign[0]],
-                         r_points[where_diff_sign[0] + 1],
-                         args=(self._psi_spline, Z, lcfs))
-        Bvec = self.getBCart(Rb, Z, 0)
-
-        Btotal = np.linalg.norm(Bvec)
-
-        # Poloidal boundary
-        psidr = self._psi_spline.ev(Rb, Z, dr=1)
-        psidz = self._psi_spline.ev(Rb, Z, dz=1)
-        Bpm = np.sqrt(psidr*psidr + psidz * psidz) / Rb
-
-        return Rb, Z, Btotal, Bpm
+        return self.get_midplane_info(lcfs=lcfs, which='owl')
 
     def getIWL_midplane(self, lcfs=None) -> Tuple[float, float, float, float]:
-        """Return the physical position of the artifically determined midplane
-        on OWL. The height of the midplane is the same as the height of the
-        plasma center.
-
-        Calculates the Rb, Z, Btotal and Bpm. Z is the height of the midplane
-        and it is always set to the height of the magnetic axis.
-
-        If no flux value is provided (boundary value) then the return result is
-        a tuple of four -1 values.
-
-        Returns:
-            (tuple): tuple containing:
-
-              - Rb (float): Starting position in the major radius.
-              - Z (float): Height of the midplane.
-              - Btotal (float): Total magnetic field magnitude at start of the
-                midplane
-              - Bpm (float): Poloidal component at start of the midplane
+        """See :py:meth:`get_midplane_info`
         """
-
-        if lcfs is None:
-            lcfs = self.psiLCFS
-        if lcfs is None:
-            log.error('No flux value provided to determine boundary values')
-            return -1, -1, -1, -1
-
-        # Get (R, Z) point of midplane for given lcfs
-        def fun(r, *args):
-            spl, z, value = args
-            return spl.ev(r, z) - value
-
-        Z = self.oPoint[1] # Hight of magnetic axis
-        Rb = bisect(fun, self._eq.grid_r[0], self.oPoint[0],
-                    args=(self._psi_spline, Z, lcfs))
-        Bvec = self.getBCart(Rb, Z, 0)
-
-        Btotal = np.linalg.norm(Bvec)
-
-        # Poloidal boundary
-        psidr = self._psi_spline.ev(Rb, Z, 0 , 1)
-        psidz = self._psi_spline.ev(Rb, Z, 1, 0)
-        Bpm = np.sqrt(psidr*psidr + psidz * psidz) / Rb
-
-        return Rb, Z, Btotal, Bpm
+        return self.get_midplane_info(lcfs=lcfs, which='iwl')
 
     def getBCart(self, r, z, phi):
         """Returns the magnetic vector in Cartesian coordinate system.
