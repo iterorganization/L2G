@@ -84,7 +84,7 @@ class EQUILIBRIUM(DATA_BLOCK):
                            "wall_limiter_r", "wall_limiter_z",
                            "wall_silh_r_shift", "wall_silh_z_shift",
                            "plasma_r_displ", "plasma_z_displ",
-                           "custom_lcfs_values"]
+                           "custom_lcfs_values", "correct_helicity"]
     def __init__(self):
         super(EQUILIBRIUM, self).__init__()
         self.data: dict = {"custom_wall_limiter": False}
@@ -401,6 +401,7 @@ class CASE(object):
         if "correct_helicity" in self.equ_obj.data:
             correct_helicity = self.equ_obj.data["correct_helicity"]
         self.ite_obj.correctHelicity(correct_helicity)
+        log.info(f"Correcting helicity? {self.ite_obj._correct_helicity}")
 
         if self.equ_obj.data["equilibrium_type"] == "eqdsk_files":
             self.ite_obj.loadEqdskEquilibriums(self.equ_obj.data["eqdsk_files"])

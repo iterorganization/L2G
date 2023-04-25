@@ -46,37 +46,46 @@ def plot_psi_to_mpl_ax(ax, eq: l2g.equil.EQ):
     cmap_vacc = truncate_colormap(base_cmap_vacc, minval=0.8, maxval=1.0, n=10)
     if equ_type == "div":
         # VACUUM
-        ax.contour(grid_r, grid_z, psi,
-                   levels=np.linspace(psi_2nd_boundary, psi_outside, 10),
-                   cmap=cmap_vacc, alpha=0.3)
-        ax.contourf(grid_r, grid_z, psi,
-                   levels=np.linspace(psi_2nd_boundary, psi_outside, 10),
-                   cmap=cmap_vacc, alpha=0.2)
+
+        if psi_2nd_boundary > psi_outside:
+            band = np.linspace(psi_outside, psi_2nd_boundary, 10)
+        else:
+            band = np.linspace(psi_2nd_boundary, psi_outside, 10)
+
+        ax.contour(grid_r, grid_z, psi, levels=band, cmap=cmap_vacc, alpha=0.3)
+        ax.contourf(grid_r, grid_z, psi, levels=band, cmap=cmap_vacc,
+                    alpha=0.2)
         # DRSEP
+        if psi_boundary > psi_2nd_boundary:
+            band = np.linspace(psi_2nd_boundary, psi_boundary, 10)
+        else:
+            band = np.linspace(psi_boundary, psi_2nd_boundary, 10)
+
         cmap_drsep = truncate_colormap(base_cmap_drsep, minval=0.5, maxval=0.8, n=10)
-        ax.contour(grid_r, grid_z, psi,
-                   levels=np.linspace(psi_boundary, psi_2nd_boundary, 10),
-                   cmap=cmap_drsep, alpha=0.5)
-        ax.contourf(grid_r, grid_z, psi,
-                   levels=np.linspace(psi_boundary, psi_2nd_boundary, 10),
-                   cmap=cmap_drsep, alpha=0.2)
+        ax.contour(grid_r, grid_z, psi, levels=band, cmap=cmap_drsep,
+                   alpha=0.5)
+        ax.contourf(grid_r, grid_z, psi, levels=band, cmap=cmap_drsep,
+                    alpha=0.2)
     else:
         # VACUUM
-        ax.contour(grid_r, grid_z, psi,
-                   levels=np.linspace(psi_boundary, psi_outside, 10),
-                   cmap=cmap_vacc, alpha=0.3)
-        ax.contourf(grid_r, grid_z, psi,
-                   levels=np.linspace(psi_boundary, psi_outside, 10),
-                   cmap=cmap_vacc, alpha=0.2)
+        if psi_boundary > psi_outside:
+            band = np.linspace(psi_outside, psi_boundary, 10)
+        else:
+            band = np.linspace(psi_boundary, psi_outside)
+        ax.contour(grid_r, grid_z, psi, levels=band, cmap=cmap_vacc, alpha=0.3)
+        ax.contourf(grid_r, grid_z, psi, levels=band, cmap=cmap_vacc,
+                    alpha=0.2)
 
 
     # CORE
     cmap_core = truncate_colormap(base_cmap_core, minval=0, maxval=0.3, n=25)
-    ax.contour(grid_r, grid_z, psi,
-               levels=np.linspace(psi_axis, psi_boundary, 25), cmap=cmap_core)
-    ax.contourf(grid_r, grid_z, psi,
-               levels=np.linspace(psi_axis, psi_boundary, 25), cmap=cmap_core,
-               alpha=0.2)
+    if psi_axis > psi_boundary:
+        band = np.linspace(psi_boundary, psi_axis, 25)
+    else:
+        band = np.linspace(psi_axis, psi_boundary, 25)
+
+    ax.contour(grid_r, grid_z, psi, levels=band, cmap=cmap_core)
+    ax.contourf(grid_r, grid_z, psi, levels=band, cmap=cmap_core, alpha=0.2)
 
     def plotPolyLine(ax, contour, label='', color='k', linewidth=1):
         x,y = contour
