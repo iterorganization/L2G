@@ -196,16 +196,22 @@ class EquilibriumIterator(object):
             equilibrium.wall_contour_z = [_ + z_shift for _ in equilibrium.wall_contour_z]
 
     def applyPlasmaShift(self, r_shift: float | List[float], z_shift: float | List[float]):
+
+        log.info("Applying shift to input plasma equilibrium data")
         if isinstance(r_shift, list):
             if not len(r_shift) == len(self):
-                log.error('You have applied a list of radial and vertical shifts to the plasma')
+                log.error('You have not provided enough shift values for all' +
+                          ' instances of plasma!')
+                return
 
             for i,equilibrium in enumerate(self._equilibriums):
+                log.info(f"Applying shift_r={r_shift[i]}m shift_z={z_shift[i]}m")
                 equilibrium.mag_axis_r += r_shift[i]
                 equilibrium.mag_axis_z += z_shift[i]
                 equilibrium.grid_r += r_shift[i]
                 equilibrium.grid_z += z_shift[i]
         else:
+            log.info(f"Applying shift_r={r_shift}m shift_z={z_shift}m")
             for equilibrium in self._equilibriums:
                 # Apply shift to the equilibrium
                 equilibrium.mag_axis_r += r_shift
