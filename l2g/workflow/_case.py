@@ -109,12 +109,11 @@ class EQUILIBRIUM(DATA_BLOCK):
 
 class HLM(DATA_BLOCK):
     required_keys: list = ["name", "hlm_type"]
-    optional_keys: list = ["ip_transition", "r_break", "parameters", "ratio", "p_sol"]
+    optional_keys: list = ["ip_transition", "r_break", "parameters", "ratio", "p_sol", "extrapolate", "outside_value"]
     elm_required: list = ["shadow_meshes"]
     single_required: list = ["p_sol", "lambda_q"]
     double_required: list = ["p_sol", "lambda_q_near", "lambda_q_main"]
     custom_required: list = ["profile_files"]
-    custom_optional: list = ["extrapolate", "outside_value"]
     l_mod_required: list = ["p_sol", "lambda_q_near", "lambda_q_main", "r_break"]
 
     def __init__(self):
