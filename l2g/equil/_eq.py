@@ -162,7 +162,7 @@ class EQ:
         # Rm - radial position of the midplane point
         # B_total - magnetic magnitude at that point.
         # Bpm - poloidal component of the magnetic field.
-        self._eq = None
+        self._eq: Equilibrium = None
 
         self.r_displ = 0.0
         self.z_displ = 0.0
@@ -264,7 +264,7 @@ class EQ:
         D = dr2 * dz2 - drz * drz
         log.info(f'Flux value at ({r}, {z}): {flux}')
         log.info(f'Sum of square first partial derivatives: {drdz_sq}')
-        log.info(f'Second partial derivative test: {D}', end='. ')
+        log.info(f'Second partial derivative test: {D}.')
         if D > 0:
             log.info('Local maximum')
         else:
@@ -428,10 +428,15 @@ class EQ:
 
         Btotal = np.linalg.norm(Bvec)
 
-        # Poloidal boundary
+        # Poloidal component of the magnetic field
         psidr = self._psi_spline.ev(Rb, Z, dr=1)
         psidz = self._psi_spline.ev(Rb, Z, dz=1)
         Bpm = np.sqrt(psidr * psidr + psidz * psidz) / Rb
+
+        # Toroidal component of the magnetic field.
+        # Use the poloidal current function = F=Bt * R, where F is constant
+        # outside the plasma core.
+        Btor = self._eq.fpol_vacuum / Rb
 
         currentPsi = self._psi_spline.ev(Rb, Z)
         if not np.allclose(currentPsi, lcfs, 1e-5):

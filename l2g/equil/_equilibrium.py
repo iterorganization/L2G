@@ -74,9 +74,9 @@ class Equilibrium(object):
         self.grid_dim_r: int = -1
         self.grid_dim_z: int = -1
 
-        self.grid_r: Optional[np.ndarray] = []
-        self.grid_z: Optional[np.ndarray] = []
-        self.psi: Optional[np.ndarray] = []
+        self.grid_r: np.ndarray = np.array([])
+        self.grid_z: np.ndarray = np.array([])
+        self.psi: np.ndarray = np.array([])
         self.psi_sign: Optional[int] = None # Sign of flux gradient from center to boundary.
         self.psi_boundary: Optional[float] = None
         self.psi_axis: Optional[float] = None

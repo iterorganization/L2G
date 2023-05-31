@@ -97,7 +97,6 @@ if args.command == "print":
         print(f'    {_.data["name"]}')
     sys.exit(0)
 
-# DEBUG
 if args.command == "run":
     output_directory = ""
 
@@ -175,11 +174,11 @@ if args.command == "run":
         print("Running with rotational misalignment. Checking if geometry has")
         print("information about the axes")
         rot_mis_dict = geo_obj.data["rotational_misalignment"]
-        if not "vectors" in geo_obj.data:
+        if not "vectors" in rot_mis_dict:
             print(f"No vectors entry in rotational_misalignment!")
             sys.exit(1)
         rotational_vectors = rot_mis_dict["vectors"]
-        if not "angles" in geo_obj.data:
+        if not "angles" in rot_mis_dict:
             print(f"No angles entry in rotational_misalignment!")
             sys.exit(1)
         rotational_angles = rot_mis_dict["angles"]
@@ -194,8 +193,8 @@ if args.command == "run":
 
         # Since we already generated the images, do not generate new images
         case.create_graphics = False
-        orig_med = case.med_obj
-        output_base_med_name = case.case_name
+        orig_mesh = case.mesh_obj
+        output_file_base_name = case.case_name
         import numpy as np
         for index in range(N):
             for angle in rotational_angles:
@@ -203,11 +202,11 @@ if args.command == "run":
                     # Iterate for each rotation. Twice.
                     p1 = np.array(rotational_vectors[index * 2])
                     p2 = np.array(rotational_vectors[index * 2 + 1])
-                    angle = (2 * j - 1) * geo_obj.data["rot_theta"]
+                    angle = (2 * j - 1) * angle
                     print(f"Rotating for {angle} degrees")
                     # Change the name
-                    output_med_name = f"{output_base_med_name}_rot{2*index+j}_{angle:.2f}_degree.med"
-                    case.med_obj = orig_med.rotateMesh(p1, p2, angle)
+                    output_file_name = f"{output_file_base_name}_rot{2*index+j}_{angle:.2f}_degree.med"
+                    case.mesh_obj = orig_mesh.rotateMesh(p1, p2, angle)
                     # First we need to delete the old target mesh in the Embree
                     # object.
 
@@ -223,7 +222,7 @@ if args.command == "run":
                         print(f"Geom ID removed {target_geom_id}")
                         case.flt_obj.embree_obj.deleteMesh(target_geom_id)
                     print("Now loading the rotated mesh into shadow")
-                    points, cells = case.med_obj.getMeshData()
+                    points, cells = case.mesh_obj.getMeshData()
                     case.flt_obj.setTargetData(points, cells)
                     new_geom_id = case.flt_obj.embree_obj.commitMesh(
                         case.flt_obj.target_vertices * case.flt_obj.parameters.target_to_m,
@@ -237,11 +236,11 @@ if args.command == "run":
                     # case.set_flt_objs()
 
                     case.see_if_results_exists(output_directory=output_directory,
-                        med_file_name=output_med_name)
+                        file_name=output_file_name)
                     # Change the case name, so that the HLM data and everythin else
                     # get's computed only once, but change the result file path.
-                    case.result_file_path = os.path.join(output_directory, output_med_name)
-                    case.case_name = output_base_med_name
+                    case.result_file_path = os.path.join(output_directory, output_file_name)
+                    case.case_name = output_file_base_name
                     case.create_result_file_if_necessary()
                     print("Running case")
                     case.main()
@@ -268,14 +267,14 @@ if args.command == "run":
 
         # Now we loop by vector and then by lengths
         import numpy as np
-        output_base_med_name = case.case_name
+        output_file_base_name = case.case_name
         for i, lw_vector in enumerate(longwave_vectors):
             for lw_length in longwave_lengths:
                 print("Running case for longwave misalignment with directional vector:")
                 print(lw_vector)
                 print(f"With the length: {lw_length} mm.")
 
-                output_med_name = f"{output_base_med_name}_lw_{i}_{lw_length}_mm.med"
+                output_med_name = f"{output_file_base_name}_lw_{i}_{lw_length}_mm.med"
                 # Create a new case!
                 case = l2g.workflow.create_case(geo_obj, equ_obj, hlm_obj)
                 case.create_graphics = False
@@ -289,11 +288,11 @@ if args.command == "run":
 
                 print("Checking if output file contains already the FLT data.")
                 case.see_if_results_exists(output_directory=output_directory,
-                    med_file_name=output_med_name)
+                    file_name=output_med_name)
                 # Change the case name, so that the HLM data and everythin else
                 # get's computed only once, but change the result file path.
                 case.result_file_path = os.path.join(output_directory, output_med_name)
-                case.case_name = output_base_med_name
+                case.case_name = output_file_base_name
                 case.create_result_file_if_necessary()
 
                 print("Creating output result file if necessary")

@@ -185,8 +185,9 @@ class CASE(object):
         # For calcualting OMP objects.
         self.omp_obj: l2g.comp.FieldLineTracer = l2g.comp.FieldLineTracer()
 
+        import l2g.mesh
         # For storing results
-        self.med_obj: l2g.comp.MEDMeshIO = None
+        self.mesh_obj: l2g.mesh.Mesh = None
         # For collecting equilibria data
         self.ite_obj: l2g.equil.EquilibriumIterator = None
 
@@ -246,7 +247,7 @@ class CASE(object):
     def load_target_mesh(self):
         """From the MEDMeshIO load the target data.
         """
-        vertices, cells = self.med_obj.getMeshData()
+        vertices, cells = self.mesh_obj.getMeshData()
         self.flt_obj.setTargetData(vertices, cells)
 
     def load_shadow_meshes(self):
@@ -295,14 +296,13 @@ class CASE(object):
                 raise IOError
 
             log.info(f"Loading {filePath}...")
-            med_obj = l2g.comp.MEDMeshIO()
-            med_obj.readMeshFromMedFile(filePath)
-
+            mesh_obj = l2g.mesh.Mesh(filePath)
+            mesh_obj.readMeshData()
             if self.longwave_misalignment:
                 log.info("Applying longwave_misalignment to mesh.")
-                med_obj.translateMesh(self.longwave_vector)
+                mesh_obj.translateMesh(self.longwave_vector)
 
-            v, t = med_obj.getMeshData()
+            v, t = mesh_obj.getMeshData()
             geom_id = flt.embree_obj.commitMesh(v * flt.parameters.shadow_to_m, t)
             geom_ids.append((geom_id, filePath))
 
@@ -314,14 +314,14 @@ class CASE(object):
             import l2g.comp
             for filePath in afl_catcher_meshes:
                 log.info(f"Loading {filePath}...")
-                med_obj = l2g.comp.MEDMeshIO()
-                med_obj.readMeshFromMedFile(filePath)
+                mesh_obj = l2g.mesh.Mesh(filePath)
+                mesh_obj.readMeshData()
                 # v, t = l2g.utils.meshio.readMesh(filePath)
                 if self.longwave_misalignment:
                     log.info("Applying longwave_misalignment to mesh.")
-                    med_obj.translateMesh(self.longwave_vector)
+                    mesh_obj.translateMesh(self.longwave_vector)
 
-                v, t = med_obj.getMeshData()
+                v, t = mesh_obj.getMeshData()
                 geom_id = flt.embree_obj.commitMesh(v * flt.parameters.shadow_to_m, t)
                 flt.parameters.artificial_fl_catcher_geom_id.add(geom_id)
                 fileName = os.path.basename(filePath)
@@ -371,18 +371,20 @@ class CASE(object):
             log.info(self.omp_obj.parameters.dump())
             log.info(self.omp_obj.options.dump())
 
-    def create_target_medio(self):
+    def open_target_mesh(self):
         import l2g.comp
-        self.med_obj = l2g.comp.MEDMeshIO()
-        log.info(f"Reading target mesh data from: {self.geo_obj.data['target_mesh']}")
-        self.med_obj.readMeshFromMedFile(self.geo_obj.data["target_mesh"])
+        import l2g.mesh
+        file = self.geo_obj.data['target_mesh']
+        log.info(f"Reading target mesh data from: {file}")
+        self.mesh_obj = l2g.mesh.Mesh(file)
+        self.mesh_obj.readMeshData()
         if self.longwave_misalignment:
             log.info("Applying longwave_misalignment to mesh.")
-            self.med_obj.translateMesh(self.longwave_vector)
+            self.mesh_obj.translateMesh(self.longwave_vector)
 
     def prepare(self):
         # It just sets the input file
-        self.create_target_medio()
+        self.open_target_mesh()
         # From the target medio get the mesh data
         self.load_target_mesh()
         # Now load the shadow mesh data.
@@ -430,7 +432,7 @@ class CASE(object):
                                               self.wall_silh_z_shift)
 
     def see_if_results_exists(self, output_directory: str = "",
-            med_file_name: str = ""):
+        file_name: str = ""):
         if output_directory == "":
             output_directory = os.getcwd()
         else:
@@ -443,18 +445,18 @@ class CASE(object):
                 os.makedirs(output_directory)
 
         case_name = f'{self.geo_obj.data["name"]}_{self.equ_obj.data["name"]}'
-        if med_file_name == "":
-            # Overwrite the med_file_name AND case name so that all images
+        if file_name == "":
+            # Overwrite the file_name AND case name so that all images
             # will consistently have the same base name.
-            med_file_name = f"{case_name}.med"
+            file_name = f"{case_name}.med"
         else:
-            if not med_file_name.lower().endswith(".med"):
-                case_name = med_file_name
-                med_file_name = f'{med_file_name}.med'
+            if not file_name.lower().endswith(".med"):
+                case_name = file_name
+                file_name = f'{file_name}.med'
             else:
-                case_name = med_file_name[:-4]
+                case_name = file_name[:-4]
 
-        result_file_path = os.path.join(output_directory, med_file_name)
+        result_file_path = os.path.join(output_directory, file_name)
 
         # The additional files for connection length and elm profiles can have
         # indexes, regarding which equilibrium it is referencing.
@@ -492,15 +494,19 @@ class CASE(object):
     def create_result_file_if_necessary(self):
         if self.run_flt:
             log.info(f"Writing target mesh to {self.result_file_path}")
-            self.med_obj.writeMesh(self.result_file_path)
+            self.mesh_obj = self.mesh_obj.writeMeshTo(self.result_file_path)
+            self.mesh_obj.file_path = self.result_file_path
         else:
             # No FLT needed, but we still need to access the files.
-            self.med_obj.med_file_path = self.result_file_path
+            # self.mesh_obj.med_file_path = self.result_file_path
+            import l2g.mesh
+            self.mesh_obj = l2g.mesh.Mesh(self.result_file_path)
 
     def main(self):
         """Main loop function for the case.
         """
         import l2g.comp
+        import l2g.mesh
 
         import time
         time_start = time.perf_counter()
@@ -550,12 +556,16 @@ class CASE(object):
             import matplotlib.axes
             import l2g.plot
 
+        # Set the number of time steps to be written inside mesh.
+        self.mesh_obj.setNumberOfTimeSteps(N)
+
         for index, associated_time, equilibrium in self.ite_obj:
             log.info(f"Processing {index + 1} of {N} equilibriums. Time={associated_time:.3f}.")
 
             # Set the index and associated time to the med object.
-            self.med_obj.setIndexAndTime(index, associated_time)
-
+            # self.mesh_obj.setIndexAndTime(index, associated_time)
+            self.mesh_obj.setIndex(index)
+            self.mesh_obj.setTime(associated_time)
             # Adjust the equilibrium data if there is any custom points for the
             # wall silhouette.
 
@@ -593,13 +603,13 @@ class CASE(object):
                 # Calculate the drsep quantity on the geometry.
                 self.flt_obj.calculateDrsep()
                 # Now save the FLT data
-                l2g.comp.dump_flt_mesh_results_to_med(
-                    self.flt_obj.mesh_results, self.med_obj)
+                l2g.mesh.dump_flt_results_to_mesh(
+                    self.flt_obj.mesh_results, self.mesh_obj)
 
             else:
                 # Now we already have the FLT results, so we need to load them
-                l2g.comp.load_flt_mesh_results_from_med(
-                    self.flt_obj.mesh_results, self.med_obj)
+                l2g.mesh.load_flt_results_from_mesh(
+                    self.flt_obj.mesh_results, self.mesh_obj)
 
             # Optionals now.
             if self.get_field_lines:
@@ -612,13 +622,13 @@ class CASE(object):
                         self.flt_obj.getFL()
                         fl_path_name = os.path.join(self.output_directory,
                             f"{fl_base_name}_{j}_{index}.vtk")
-                        l2g.comp.save_results_to_vtk(self.flt_obj.fl_results, fl_path_name)
+                        l2g.mesh.save_results_to_vtk(self.flt_obj.fl_results, fl_path_name)
                 else:
                     self.flt_obj.fl_ids = self.fl_ids
                     self.flt_obj.getFL()
                     fl_path_name = os.path.join(self.output_directory,
                         f"{fl_base_name}_{index}.vtk")
-                    l2g.comp.save_results_to_vtk(self.flt_obj.fl_results, fl_path_name)
+                    l2g.mesh.save_results_to_vtk(self.flt_obj.fl_results, fl_path_name)
 
             if self.apply_heat_load:
                 if hlm_type == "elm":
@@ -632,37 +642,11 @@ class CASE(object):
 
                 self.flt_obj.applyHLM()
 
-                log.info("Writing arrays to file")
+                log.info("Writing HLM arrays to file")
+                l2g.mesh.dump_hlm_results_to_mesh(self.flt_obj.hlm_results,
+                    self.mesh_obj, hlm_type)
 
-                self.med_obj.writeArray(array=self.flt_obj.hlm_results.flux_expansion,
-                    array_name="Total_flux expansion")
-                self.med_obj.writeArray(array=self.flt_obj.hlm_results.q_inc,
-                    array_name=r"$q_{\perp}\;\;[\frac{W}{m^2}]$")
-                self.med_obj.writeArray(array=self.flt_obj.hlm_results.q_par,
-                    array_name=r"$q_{\parallel}\;\;[\frac{W}{m^2}]$")
-
-                if hlm_type == "elm":
-                    # Writing additional arrays
-                    # Take arrays from additional_arrays variable.
-                    self.med_obj.writeArray(
-                        array=self.flt_obj.hlm_results.additional_arrays[0],
-                        array_name=r"$q_{\parallel}\;\;[\frac{W}{m^2}]$ ELM")
-                    self.med_obj.writeArray(
-                        array=self.flt_obj.hlm_results.additional_arrays[1],
-                        array_name=r"$q_{\parallel}\;\;[\frac{W}{m^2}]$ inter-ELM")
-                    self.med_obj.writeArray(
-                        array=self.flt_obj.hlm_results.additional_arrays[2],
-                        array_name=r"$T_e$ [eV]")
-                    self.med_obj.writeArray(
-                        array=self.flt_obj.hlm_results.additional_arrays[3],
-                        array_name=r"$T_i$ [eV]")
-                    self.med_obj.writeArray(
-                        array=self.flt_obj.hlm_results.additional_arrays[4],
-                        array_name=r"$q_{\perp}\;\;[\frac{W}{m^2}]$ ELM")
-                    self.med_obj.writeArray(
-                        array=self.flt_obj.hlm_results.additional_arrays[5],
-                        array_name=r"$q_{\perp}\;\;[\frac{W}{m^2}]$ inter-ELM")
-                elif hlm_type == "ramp-down":
+                if hlm_type == "ramp-down":
                     lambda_q = self.flt_obj.hlm_results.additional_arrays[0]
                     log.info(f'[RAMP DOWN]: i={index} t={associated_time:.3f} lq={lambda_q:.2f} Ip={self.flt_obj.equilibrium.Ip:.2e}')
 

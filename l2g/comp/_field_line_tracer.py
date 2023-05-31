@@ -119,14 +119,22 @@ class FieldLineTracer:
 
         return out_ids
 
-    def setTargetData(self, vertices:list = [], cells:list = []) -> None:
+    def setTargetData(self, vertices:np.ndarray, triangles:np.ndarray) -> None:
         """Sets new target data via function. In this case a target mesh is
         provided to the case via providing a list of nodes and a list of cells.
 
         With this the past mesh results are cleared.
         """
+        if isinstance(vertices, list):
+            vertices = np.asarray(vertices)
+        if vertices.ndim > 1:
+            vertices = vertices.flatten()
         self.target_vertices = vertices
-        self.target_triangles = cells
+        if isinstance(triangles, list):
+            triangles = np.asarray(triangles)
+        if triangles.ndim > 1:
+            triangles = triangles.flatten()
+        self.target_triangles = triangles
         self.mesh_results.reset()
 
     def setTargetPoints(self, points: list = []) -> None:
