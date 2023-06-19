@@ -5,8 +5,7 @@ requires = [
     "matplotlib>=3.3.0",
     "numpy>=1.19.5",
     "scipy>=1.5.4",
-    "vtk",
     "wheel",
-    "medcoupling"
 ]
+optional = ["vtk", "medcoupling"] # For I/O
 build-backend = "setuptools.build_meta"
