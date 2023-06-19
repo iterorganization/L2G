@@ -50,9 +50,6 @@ def get_include_directories():
 
     out.append(os.path.join(L2G_CPP_ROOTDIR, 'include', 'flt'))
     out.append(os.path.join(EMBREE_ROOTDIR, 'include'))
-
-
-
     out.append(np.get_include())
 
     return out
@@ -62,21 +59,17 @@ def get_libraries():
         flt
     """
     out = []
+    out.append("flt")
     if sys.platform == "win32":
-        out.append("flt")
         out.append("embree3")
-    else:
-        out.append("flt")
     return out
 
 def get_library_dirs():
     out = []
 
+    out.append(os.path.join(L2G_CPP_ROOTDIR))
     if sys.platform == "win32":
-        out.append(os.path.join(L2G_CPP_ROOTDIR, 'lib'))
         out.append(os.path.join(EMBREE_ROOTDIR, 'lib'))
-    else:
-        out.append(os.path.join(L2G_CPP_ROOTDIR, 'lib'))
 
     return out
 
@@ -98,12 +91,11 @@ def get_extra_compile_args():
 
 def get_extra_link_args():
     out = []
-    if sys.platform == "win32":
-        pass
-        #if useOpenMP:
-        #    out.append("/openmp")
-    else:
-        if useOpenMP:
+
+    if useOpenMP:
+        if sys.platform == "win32":
+           out.append("/openmp")
+        else:
             out.append("-fopenmp")
     return out
 
