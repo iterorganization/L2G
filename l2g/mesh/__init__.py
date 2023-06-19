@@ -1,15 +1,20 @@
+# The following import line is used only for type hints. Remove it and the
+# used types to avoid importing the main module.
+from l2g.comp import L2GResults, L2GResultsHLM, L2GFLs
 import numpy as np
 import logging
 import os
 log = logging.getLogger(__name__)
-from typing import Dict, Tuple, TYPE_CHECKING, Union
+from typing import Dict, Tuple, Union, List
 
-from l2g.comp import L2GResults, L2GResultsHLM, L2GFLs
+
+def supportedFileExts() -> List[str]:
+    return ["med", "vtk", "vtu"]
 
 def rotatePointsAroundAxis(points: np.ndarray, p1: np.ndarray, p2: np.ndarray,
     theta: float):
-    """Rotate the argument points around the axis |p2 - p1| for the angle
-    theta.
+    """Rotate the argument points around the axis :math:`|p2 - p1|` for the
+    angle     theta.
 
     Arguments:
         points (npt.ndarray): Array of points with the shape ((N_points, 3)).
@@ -116,6 +121,14 @@ class Mesh():
         ext = os.path.splitext(file_path)[-1].lower()
         if ext.startswith("."):
             ext = ext[1:]
+
+        if ext not in supportedFileExts():
+            log.error(f"File {file_path} does not have a supported file ext.")
+            log.info(f"Supported exts: {' '.join(supportedFileExts())}")
+            self.backend_name = None
+            self.backend = None
+            return
+
         self.file_path = file_path
 
         if ext == "med":
@@ -126,10 +139,10 @@ class Mesh():
             from . import _vtk
             self.backend = _vtk
             self.backend_name = "VTK"
-        elif "h5" in ext or "hdf" in ext:
-            from . import _hdf5
-            self.backend = _hdf5
-            self.backend_name = "HDF5"
+        # elif "h5" in ext or "hdf" in ext:
+        #     from . import _hdf5
+        #     self.backend = _hdf5
+        #     self.backend_name = "HDF5"
         else:
             self.backend_name = "UNKNOWN"
             self.backend = None
@@ -139,7 +152,7 @@ class Mesh():
             return False
         return True
 
-    def getMeshData(self) -> Tuple[np.ndarray]:
+    def getMeshData(self) -> Tuple[np.ndarray, np.ndarray]:
         """Get the vertices and triangles of the mesh.
         """
         if self.vertices.size == 0:
@@ -152,6 +165,9 @@ class Mesh():
         arrays are (N_vertices, 3) with dtype float32 and (N_triangles, 3) with
         dtype uint32 respectively.
         """
+        if self.backend is None:
+            return
+
         if self.vertices.size == 0:
             v, t = self.backend.getMeshData(self.file_path)
             self.vertices = v

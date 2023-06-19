@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Tuple
 import medcoupling as mc
 import numpy as np
 
@@ -105,6 +105,14 @@ __med__: Dict[str, mc.MEDCouplingUMesh] = {}
 __file_med__: Dict[str, mc.MEDFileUMesh] = {}
 
 def openFile(file_path: str, **kwargs) -> None:
+    """Opens a file and creates MEDCoupling File and Object handles.
+
+    Arguments:
+        file_path (str): Path to MED file.
+        kwargs (dict): Optional arguments passed. For instance a MED file can
+            have multiple meshes, therefore we can also use the name of the
+            mesh to obtain the desired mesh.
+    """
     global __med__, __file_med__
 
     if 'name' in kwargs:
@@ -114,12 +122,23 @@ def openFile(file_path: str, **kwargs) -> None:
     __med__[file_path] = __file_med__[file_path].getMeshAtLevel(0)
 
 def checkIfFieldExists(file_path: str, field_name: str) -> bool:
+    """Checks if a field exists in the file.
+
+    Arguments:
+        file_path (str): Path to file
+        field_name (str): Name of field
+
+    Returns:
+        ok (bool)
+    """
     fields = mc.GetAllFieldNames(file_path)
     if field_name in fields:
         return True
     return False
 
-def getMeshData(file_path):
+def getMeshData(file_path: str) -> Tuple[np.ndarray, np.ndarray]:
+    """Returns
+    """
     global __med__, __file_med__
     if not file_path in __file_med__:
         openFile(file_path)
