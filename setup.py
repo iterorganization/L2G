@@ -67,7 +67,7 @@ def get_libraries():
 def get_library_dirs():
     out = []
 
-    out.append(os.path.join(L2G_CPP_ROOTDIR))
+    out.append(os.path.join(L2G_CPP_ROOTDIR, 'lib'))
     if sys.platform == "win32":
         out.append(os.path.join(EMBREE_ROOTDIR, 'lib'))
 
