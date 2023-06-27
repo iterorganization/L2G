@@ -66,11 +66,13 @@ def checkIfOnEdge(px1: float, py1: float, px2: float, py2: float, tx: float,
     """
     c = False
 
+    # It's easier to remove points that are insanely close to each other prior
+    # to calling this function
     # In the case the p1 and p2 is the same, ignore it.
-    if np.allclose(px1, px2) and np.allclose(py1, py2):
-        if np.allclose(tx, px1) and np.allclose(ty, py1):
-            return True
-        return False
+    # if np.allclose(px1, px2) and np.allclose(py1, py2):
+    #     if np.allclose(tx, px1) and np.allclose(ty, py1):
+    #         return True
+    #     return False
 
     dx1 = tx - px1
     dy1 = ty - py1
@@ -524,6 +526,20 @@ class EQ:
 
 
         RLIM, ZLIM = self._eq.wall_contour_r, self._eq.wall_contour_z
+
+        N_RLIM = len(RLIM)
+        # Remove any duplicate points.
+        to_remove = []
+        for i in range(N_RLIM):
+            next_i = (i+1) % N_RLIM
+            if np.allclose(RLIM[i], RLIM[i+1]) and np.allclose(ZLIM[i], ZLIM[i+1]):
+                to_remove.append(i)
+
+        # Remove elements in reverse
+        for el in to_remove[::-1]:
+            RLIM.pop(el)
+            ZLIM.pop(el)
+
         # Apply the displacements too! But in this case we have to be
         # careful. As negative shift basically means that we shift the
         # plasma to the left. As well as the wall silhouette. As this is
