@@ -30,7 +30,7 @@ def single_exponential_psol(drsep: np.ndarray, Bt: float, Bpm: float, Rb: float,
 
     .. math::
 
-       q_{\parallel} = \frac{F P_{sol} B_t}{2 \pi B_{pm} R_{b}}
+       q_{\parallel} = \frac{F P_{sol} B_t}{2 \pi \lambda_q B_{pm} R_{b}}
 
     .. math::
 
@@ -62,7 +62,7 @@ def double_exponential_psol(drsep: np.ndarray, Bt: float, Bpm: float, Rb: float,
     r"""The double exponential plasma profile. Not to be confused of the sum
     of two single exponentials.
 
-    .. math:
+    .. math::
 
         q_{\parallel} = \frac{F P_{sol} B_t}{2 \pi R_b B_{pm} (\lambda_{q, main} + R_q \lambda_{q, near})}
 
