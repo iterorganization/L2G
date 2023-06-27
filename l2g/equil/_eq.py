@@ -532,7 +532,7 @@ class EQ:
         to_remove = []
         for i in range(N_RLIM):
             next_i = (i+1) % N_RLIM
-            if np.allclose(RLIM[i], RLIM[i+1]) and np.allclose(ZLIM[i], ZLIM[i+1]):
+            if np.allclose(RLIM[i], RLIM[next_i]) and np.allclose(ZLIM[i], ZLIM[next_i]):
                 to_remove.append(i)
 
         # Remove elements in reverse
