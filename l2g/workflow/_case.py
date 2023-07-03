@@ -759,8 +759,8 @@ class CASE(object):
                         ax.semilogy(drsep * 1e3, interELM_par, 'g--',
                             label="inter-ELM")
                         _drsep = np.linspace(separatrix_distance, 300, 100)
-                        old_q_par = 5 * np.exp(-(_drsep - separatrix_distance) / 0.09)\
-                                  + 3 * np.exp(-(_drsep - separatrix_distance) / 0.17)
+                        old_q_par = 5e6 * np.exp(-(_drsep - separatrix_distance) / 0.09)\
+                                  + 3e6 * np.exp(-(_drsep - separatrix_distance) / 0.17)
                         ax.semilogy(_drsep, old_q_par, 'k')
 
                         ax.vlines(separatrix_distance, ymin=0, ymax=200, colors='r')
