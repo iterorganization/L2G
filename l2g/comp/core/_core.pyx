@@ -439,6 +439,7 @@ cpdef runFLTonPoints(PyFLT flt_obj, float [:] tg_vertices, int user_num_threads=
         double [:] conlenUp = results.conlenUp
         double [:] conlenDown = results.conlenDown
         int [:] direction_map = results.direction
+        # Result memory views
         int [:] geom_hit_ids_up = results.geom_hit_ids_up
         int [:] prim_hit_ids_up = results.prim_hit_ids_up
         int [:] geom_hit_ids_down = results.geom_hit_ids_down
@@ -450,9 +451,9 @@ cpdef runFLTonPoints(PyFLT flt_obj, float [:] tg_vertices, int user_num_threads=
         threadId = threadid()
 
         for i in prange(N_vertices, schedule="dynamic"):
+            iS = 3 * i
             # First go Down!
             direction = -1 * direction_map[i]
-            iS = 3 * i
             flt_obj.c_setDirection_omp(direction, threadId)
             flt_obj.c_setIV_omp(points[iS], points[iS + 1], points[iS + 2],
                                threadId)
@@ -460,6 +461,8 @@ cpdef runFLTonPoints(PyFLT flt_obj, float [:] tg_vertices, int user_num_threads=
             conlenDown[i] = flt_obj.c_getConlen_omp(threadId)
             geom_hit_ids_down[i] = flt_obj.c_getGeomID_omp(threadId)
             prim_hit_ids_down[i] = flt_obj.c_getPrimID_omp(threadId)
+        for i in prange(N_vertices, schedule="dynamic"):
+            iS = 3 * i
             # Next go Up!
             direction = direction_map[i]
             flt_obj.c_setDirection_omp(direction, threadId)
