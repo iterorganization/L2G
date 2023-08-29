@@ -723,7 +723,7 @@ class FieldLineTracer:
         # mark the fls as zero
 
         for geom_id in self.parameters.artificial_fl_catcher_geom_id:
-            log.info(f"Masking all elements with geom_hit_ids == {geom_id} to zero.")
+            log.debug(f"Masking all elements with geom_hit_ids == {geom_id} to zero.")
             out = np.where(self.mesh_results.geom_hit_ids != geom_id,
                            out, 0)
         return out
