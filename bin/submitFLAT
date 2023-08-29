@@ -3,6 +3,9 @@
 declare -a flatopts
 flatopts=()
 
+REDIRECT_OUTPUT_TO_LOG_FILE=1
+SLURM_COMMAND=sbatch
+
 while [[ $# -gt 0 ]]; do
     key="$1"
     case $key in
@@ -13,7 +16,13 @@ while [[ $# -gt 0 ]]; do
             echo "Available options (verbatim):"
             echo "partition=<partition_name> - Specify slurm partition name. No spaces between = operator"
             echo "cpus_per_task=<num_of_cpus> - Specify how many OpenMP threads you wish to use. No spaces between = operator.Default, maximum available"
+            echo "slurm_command=srun - Sometimes we wish to catch the output directly from the submitted process. In this case we provide the following option, verbatim, in order to catch the output."
             exit
+            ;;
+        slurm_command=srun)
+            REDIRECT_OUTPUT_TO_LOG_FILE=0
+            SLURM_COMMAND=srun
+            shift
             ;;
         partition=*)
             PARTITION_NAME=${1#*=}
@@ -42,15 +51,20 @@ echo "Running job ${JOB_NAME}"
 LOG_DIR=$(realpath ${CONF_FILE} | xargs dirname)/log
 mkdir -p ${LOG_DIR}
 
+if [ "${REDIRECT_OUTPUT_TO_LOG_FILE}" = "1" ]; then
+    LOG_NAME=${LOG_DIR}/${JOB_NAME}
 
-LOG_NAME=${LOG_DIR}/${JOB_NAME}
+    # Add time stamp if date command exists
+    if hash date 2>/dev/null; then
+        LOG_NAME="${LOG_NAME}_$(date +%d-%m-%y_%T)"
+    fi
+    LOG_NAME="${LOG_NAME}_slurm.log"
 
-# Add time stamp if date command exists
-if hash date 2>/dev/null; then
-    LOG_NAME="${LOG_NAME}_$(date +%d-%m-%y_%T)"
+    # Now modify the SLURM_COMMAND
+    SLURM_COMMAND="${SLURM_COMMAND} --output=${LOG_NAME}"
+    echo "Log file: ${LOG_NAME}"
 fi
 
-LOG_NAME="${LOG_NAME}_slurm.log"
 # Defaults to gen10_ib
 PARTITION_NAME=${PARTITION_NAME:-"gen10_ib"}
 
@@ -64,6 +78,5 @@ export MPLBACKEND=Agg
 #                                                v                                           v
 CPUS_PER_TASK=${CPUS_PER_TASK:-$(sinfo -p ${PARTITION_NAME} -O "cpus" --noheader | sed 's/[^0-9]*//g')}
 
-
-sbatch --job-name=${JOB_NAME} --output=${LOG_NAME} --partition=${PARTITION_NAME} --cpus-per-task=${CPUS_PER_TASK} --nodes=1 ${SCRIPTPATH}/FLAT.sbatch "${CONF_FILE}" "${flatopts[@]}"
-echo "Log file: ${LOG_NAME}"
+# Now run the command
+${SLURM_COMMAND} --partition=${PARTITION_NAME} --cpus-per-task=${CPUS_PER_TASK} --nodes=1 ${SCRIPTPATH}/FLAT.sbatch "${CONF_FILE}" "${flatopts[@]}"
