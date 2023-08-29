@@ -612,7 +612,7 @@ class CASE(object):
                     self.flt_obj.mesh_results, self.mesh_obj)
 
             # Optionals now.
-            if self.get_field_lines:
+            if self.get_field_lines and self.fl_ids:
                 fl_base_name = ".".join(self.result_file_path.split(".")[:-1]) # without .med
                 # Now get the FL
                 if all(isinstance(x, list) for x in self.fl_ids):
