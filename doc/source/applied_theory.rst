@@ -21,8 +21,7 @@ before it is intercepted.
 .. note::
 
    In case of triangular surface meshes, the origin or actually end of a
-   field line starts at the barycenter of the triangle. There is no sampling
-   used.
+   field line starts at the barycenter of the triangle. Sampling is not used.
 
 .. note::
 

@@ -81,7 +81,7 @@ Head load mapping submodule
 ***************************
 
 Contains functions for applying the heat load mapping of different phases
-of a scenario (e.g., Ramp-Down, Steady-State, ...)
+of a scenario (e.g., Ramp-Down, Steady-State, ...).
 
 .. automodule:: l2g.hlm.general
    :members:
@@ -151,26 +151,6 @@ application of heat load maps.
    :undoc-members:
    :private-members:
 
-MEDCoupling I/O class
-=====================
-
-This module contains functions for input output handling of FLT result data.
-
-.. autoclass:: l2g.comp.MEDMeshIO
-   :members:
-   :undoc-members:
-   :private-members:
-
-.. autofunction:: l2g.comp.dump_flt_mesh_results_to_med
-
-.. autofunction:: l2g.comp.load_flt_mesh_results_from_med
-
-.. autofunction:: l2g.comp.save_fls_to_vtk
-
-.. autofunction:: l2g.comp.save_mesh_to_vtk
-
-.. autofunction:: l2g.comp.save_results_to_vtk
-
 Settings classes
 ================
 
@@ -210,6 +190,104 @@ use in Cython context and as previous case + overloading.
    :private-members:
 
 .. automodule:: l2g.comp.core.ext_wrapper
+   :members:
+   :undoc-members:
+   :private-members:
+
+******************
+Mesh file handling
+******************
+
+This module provides a minimal functionality for reading/writing unstructured
+grid mesh files with fields. There is a single class that based on the file
+extension utilizes different backends.
+
+An unstructured grid mesh here is considered a mesh built from triangles. Other
+cell types are ignored.
+
+Mesh class
+==========
+
+This class is the main interface used for reading/writing data from/to a file.
+
+.. code-block:: python
+
+   import l2g.mesh
+   file_path = '/path/to/file.ext'
+
+   # You can see which file extensions are supported. The program itself will
+   # not try to figure out the magic bits or the file structure.
+
+   file_ext = 'ext'
+   print(file_ext in l2g.mesh.supportedFileExts())
+
+   # If all is okay
+   mesh = l2g.mesh.Mesh(file_ext)
+
+   # Get mesh data
+   mesh.getMeshData() # Returns vertices, triangles
+
+   # Get field data
+   # Set the index if there are multiple time series
+   mesh.setIndex(2)
+   # Get a field
+   mesh.getField("Field name")
+
+   # Now the opposite. Let's write the mesh to a new file.
+   new_mesh = mesh.writeMeshTo('/new/file/path.ext')
+
+   number_of_triangles = len(new_mesh.triangles)
+
+   # Let's add some time steps
+   import numpy as np
+
+   new_mesh.setNumberOfTimeSteps(5)
+
+   for i in range(5):
+      # Set the index
+      new_mesh.setIndex(i)
+      # Provisionally set the time
+      new_mesh.setTime(i * 0.25)
+      array = np.random.random(number_of_triangle)
+      new_mesh.addField("Field name", array)
+
+   # Now write the fields
+   new_mesh.writeFields()
+
+
+
+
+.. autoclass:: l2g.mesh.Mesh
+   :members:
+   :undoc-members:
+   :private-members:
+
+Backends
+========
+
+The backends submodule contains functions on reading their respective file
+formats.
+
+
+MEDCoupling (hdf5)
+------------------
+
+.. automodule:: l2g.mesh._medcoupling
+   :members:
+   :undoc-members:
+   :private-members:
+
+VTK
+---
+
+Only the vtkUnstructuredGrid and vtkXMLUnstructuredGrid formats are supported.
+The legacy ASCII VTK format should be avoided as it takes far more data and
+does not support time steps in a single file.
+
+The XML VTU files should be used only as they support having multiple time
+steps in a single file (although writing to the file is not so intuitive).
+
+.. automodule:: l2g.mesh._vtk
    :members:
    :undoc-members:
    :private-members:

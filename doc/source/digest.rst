@@ -89,7 +89,6 @@ in :ref:`why_openmp`.
 
         input_equil -> l2g_py [ltail=cluster_0]
         l2g_py -> output_graphics [lhead=cluster_2, label="Write"]
-        ext_alglib -> l2g_cpp [ltail=cluster_3, style=dashed, arrowhead=none]
         py_cython -> l2g_py [ltail=cluster_4, style=dashed, arrowhead=none]
     }
 

@@ -9,6 +9,9 @@ First steps
 This chapter will show the minimum number of steps required to run a
 :term:`FLT` case.
 
+Mesh data
+=========
+
 Essentially when it comes to :term:`FLT` all we require is the mesh data, a
 target and shadowing mesh and an equilibrium source. If we use scripting there
 is no strict format on the mesh files, what is important is only the data type
@@ -47,10 +50,16 @@ supposed to be as following:
 
    It is important that the units of the meshes (vertices) is always in meters!
 
+Equilibrium data
+================
+
 Now that we have our mesh data, in this case we will have variables only for
 one dummy mesh, we require a source of equilibrium. In L2G the class for
 handling equilibrium data is the `l2g.equil.Equilibrium`. But the source of
 the data can be either the EQDSK-G or from IMAS format:
+
+EQDSK-G format
+--------------
 
 .. code-block:: python
 
@@ -68,6 +77,9 @@ the data can be either the EQDSK-G or from IMAS format:
    # poloidal flux function is changed to mimic the correct helicity.
 
    # The equilibrium object is now ready to be used  for :term:`FLT`
+
+IMAS format
+-----------
 
 .. code-block:: python
 

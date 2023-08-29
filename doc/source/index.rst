@@ -7,7 +7,7 @@ Welcome to L2G_py's documentation!
 ==================================
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 4
    :caption: Contents:
    
    abbreviations.rst
