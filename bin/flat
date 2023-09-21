@@ -12,6 +12,8 @@ equilibrium data or finally describing what HLM to use on the FLT data.
 This program reads that file and then the user can decide what to run, on what
 geometry, using which equilibrium and using which HLM.
 """
+import time
+start = time.time()
 
 import argparse
 
@@ -276,6 +278,8 @@ if args.command == "run":
 
                 output_med_name = f"{output_file_base_name}_lw_{i}_{lw_length}_mm.med"
                 # Create a new case!
+                hlm_obj.data["longwave_misaligment_applied"] = True
+                hlm_obj.data["longwave_l"] = lw_length * 1e-3
                 case = l2g.workflow.create_case(geo_obj, equ_obj, hlm_obj)
                 case.create_graphics = False
 
@@ -295,12 +299,9 @@ if args.command == "run":
                 case.case_name = output_file_base_name
                 case.create_result_file_if_necessary()
 
-                print("Creating output result file if necessary")
-                case.create_result_file_if_necessary()
-
                 print("Running case")
                 case.main()
 
         pass
-
+    print(f"Elapsed total time: {time.time() - start:.2f} seconds.")
     sys.exit(0)

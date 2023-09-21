@@ -621,11 +621,19 @@ class FieldLineTracer:
                 Bt=Btotal, Bpm=Bpm, Rb=Rb, P_sol=self.hlm_params.p_sol,
                 F=0.5, lambda_q=self.hlm_params.lambda_q)
         elif self.hlm_params.hlm_type == "double":
-            q_par = l2g.hlm.general.double_exponential_psol(drsep=drsep,
-                Bt=Btotal, Bpm=Bpm, Rb=Rb,
-                lambda_q_main=self.hlm_params.lambda_q_main,
-                lambda_q_near=self.hlm_params.lambda_q_near,
-                Rq=self.hlm_params.ratio, P_sol=self.hlm_params.p_sol, F=0.5)
+            if self.hlm_params.longwave_misaligment_applied:
+                q_par = l2g.hlm.general.double_exponential_psol_longwave(
+                    drsep=drsep, Bt=Btotal, Bpm=Bpm, Rb=Rb,
+                    lambda_q_main=self.hlm_params.lambda_q_main,
+                    lambda_q_near=self.hlm_params.lambda_q_near,
+                    Rq=self.hlm_params.ratio, P_sol=self.hlm_params.p_sol,
+                    F=0.5, delta_mis=self.hlm_params.longwave_l)
+            else:
+                q_par = l2g.hlm.general.double_exponential_psol(drsep=drsep,
+                    Bt=Btotal, Bpm=Bpm, Rb=Rb,
+                    lambda_q_main=self.hlm_params.lambda_q_main,
+                    lambda_q_near=self.hlm_params.lambda_q_near,
+                    Rq=self.hlm_params.ratio, P_sol=self.hlm_params.p_sol, F=0.5)
         elif self.hlm_params.hlm_type == "custom":
             # We have points and profile
             q_par = l2g.hlm.general.custom(drsep=drsep,
@@ -635,7 +643,9 @@ class FieldLineTracer:
         elif self.hlm_params.hlm_type == "elm":
             # The ELM data is loaded with an extra step.
             interELM = l2g.hlm.steady_state.inter_ELM(drsep, Rb, Btotal, Bpm,
-                    Rb=self.hlm_params.r_break, P_sol=self.hlm_params.p_sol)
+                    Rb=self.hlm_params.r_break, P_sol=self.hlm_params.p_sol,
+                    lambda_n=self.hlm_params.lambda_q_near,
+                    lambda_m=self.hlm_params.lambda_q_main)
             elm = l2g.hlm.general.custom(drsep=drsep,
                 points=self.hlm_params.points, profile=self.hlm_params.profile)
             q_par = interELM + elm
