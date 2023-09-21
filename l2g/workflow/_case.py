@@ -68,7 +68,7 @@ class GEOMETRY(DATA_BLOCK):
     """Class for storing information on FLT to be used
     """
     required_keys = ["name", "target_mesh", "shadow_meshes"]
-    optional_keys = ["cutoff", "parameters", "fl_ids", "exclude_meshes",
+    optional_keys = ["cutoff_conlen", "parameters", "fl_ids", "exclude_meshes",
                      "include_target_in_shadow", "afl_catcher_meshes",
                      "rot_axes", "rot_theta", "align_lcfs",
                      "longwave_misalignment", "rotational_misalignment"]
@@ -109,7 +109,7 @@ class EQUILIBRIUM(DATA_BLOCK):
 
 class HLM(DATA_BLOCK):
     required_keys: list = ["name", "hlm_type"]
-    optional_keys: list = ["ip_transition", "r_break", "parameters", "ratio", "p_sol", "extrapolate", "outside_value"]
+    optional_keys: list = ["ip_transition", "r_break", "parameters", "ratio", "p_sol", "extrapolate", "outside_value", "longwave_misalignment_applied", "longwave_l", "lambda_q_near", "lambda_q_main"]
     elm_required: list = ["shadow_meshes"]
     single_required: list = ["p_sol", "lambda_q"]
     double_required: list = ["p_sol", "lambda_q_near", "lambda_q_main"]
@@ -531,6 +531,8 @@ class CASE(object):
             else:
                 log.error(f"Unknown plasma profile: {hlm_type}. Stopping!")
                 return
+            if self.flt_obj.hlm_params.longwave_misaligment_applied:
+                log.info("Longwave misalignment applied!")
             import l2g.hlm.general
             import l2g.hlm.ramp_down
             import l2g.hlm.steady_state
@@ -618,6 +620,8 @@ class CASE(object):
                 if all(isinstance(x, list) for x in self.fl_ids):
                     # We have a group of IDs.
                     for j, subset in enumerate(self.fl_ids):
+                        if not subset:
+                            continue
                         self.flt_obj.fl_ids = subset
                         self.flt_obj.getFL()
                         fl_path_name = os.path.join(self.output_directory,
@@ -759,14 +763,18 @@ class CASE(object):
                         ax.semilogy(drsep * 1e3, interELM_par, 'g--',
                             label="inter-ELM")
                         _drsep = np.linspace(separatrix_distance, 300, 100)
-                        old_q_par = 5e6 * np.exp(-(_drsep - separatrix_distance) / 0.09)\
-                                  + 3e6 * np.exp(-(_drsep - separatrix_distance) / 0.17)
+                        old_q_par = 5e6 * np.exp(-(_drsep - separatrix_distance) / 90)\
+                                  + 3e6 * np.exp(-(_drsep - separatrix_distance) / 170)
                         ax.semilogy(_drsep, old_q_par, 'k')
 
-                        ax.vlines(separatrix_distance, ymin=0, ymax=200, colors='r')
+                        ax.vlines(separatrix_distance, ymin=0, ymax=1e10, colors='r')
                         ax.text(separatrix_distance, 150, r"$2^{nd} sep$", rotation=90)
 
+                    # q_max = np.max(q_par) * 10
+                    # q_min = np.min(q_par) // 10
+                    # ax.set_ylim(q_min, q_max)
                     # Save the figure
+                    ax.legend()
                     figure.savefig(f"{out_file}_{index}_qpar.pdf")
                     figure.savefig(f"{out_file}_{index}_qpar.png")
 
