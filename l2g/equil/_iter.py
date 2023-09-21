@@ -198,6 +198,7 @@ class EquilibriumIterator(object):
     def applyPlasmaShift(self, r_shift: float | List[float], z_shift: float | List[float]):
 
         log.info("Applying shift to input plasma equilibrium data")
+
         if isinstance(r_shift, list):
             if not len(r_shift) == len(self):
                 log.error('You have not provided enough shift values for all' +
@@ -205,16 +206,32 @@ class EquilibriumIterator(object):
                 return
 
             for i,equilibrium in enumerate(self._equilibriums):
-                log.info(f"Applying shift_r={r_shift[i]}m shift_z={z_shift[i]}m")
+                log.info(f"Applying shift_r={r_shift[i]}m")
                 equilibrium.mag_axis_r += r_shift[i]
-                equilibrium.mag_axis_z += z_shift[i]
                 equilibrium.grid_r += r_shift[i]
-                equilibrium.grid_z += z_shift[i]
+            # It must be float
         else:
-            log.info(f"Applying shift_r={r_shift}m shift_z={z_shift}m")
+            log.info(f"Applying shift_r={r_shift}m")
             for equilibrium in self._equilibriums:
                 # Apply shift to the equilibrium
                 equilibrium.mag_axis_r += r_shift
-                equilibrium.mag_axis_z += z_shift
                 equilibrium.grid_r += r_shift
+
+
+
+        if isinstance(z_shift, list):
+            if not len(z_shift) == len(self):
+                log.error('You have not provided enough shift values for all' +
+                          ' instances of plasma!')
+                return
+
+            for i,equilibrium in enumerate(self._equilibriums):
+                log.info(f"Applying shift_z={z_shift[i]}m")
+                equilibrium.mag_axis_z += z_shift[i]
+                equilibrium.grid_z += z_shift[i]
+        else:
+            log.info(f"Applying shift_z={z_shift}m")
+            for equilibrium in self._equilibriums:
+                # Apply shift to the equilibrium
+                equilibrium.mag_axis_z += z_shift
                 equilibrium.grid_z += z_shift
