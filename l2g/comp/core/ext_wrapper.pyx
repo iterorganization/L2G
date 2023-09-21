@@ -9,6 +9,8 @@ from libcpp.vector cimport vector
 
 from l2g.comp.core.ext_flt_cpp cimport FLT, EmbreeAccell
 
+import logging
+log = logging.getLogger()
 
 cdef class PyEmbreeAccell:
     """This class wraps the EmbreeAccell class from L2G_cpp and is used to
@@ -17,6 +19,15 @@ cdef class PyEmbreeAccell:
     """
     def __cinit__(self):
         self.c_eacc = new EmbreeAccell()
+
+    def __init__(self):
+        # List of Loaded GeomIDs in the Embree object.
+        self.loaded_meshes_id: list = []
+        # Mapping of name to mesh if name is provided when supplying a mesh.
+        # Useful when you want to dynamically see what meshes are loaded, to
+        # load only when there is a new mesh. This is though entirely up to
+        # the user to manage.
+        self.name_to_mesh: dict = {}
 
     def commitMesh(self, vertices, triangles, name=""):
         """Commit a mesh, consisting of list of vertices and list
@@ -78,16 +89,38 @@ cdef class PyEmbreeAccell:
 
         geomId = self.c_eacc.commitMesh(&npa_vertices[0], n_vertices,
                                         &npa_triangles[0], n_triangles)
+        self.loaded_meshes_id.append(geomId)
+        if name != "":
+            self.name_to_mesh[name] = geomId
         return geomId
 
-    def deleteMesh(self, unsigned geom_id):
+    def deleteMesh(self, unsigned geom_id) -> bool:
         """Removes a commited mesh from Embree if it exists
 
         Arguments:
             geom_id (unsigned): Non-negative ID of a geometry to remove.
         """
 
-        return self.c_eacc.deleteMesh(geom_id)
+        if not geom_id in self.loaded_meshes_id:
+            return False
+        ok = self.c_eacc.deleteMesh(geom_id)
+        if ok:
+            self.loaded_meshes_id.remove(geom_id)
+            # Now to delete entry in the name_to_mesh.
+            entry = [k for k, v in self.name_to_mesh.items() if v == geom_id]
+            if entry:
+                self.name_to_mesh.pop(entry[0])
+        return ok
+
+    def isEmpty(self) -> bool:
+        if len(self.loaded_meshes_id):
+            return False
+        return True
+
+    def isMeshWithNameIn(self, name: str) -> bool:
+        if name in self.name_to_mesh:
+            return True
+        return False
 
 cdef class PyFLT:
     """This class wrapps the FLT class from L2G_cpp and houses functions, used
@@ -97,6 +130,36 @@ cdef class PyFLT:
 
     def __cinit__(self):
         self.c_flt = new FLT()
+
+    def __init__(self):
+        # List of booleans
+        self.resetFlags()
+
+    def resetFlags(self) -> None:
+        self.flag_rarr: bool = False
+        self.flag_zarr: bool = False
+        self.flag_psi: bool = False
+        # FPOL and FARR not needed
+        self.flag_vfpol: bool = False
+
+    def isReady(self) -> bool:
+        """Function that checks whether the underlying C++ object has all the
+        minimal data necessary for FLT
+        """
+        ok = True
+
+        ok &= self.flag_rarr
+        ok &= self.flag_zarr
+        ok &= self.flag_psi
+        if not self.flag_rarr:
+            log.error("R array not set for Psi data.")
+        if not self.flag_zarr:
+            log.error("Z array not set for Psi data.")
+        if not self.flag_psi:
+            log.error("Psi data not set.")
+        if not self.flag_vfpol:
+            log.error("FPol vacuum not set.")
+        return ok
 
     def setNDIM(self, Py_ssize_t NDIMR, Py_ssize_t NDIMZ):
         """Set the dimensions of the R,Z grid.

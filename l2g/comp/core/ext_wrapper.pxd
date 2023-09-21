@@ -11,6 +11,8 @@ from l2g.comp.core.ext_flt_cpp cimport FLT, EmbreeAccell
 cdef class PyEmbreeAccell:
 
     cdef EmbreeAccell *c_eacc
+    cdef dict name_to_mesh
+    cdef list loaded_meshes_id
 
 # Function signatures that have c_ prefix are written so that they can be used
 # in nogil blocks.
@@ -28,6 +30,8 @@ cdef class PyEmbreeAccell:
 cdef class PyFLT:
 
     cdef FLT *c_flt # C++ instance we are wrapping
+
+    cdef bool flag_rarr, flag_zarr, flag_psi, flag_vfpol
 
     cpdef double getVacuumFPOL(self)
     cpdef void setShift(self, double rmove, double zmove)
