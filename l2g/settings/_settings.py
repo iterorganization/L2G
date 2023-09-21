@@ -149,7 +149,8 @@ class HLM(BaseClassOptions):
     __slots__ = ["hlm_type", "p_sol", "lambda_q", "lambda_q_main",
                  "lambda_q_near", "ratio", "r_break", "ip_transition",
                  "Rb", "Z", "Btotal", "points", "profile", "additional_points",
-                 "additional_profiles", "extrapolate", "outside_value"]
+                 "additional_profiles", "extrapolate", "outside_value",
+                 "longwave_misaligment_applied", "longwave_l"]
 
     # Lists for each scenario
     flat_top = ["r_break"]
@@ -157,7 +158,8 @@ class HLM(BaseClassOptions):
     single_exp = ["p_sol", "lambda_q"]
     double_exp = ["p_sol", "lambda_q_main", "lambda_q_near", "ratio"]
     custom = ["points", "profile", "additional_points", "additional_profiles",
-              "extrapolate", "outside_value"]
+              "extrapolate", "outside_value", "longwave_misaligment_applied",
+              "longwave_l"]
 
     acceptable_types = ["flat_top", "ramp_down", "single_exp",
                         "double_exp", "custom"]
@@ -181,6 +183,8 @@ class HLM(BaseClassOptions):
         self.additional_profiles: list = []
         self.extrapolate: bool = True
         self.outside_value: float = 0.0
+        self.longwave_misaligment_applied: bool = False
+        self.longwave_l: float = 0.0
         # Not user set
         self.Rb: float = 0
         self.Z: float = 0 #
