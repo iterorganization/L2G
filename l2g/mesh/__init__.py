@@ -235,7 +235,7 @@ class Mesh():
 
         """
         if file_path == self.file_path:
-            return None
+            return self
 
         if not self.vertices.size:
             # Try getting the data
@@ -407,7 +407,7 @@ def load_flt_results_from_mesh(mesh_results: L2GResults, mesh_object: Mesh):
         return
 
     mesh_results.drsep = mesh_object.getField('drsep') * 1e-3 # Convert to m
-    mesh_results.conlen = mesh_object.getField('conlen')
+    mesh_results.conlen = mesh_object.getField('conlen') * 1e-3
     mesh_results.flux = mesh_object.getField('flux')
 
     # Necessary for the mask.
