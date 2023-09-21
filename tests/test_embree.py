@@ -47,5 +47,17 @@ class TestEmbree(unittest.TestCase):
         geomId = self.embreeObj.commitMesh(vertices, triangles)
         self.assertEqual(geomId, 0)
 
+    def test_5_add_mesh_with_name(self):
+        """Add a mesh with name 'test' ask the Embree object if it contains a
+        mesh with that name.
+        """
+        vertices = np.array([0,0,0,1,0,0,0,1,0], dtype=np.float32)
+        vertices += 1.0
+        triangles = np.array([1,2,3], dtype=np.uint32)
+        geomId = self.embreeObj.commitMesh(vertices, triangles, 'test')
+
+        isIn = self.embreeObj.isMeshWithNameIn('test')
+        self.assertTrue(isIn)
+
 if __name__ == '__main__':
     unittest.main()
