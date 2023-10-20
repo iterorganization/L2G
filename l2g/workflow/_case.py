@@ -28,6 +28,7 @@ class DATA_BLOCK:
                           f"{','.join(missing_keys)}")
             sys.exit(1)
 
+    # These two functions have the same logic. Will have to rethink it...
     def set_required_attr(self, data: dict, required_keys=None) -> None:
         if required_keys is None:
             required_keys = self.required_keys
@@ -120,6 +121,11 @@ class HLM(DATA_BLOCK):
         super(HLM, self).__init__()
         self.data = {}
 
+        # Next set of variables are used for generating the next "set"
+        # of
+        self.only_one_set = True # Flag that tells us if we have one function
+                                 # for all time steps.
+
     def check_data(self, data: dict) -> None:
         super(HLM, self).check_data(data)
 
@@ -165,6 +171,73 @@ class HLM(DATA_BLOCK):
             self.set_required_attr(data, self.custom_required)
 
         self.set_optional_attr(data)
+
+        # Before one HLM block would contain information just for one profile.
+        # For instance, if we had a time-series or a collection of equilibria
+        # which all contained the same plasma profile but different parameters
+        # then we couldn't do it as an HLM block would contain information
+        # only for one instance.
+
+        # So we expand the parameters based on the largest list of parameters.
+        new_data = {}
+        max_n = -1
+        for key in self.data:
+            if isinstance(self.data[key], list):
+                max_n = max(max_n, len(self.data[key]))
+
+        if max_n == -1 or max_n == 1:
+            # We only have one HLM set
+            self.only_one_set = True
+            # Unpack lists, that is, if the parameters have a list with one value
+            for key in self.data:
+                if key in ["name", "hlm_type"]:
+                    continue
+                if isinstance(self.data[key], list):
+                    self.data[key] = self.data[key][0]
+
+            return
+        else:
+            self.only_one_set = False
+
+        # Now we have expand the data
+        for key in self.data:
+            old_data = self.data[key]
+            if key in ["name", "hlm_type"]:
+                new_data[key] = self.data[key]
+                continue
+
+            if isinstance(self.data[key], list):
+                # Just see if we have to expand it.
+                if len(old_data) < max_n:
+                    new_l = old_data + [old_data[-1] for _ in range(max_n - old_data)]
+                    new_data[key] = new_l
+                else:
+                    new_data[key] = old_data
+            else:
+                # It's only one value so copy it.
+                new_data[key] = [self.data[key] for _ in range(max_n)]
+        self.data = new_data
+
+    def get_hlm(self, index: int) -> dict:
+        """Get the hlm parameters index time step.
+        """
+        if self.only_one_set:
+            return self.data
+
+        if index < 0:
+            index = 0
+        # Select one key
+        n_max = len(self.data[list(self.data.keys())[0]])
+        if index >= n_max:
+            index = n_max - 1
+        out = {}
+        for key in self.data:
+            if key in ["name", "hlm_type"]:
+                out[key] = self.data[key]
+            else:
+                out[key] = self.data[key][index]
+        return out
+
 
 class CASE(object):
     """Collection of the case data:
@@ -354,7 +427,8 @@ class CASE(object):
             self.plot_heat_loads = False
             return
 
-        self.flt_obj.hlm_params.load(self.hlm_obj.data)
+        # Old part of setting the HLM parameters.
+        # self.flt_obj.hlm_params.load(self.hlm_obj.data)
         log.info(self.flt_obj.hlm_params.dump())
 
         if self.hlm_obj.data["hlm_type"] == "elm":
@@ -512,25 +586,23 @@ class CASE(object):
         time_start = time.perf_counter()
         N = len(self.ite_obj)
 
-        hlm_type = self.flt_obj.hlm_params.hlm_type
-
         if self.apply_heat_load:
-            # Print message which profile is applied
-            if hlm_type == "elm":
-                log.info("Applying Flat-Top plasma profile")
-            elif hlm_type == "ramp-down":
-                log.info("Applying Ramp-Down plasma profile")
-            elif hlm_type == "single":
-                log.info("Applying single exponential plasma profile")
-            elif hlm_type == "double":
-                log.info("Applying double exponential plasma profile")
-            elif hlm_type == "l_mod":
-                log.info("Applying L-mod diverted plasma profile")
-            elif hlm_type == "custom":
-                log.info("Applying custom profile")
-            else:
-                log.error(f"Unknown plasma profile: {hlm_type}. Stopping!")
-                return
+            # # Print message which profile is applied
+            # if hlm_type == "elm":
+            #     log.info("Applying Flat-Top plasma profile")
+            # elif hlm_type == "ramp-down":
+            #     log.info("Applying Ramp-Down plasma profile")
+            # elif hlm_type == "single":
+            #     log.info("Applying single exponential plasma profile")
+            # elif hlm_type == "double":
+            #     log.info("Applying double exponential plasma profile")
+            # elif hlm_type == "l_mod":
+            #     log.info("Applying L-mod diverted plasma profile")
+            # elif hlm_type == "custom":
+            #     log.info("Applying custom profile")
+            # else:
+            #     log.error(f"Unknown plasma profile: {hlm_type}. Stopping!")
+            #     return
             if self.flt_obj.hlm_params.longwave_misaligment_applied:
                 log.info("Longwave misalignment applied!")
             import l2g.hlm.general
@@ -551,7 +623,7 @@ class CASE(object):
             # Create path for file
             out_file = os.path.join(self.output_directory, self.case_name)
 
-            hlm_type = self.flt_obj.hlm_params.hlm_type
+
 
             import matplotlib.pyplot as plt
             import matplotlib.figure
@@ -635,6 +707,9 @@ class CASE(object):
                     l2g.mesh.save_results_to_vtk(self.flt_obj.fl_results, fl_path_name)
 
             if self.apply_heat_load:
+                # Get the HLM parameters
+                self.flt_obj.hlm_params.load(self.hlm_obj.get_hlm(index))
+                hlm_type = self.flt_obj.hlm_params.hlm_type
                 if hlm_type == "elm":
                     self.omp_obj.setEquilibrium(equilibrium)
                     self.omp_obj.applyParameters()
@@ -669,8 +744,9 @@ class CASE(object):
                     # warning.
                     plt.close(figure)
                     del figure
-
                 if self.plot_heat_loads:
+                    self.flt_obj.hlm_params.load(self.hlm_obj.get_hlm(index))
+                    hlm_type = self.flt_obj.hlm_params.hlm_type
                     # See if hlm is ELM.
                     if hlm_type == "elm":
                         self.omp_obj.setEquilibrium(equilibrium)
@@ -742,8 +818,6 @@ class CASE(object):
                             lambda_q = float("NaN")
                             q_par = np.zeros(drsep.shape)
                         lambdaq_array.append(lambda_q)
-
-
 
                     figure: matplotlib.figure.Figure = plt.figure()
 

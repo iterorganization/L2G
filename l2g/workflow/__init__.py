@@ -421,7 +421,7 @@ def load_elm_settings(d: dict, flt: 'FieldLineTracer') -> None:
     flt.options.switch_runFLT = 1
     flt.parameters.target_to_m = 1
 
-    set_parameters_and_options(d, flt)
+    set_parameters_and_options(d['parameters'], flt)
 
     # embreeObj = l2g.comp.core.PyEmbreeAccell()
 
