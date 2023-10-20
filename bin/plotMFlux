@@ -4,7 +4,7 @@ description = """From an IMAS time slice get a LCFS and Psi image.
 """
 
 
-parser = argparse.ArgumentParser(description='Create EQDSK from IDS time slice')
+parser = argparse.ArgumentParser(description='Plot magnetic poloidal flux')
 subparsers = parser.add_subparsers(dest="input_type", help="Data source: IMAS, EQDSK, ...")
 
 imas_subparser = subparsers.add_parser("imas", help="Plot from IMAS source")
@@ -26,7 +26,7 @@ eqdsk_subparser = subparsers.add_parser("eqdsk", help="Plot from EQDSK source")
 eqdsk_subparser.add_argument("eqdsk_file", nargs="?", help="Path to EQDSK file.")
 eqdsk_subparser.add_argument('-o', '--output_name', type=str, default="out",
                              help="Base name of files.", metavar="OUTNAME")
-parser.add_argument("--interactive", dest="interactive", action="store_true",
+parser.add_argument("-i", "--interactive", dest="interactive", action="store_true",
                     help="Display plots interactively")
 
 

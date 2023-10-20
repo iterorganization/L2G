@@ -186,5 +186,5 @@ setup(
     python_requires=">=3.6",
     scripts = ['bin/flat', 'bin/submitFLAT', 'bin/FLAT.sbatch',
                'bin/imas2eqdsk', 'bin/mkEqdskMovie', 'bin/mkImasMovie',
-               'bin/med2mat', 'bin/plotMFlux']
+               'bin/med2mat', 'bin/mat2med', 'bin/plotMFlux', "bin/plotIP"]
 )

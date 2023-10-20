@@ -1,0 +1,44 @@
+#!/home/ITER/simicg/smiter-9.10.0/INSTALL/Python/bin/python3
+# Converts fields of a MED file to MATLAB format.
+
+from scipy.io import loadmat
+import l2g.mesh
+import numpy as np
+
+import sys
+mat_file = ''
+med_file = ''
+if len(sys.argv) > 1:
+    mat_file = sys.argv[1]
+    med_file = sys.argv[2]
+
+if mat_file == '':
+    print("No MAT file specified!")
+    sys.exit(1)
+
+if med_file == '':
+    print("No MED file specified!")
+    sys.exit(1)
+
+data = loadmat(mat_file)
+
+mesh = l2g.mesh.Mesh(med_file)
+
+for key in data:
+    if key.startswith("__"):
+        print(f"Ignoring ducked key: {key}")
+        continue
+
+    print(f"Adding field: {key}")
+    matlab_field = data[key]
+    # Matlab converts everything to 2D array I guess
+    if matlab_field.shape[0] == 1:
+        # print(f"Flattening {matlab_field.shape} to 1D array.")
+        matlab_field = matlab_field.flatten()
+
+    # Create numpy array to fix stride.
+    field = np.zeros(matlab_field.shape, matlab_field.dtype)
+    field[:] = matlab_field
+    mesh.addField(key, field)
+print(f"Writing data to {med_file}")
+mesh.writeFields()

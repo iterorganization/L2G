@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+
+import argparse
+description = """From an IMAS time slice plot Ip and Psol.
+"""
+
+
+parser = argparse.ArgumentParser(description='Plot Ip and Psol')
+parser.add_argument('-s', '--shot', metavar='SHOT', type=int,
+                    help='Shot number',
+                    required=True)
+parser.add_argument('-r', '--run', metavar='RUN', type=int,
+                    help='Run number', required=True)
+parser.add_argument('-u', '--user', metavar='USER', type=str, default="public",
+                    help='Username')
+parser.add_argument('-d', '--device',
+                    metavar="DEVICE", type=str, default="ITER", help='Device')
+parser.add_argument('-ts', '--time_slice', metavar='#time_slice', type=float,
+                    default=0.0, help='Time slice')
+parser.add_argument('-o', '--output_name', type=str, default="out",
+                            help="Base name of files.", metavar="OUTNAME")
+
+args = parser.parse_args()
+
+import numpy as np
+import imas
+import imas.imasdef
+ids = imas.DBEntry(backend_id=imas.imasdef.MDSPLUS_BACKEND,
+    user_name=args.user, db_name=args.device, shot=args.shot, run=args.run,
+    data_version="3")
+ids.open()
+summary = ids.get("summary")
+
+TITLE=f"s={args.shot} r={args.run}"
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+figure = plt.figure()
+ax = figure.add_subplot(111)
+ax.set_title(TITLE)
+ax.grid(True)
+
+lambdaq_vals = []
+lambdaq_tims = []
+
+ip_vals = []
+psol_vals = []
+
+ip_vals = summary.global_quantities.ip.value
+Psol = summary.global_quantities.power_loss.value
+ip_vals = np.abs(np.asarray(ip_vals))
+psol_vals = np.asarray(Psol)
+
+time = summary.time
+ax.plot(time, ip_vals*1e-6, color='r', label=r'$I_p$')
+ax.plot(time, psol_vals*1e-6, color='g', label=r'$P_{sol}$')
+ax.set_ylabel('Ip [MA], Psol [MW]')
+ax.set_xlabel('Time [s]')
+ax.hlines(y=10, xmin=time[0], xmax=time[ip_vals <= 10e6][0], linewidth=2, color='r')
+ax.legend()
+
+
+plt.show()
