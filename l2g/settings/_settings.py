@@ -153,7 +153,7 @@ class HLM(BaseClassOptions):
                  "longwave_misaligment_applied", "longwave_l"]
 
     # Lists for each scenario
-    flat_top = ["r_break"]
+    flat_top = ["r_break", "p_sol", "lambda_q_main", "lambda_q_near"]
     ramp_down = ["ip_transition"]
     single_exp = ["p_sol", "lambda_q"]
     double_exp = ["p_sol", "lambda_q_main", "lambda_q_near", "ratio"]
