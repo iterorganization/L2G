@@ -182,6 +182,9 @@ class HLM(DATA_BLOCK):
         new_data = {}
         max_n = -1
         for key in self.data:
+            if key in ["shadow_meshes", "parameters"]:
+                continue
+
             if isinstance(self.data[key], list):
                 max_n = max(max_n, len(self.data[key]))
 
@@ -190,7 +193,7 @@ class HLM(DATA_BLOCK):
             self.only_one_set = True
             # Unpack lists, that is, if the parameters have a list with one value
             for key in self.data:
-                if key in ["name", "hlm_type"]:
+                if key in ["name", "hlm_type", "shadow_meshes", "parameters"]:
                     continue
                 if isinstance(self.data[key], list):
                     self.data[key] = self.data[key][0]
@@ -202,7 +205,7 @@ class HLM(DATA_BLOCK):
         # Now we have expand the data
         for key in self.data:
             old_data = self.data[key]
-            if key in ["name", "hlm_type"]:
+            if key in ["name", "hlm_type", "shadow_meshes", "parameters"]:
                 new_data[key] = self.data[key]
                 continue
 
@@ -232,7 +235,7 @@ class HLM(DATA_BLOCK):
             index = n_max - 1
         out = {}
         for key in self.data:
-            if key in ["name", "hlm_type"]:
+            if key in ["name", "hlm_type", "shadow_meshes", "parameters"]:
                 out[key] = self.data[key]
             else:
                 out[key] = self.data[key][index]
@@ -481,7 +484,6 @@ class CASE(object):
         if self.equ_obj.data["equilibrium_type"] == "eqdsk_files":
             self.ite_obj.loadEqdskEquilibriums(self.equ_obj.data["eqdsk_files"])
         elif self.equ_obj.data["equilibrium_type"] == "imas":
-            print(self.equ_obj.data["imas"])
             self.ite_obj.loadIMASEquilibriums(self.equ_obj.data["imas"])
 
         if self.equ_obj.data["custom_wall_limiter"]:
@@ -568,7 +570,10 @@ class CASE(object):
     def create_result_file_if_necessary(self):
         if self.run_flt:
             log.info(f"Writing target mesh to {self.result_file_path}")
-            self.mesh_obj = self.mesh_obj.writeMeshTo(self.result_file_path)
+            # self.mesh_obj = self.mesh_obj.writeMeshTo(self.result_file_path)
+            # Copy the original file.
+            import shutil
+            shutil.copyfile(self.mesh_obj.file_path, self.result_file_path)
             self.mesh_obj.file_path = self.result_file_path
         else:
             # No FLT needed, but we still need to access the files.
