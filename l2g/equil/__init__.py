@@ -79,10 +79,12 @@ def getEquilibriumFromIMASSlice(shot: int, run: int, user: str = "public",
                                          imas.imasdef.CLOSEST_INTERP)
 
     equilibrium =  getEquilibriumFromIMAS(equilibrium_ids.time_slice[0],
+        equilibrium_ids.vacuum_toroidal_field,
         wall_ids, summary_ids, correct_helicty=correct_helicity)
     return equilibrium
 
-def getEquilibriumFromIMAS(equilibrium_ids_time_slice, wall_ids,
+def getEquilibriumFromIMAS(equilibrium_ids_time_slice,
+                           vacuum_toroidal_field_ids, wall_ids,
                            summary_ids=None, correct_helicty=True) -> Equilibrium:
     """Populate the Equilibrium class with relevant data.
 
@@ -93,8 +95,8 @@ def getEquilibriumFromIMAS(equilibrium_ids_time_slice, wall_ids,
     obj = Equilibrium()
 
     # Write the wall limiter
-    obj.wall_contour_r = wall_ids.description_2d[0].limiter.unit[0].outline.r
-    obj.wall_contour_z = wall_ids.description_2d[0].limiter.unit[0].outline.z
+    obj.wall_contour_r = list(wall_ids.description_2d[0].limiter.unit[0].outline.r)
+    obj.wall_contour_z = list(wall_ids.description_2d[0].limiter.unit[0].outline.z)
 
     # Write the magnetic axis position
     obj.mag_axis_r = equilibrium_ids_time_slice.global_quantities.magnetic_axis.r
@@ -115,12 +117,17 @@ def getEquilibriumFromIMAS(equilibrium_ids_time_slice, wall_ids,
     # Write the plasma current
     obj.Ip = np.abs(equilibrium_ids_time_slice.global_quantities.ip)
 
-    # Write the FPOL
-    obj.fpol = equilibrium_ids_time_slice.profiles_1d.f
-    obj.fpol_flux = equilibrium_ids_time_slice.profiles_1d.psi
+    # Instead of taking the equilibirum.time_slice[:].profiles_1d.f[-1]
+    # Use the vacuum_toroidal_field.r0, b0
 
-    # Write the FPOL in vacuum. Just take the last value
-    obj.fpol_vacuum = obj.fpol[-1]
+    obj.fpol_vacuum = vacuum_toroidal_field_ids.b0 * vacuum_toroidal_field_ids.r0
+    # Write the FPOL
+    if not equilibrium_ids_time_slice.profiles_1d.f.size:
+        obj.fpol = [obj.fpol_vacuum]
+        obj.fpol_flux = [equilibrium_ids_time_slice.global_quantities.psi_axis]
+    else:
+        obj.fpol = equilibrium_ids_time_slice.profiles_1d.f
+        obj.fpol_flux = equilibrium_ids_time_slice.profiles_1d.psi
 
     # Equilibrium type
     obj.type = 'div' if equilibrium_ids_time_slice.boundary.type else 'lim'
@@ -129,7 +136,8 @@ def getEquilibriumFromIMAS(equilibrium_ids_time_slice, wall_ids,
     obj.a = equilibrium_ids_time_slice.boundary.minor_radius
     obj.Area = equilibrium_ids_time_slice.global_quantities.area
     if summary_ids is not None:
-        obj.Psol = np.abs(summary_ids.global_quantities.power_loss.value[0])
+        if summary_ids.global_quntities.power_loss.value.size:
+            obj.Psol = np.abs(summary_ids.global_quantities.power_loss.value[0])
 
     if correct_helicty:
         correct_equilibrium_helicity(obj)

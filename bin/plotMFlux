@@ -51,6 +51,7 @@ if args.input_type == "imas":
     equilibrium = ids.get_slice("equilibrium", args.time_slice,
                                 imas.imasdef.CLOSEST_INTERP)
     slice = equilibrium.time_slice[0]
+    vacuum_toroidal_field_ids = equilibrium.vacuum_toroidal_field
     threshold = 0.5
 
     lcfs_collection_r = []
@@ -97,7 +98,7 @@ if args.input_type == "imas":
             secondary_collection_r.append(r[prev_index:])
             secondary_collection_z.append(z[prev_index:])
     import l2g.equil
-    equilibrium = l2g.equil.getEquilibriumFromIMAS(slice, wall_ids)
+    equilibrium = l2g.equil.getEquilibriumFromIMAS(slice, vacuum_toroidal_field_ids, wall_ids)
     title = f"S={args.shot} R={args.run} U={args.user} D={args.device} t={args.time_slice} s"
 elif args.input_type == "eqdsk":
     import os

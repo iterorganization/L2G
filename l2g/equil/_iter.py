@@ -1,3 +1,4 @@
+from imas.equilibrium import vacuum_toroidal_field__structure
 from l2g.equil import (getEquilibriumFromIMAS, getEquilibriumFromEQDSKG,
                        EQDSKIO, Equilibrium)
 import glob
@@ -164,14 +165,16 @@ class EquilibriumIterator(object):
                 interpolation)
             self._ids_summary = self._ids.get_slice("summary", t,
                 interpolation)
-            slice = self._ids_equilibrium.time_slice[0]
+            time_slice = self._ids_equilibrium.time_slice[0]
+            vacuum_toroidal_field = self._ids_equilibrium.vacuum_toroidal_field
 
-            equilibrium = getEquilibriumFromIMAS(slice, self._ids_wall,
+            equilibrium = getEquilibriumFromIMAS(time_slice,
+                vacuum_toroidal_field, self._ids_wall,
                 self._ids_summary, correct_helicty=self._correct_helicity)
 
             if interpolation == 1:
                 # Closest interpolation
-                t = slice.time
+                t = time_slice.time
 
             self._equilibriums.append(equilibrium)
 
