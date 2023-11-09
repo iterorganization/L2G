@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+import argparse
+description = """From an IMAS IDS create a move of the LCFS or
+separatrixes.
+"""
+
+
+parser = argparse.ArgumentParser(description='Create EQDSK from IDS time slice')
+
+parser.add_argument('-s', '--shot', metavar='SHOT', type=int,
+                    help='Shot number',
+                    required=True)
+parser.add_argument('-r', '--run', metavar='RUN', type=int,
+                    help='Run number', required=True)
+parser.add_argument('-u', '--user', metavar='USER', type=str, default="public",
+                    help='Username')
+parser.add_argument('-d', '--device',
+                    metavar="DEVICE", type=str, default="ITER", help='Device')
+parser.add_argument('-ts', '--time_start', metavar='#time_start', type=float,
+                    default=0.0, help='Starting time')
+parser.add_argument('-te', '--time_end', type=float, default=999999)
+parser.add_argument('-o', '--output_name', type=str, default="out.gif",
+                    help="Name of gif.", metavar="OUTNAME")
+
+# Additional cosmetic arguments
+parser.add_argument('-minx', '--min_x', type=float, help="Abscissa lower limit",
+                    metavar="MIN X")
+parser.add_argument('-maxx', '--max_x', type=float, help="Abscissa upper limit",
+                    metavar="MAX X")
+parser.add_argument('-miny', '--min_y', type=float, help="Ordinate lower limit",
+                    metavar="MIN Y")
+parser.add_argument('-maxy', '--max_y', type=float, help="Ordinate upper limit",
+                    metavar="MAX Y")
+
+args = parser.parse_args()
+
+import imas
+
+#ids = imas.ids(args.shot, args.run)
+#ids.open_env(args.user, args.device, '3')
+ids = imas.DBEntry(backend_id=imas.imasdef.MDSPLUS_BACKEND,
+    user_name=args.user, db_name=args.device, shot=args.shot, run=args.run,
+    data_version='3')
+ids.open()
+# Old API
+#wall_ids = ids.wall
+#wall_ids.get()
+wall_ids = ids.get("wall")
+
+#summary_ids = ids.summary
+#summary_ids.get()
+summary_ids = ids.get("summary")
+
+#equilibrium = ids.equilibrium
+
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation, PillowWriter
+from functools import partial
+
+figure = plt.figure()
+figure.set_tight_layout(True)
+ax = figure.add_subplot()
+ax.grid(True)
+ax.axis('equal')
+ax.set_xlabel('R [m]')
+ax.set_ylabel('Z [m]')
+
+wall_contour_r = wall_ids.description_2d[0].limiter.unit[0].outline.r
+wall_contour_z = wall_ids.description_2d[0].limiter.unit[0].outline.z
+Z_LIMITS = np.min(wall_contour_z) - 1, np.max(wall_contour_z) + 1
+R_LIMITS = np.min(wall_contour_r) - 1, np.max(wall_contour_r) + 1
+
+# Plot limiter
+ax.plot(wall_contour_r, wall_contour_z, 'r-')
+ax.set_title(f"S={args.shot} R={args.run} U={args.user} D={args.device}")
+
+N = len(summary_ids.time)
+i = 0
+
+# Labels
+times = []
+from time import sleep
+
+import l2g.equil
+import l2g.plot._marching_squares
+
+it = l2g.equil.EquilibriumIterator()
+
+dictionary = {
+    "user": args.user,
+    "shot": args.shot,
+    "run": args.run,
+    "time_start": args.time_start,
+    "time_end": args.time_end,
+    "device": args.device,
+}
+
+it.loadIMASEquilibriums(dictionary)
+paths_to_plot = []
+x = l2g.plot._marching_squares.Marching()
+for index, time, equilibrium in it:
+    print(time)
+    eq = l2g.equil.EQ(equilibrium)
+    eq.evaluate()
+
+    x.setData(equilibrium.grid_r, equilibrium.grid_z, equilibrium.psi)
+
+    # Get the contour path
+    paths = x.getContourPath(eq.psiLCFS)
+    paths_to_plot.append(paths)
+
+    times.append(f"t={time:12.4f}s")
+
+
+# Now make the animation
+
+def update(i, bdry_path, lines, labels):
+    while lines:
+        el = lines.pop(0)
+        el.remove()
+
+    for path in bdry_path[i]:
+        lines += ax.plot(path[0], path[1], '-', c='b')
+
+    # if len(sr[i]):
+    #     for j in range(len(sr[i])):
+    #         lines += ax.plot(sr[i][j], sz[i][j], '-', c='g')
+    ax.set_ylim(Z_LIMITS)
+    ax.set_xlim(R_LIMITS)
+
+    lines.append(ax.text(0.7, 0.9, labels[i], transform = ax.transAxes))
+
+lines = [] # Holds plotting objects
+frame_update = partial(update, bdry_path=paths_to_plot,
+                              lines=lines, labels=times)
+
+anim = FuncAnimation(figure, frame_update, frames=index+1, interval=250)
+anim.save(args.output_name, writer=PillowWriter())

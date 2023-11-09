@@ -181,10 +181,11 @@ setup(
     ],
     packages = ["l2g", "l2g.comp", "l2g.comp.core", "l2g.equil", "l2g.hlm",
                 "l2g.plot",  "l2g.utils", "l2g.settings", "l2g.workflow",
-                "l2g.mesh"],
+                "l2g.mesh", "l2g.external"],
     data_files = [('', getDataFiles())],
     python_requires=">=3.6",
     scripts = ['bin/flat', 'bin/submitFLAT', 'bin/FLAT.sbatch',
                'bin/imas2eqdsk', 'bin/mkEqdskMovie', 'bin/mkImasMovie',
+               'bin/mkImasMovieFromPsi',
                'bin/med2mat', 'bin/mat2med', 'bin/plotMFlux', "bin/plotIP"]
 )
