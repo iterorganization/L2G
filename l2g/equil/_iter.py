@@ -172,9 +172,9 @@ class EquilibriumIterator(object):
                 vacuum_toroidal_field, self._ids_wall,
                 self._ids_summary, correct_helicty=self._correct_helicity)
 
-            if interpolation == 1:
-                # Closest interpolation
-                t = time_slice.time
+            # if interpolation == 1:
+            #     # Closest interpolation
+            #     t = time_slice.time
 
             self._equilibriums.append(equilibrium)
 

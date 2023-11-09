@@ -88,6 +88,10 @@ def getEquilibriumFromIMAS(equilibrium_ids_time_slice,
                            summary_ids=None, correct_helicty=True) -> Equilibrium:
     """Populate the Equilibrium class with relevant data.
 
+    It's best to work on time slices of data, that means that
+    equilibrium.time_slice is a single time slice, same for
+    vacuum_toroidal_field.
+
     Optional:
         summary_ids can be optionally provided to obtain other relevant values.
     """
@@ -120,11 +124,11 @@ def getEquilibriumFromIMAS(equilibrium_ids_time_slice,
     # Instead of taking the equilibirum.time_slice[:].profiles_1d.f[-1]
     # Use the vacuum_toroidal_field.r0, b0
 
-    obj.fpol_vacuum = vacuum_toroidal_field_ids.b0 * vacuum_toroidal_field_ids.r0
+    obj.fpol_vacuum = vacuum_toroidal_field_ids.b0[0] * vacuum_toroidal_field_ids.r0
     # Write the FPOL
     if not equilibrium_ids_time_slice.profiles_1d.f.size:
-        obj.fpol = [obj.fpol_vacuum]
-        obj.fpol_flux = [equilibrium_ids_time_slice.global_quantities.psi_axis]
+        obj.fpol = np.asarray([obj.fpol_vacuum])
+        obj.fpol_flux = np.asarray([equilibrium_ids_time_slice.global_quantities.psi_axis])
     else:
         obj.fpol = equilibrium_ids_time_slice.profiles_1d.f
         obj.fpol_flux = equilibrium_ids_time_slice.profiles_1d.psi
@@ -136,7 +140,7 @@ def getEquilibriumFromIMAS(equilibrium_ids_time_slice,
     obj.a = equilibrium_ids_time_slice.boundary.minor_radius
     obj.Area = equilibrium_ids_time_slice.global_quantities.area
     if summary_ids is not None:
-        if summary_ids.global_quntities.power_loss.value.size:
+        if summary_ids.global_quantities.power_loss.value.size:
             obj.Psol = np.abs(summary_ids.global_quantities.power_loss.value[0])
 
     if correct_helicty:
