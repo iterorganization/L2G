@@ -729,7 +729,7 @@ class CASE(object):
                 log.info("Writing HLM arrays to file")
                 l2g.mesh.dump_hlm_results_to_mesh(self.flt_obj.hlm_results,
                     self.mesh_obj, hlm_type)
-
+                log.info("Done")
                 if hlm_type == "ramp-down":
                     lambda_q = self.flt_obj.hlm_results.additional_arrays[0]
                     log.info(f'[RAMP DOWN]: i={index} t={associated_time:.3f} lq={lambda_q:.2f} Ip={self.flt_obj.equilibrium.Ip:.2e}')
@@ -952,7 +952,11 @@ class CASE(object):
         """Load a custom profile.
         """
         # See if we have a list of profile files.
-        file = self.hlm_obj.data["profile_files"][index]
+        # When we do the "extend" thingy in HLM block we also affect this.
+        if isinstance(self.hlm_obj.data["profile_files"], str):
+            file = self.hlm_obj.data["profile_files"]
+        else:
+            file = self.hlm_obj.data["profile_files"][index]
         data = np.loadtxt(file)
         if data.shape[0] == 2:
             self.flt_obj.hlm_params.points = data[0]
