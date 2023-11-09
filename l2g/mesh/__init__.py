@@ -344,6 +344,13 @@ class Mesh():
             if self.index == self.number_of_time_steps - 1:
                 writer.Stop()
 
+        # Clear the data arrays.
+        # Fields
+        self.arrays: Dict[str, Dict[int, np.ndarray]] = {}
+
+        # Writing data
+        self.info_on_components: Dict[str, Dict[int, list]] = {}
+        self.times: Dict[str, Dict[int, float]] = {}
 
         return True
 
