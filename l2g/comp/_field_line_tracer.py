@@ -640,6 +640,16 @@ class FieldLineTracer:
                 points=self.hlm_params.points, profile=self.hlm_params.profile,
                 extrapolate=self.hlm_params.extrapolate,
                 outside_value=self.hlm_params.outside_value)
+            # The custom is defined on a midplane with magnetic surfaces going
+            # perpendicular to it. In reality of course we have the toroidal
+            # and poloidal component that already states that the flux tubes
+            # go from the midplane at an angle. Therefore we multiply this
+            # profile with the factor in order to actually scale it to the
+            # midplane.
+            # In other words apply the pitch at the midplane. Other functions
+            # defined in the l2g.hlm already contains this term, except for the
+            # q_parallel profile here.
+            q_par *= Btotal / Bpm
         elif self.hlm_params.hlm_type == "elm":
             # The ELM data is loaded with an extra step.
             interELM = l2g.hlm.steady_state.inter_ELM(drsep, Rb, Btotal, Bpm,
