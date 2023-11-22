@@ -187,5 +187,6 @@ setup(
     scripts = ['bin/flat', 'bin/submitFLAT', 'bin/FLAT.sbatch',
                'bin/imas2eqdsk', 'bin/mkEqdskMovie', 'bin/mkImasMovie',
                'bin/mkImasMovieFromPsi',
-               'bin/med2mat', 'bin/mat2med', 'bin/plotMFlux', "bin/plotIP"]
+               'bin/med2mat', 'bin/mat2med', 'bin/plotMFlux', "bin/plotIP",
+               "bin/get_disruption_profile_from_imas.py"]
 )
