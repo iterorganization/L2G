@@ -5,7 +5,7 @@ import numpy as np
 import logging
 import os
 log = logging.getLogger(__name__)
-from typing import Dict, Tuple, Union, List
+from typing import Dict, Optional, Tuple, Union, List
 
 
 def supportedFileExts() -> List[str]:
@@ -68,19 +68,64 @@ def rotatePointsAroundAxis(points: np.ndarray, p1: np.ndarray, p2: np.ndarray,
     # out_points += p1
     return np.array(out_points + p1, dtype=np.float32)
 
+class WrongFileExtensionException(Exception):
+    pass
+
+class FileDoesNotExistException(Exception):
+    pass
+
 class Mesh():
-    """This is a convenient class for reading 2D surface meshes made of
-    triangles. Additionally it writes the mesh in different profiles and writes
-    fields to those files. It supports HDF5, MEDCoupling and VTK file formats.
+    """This is a convenient class for reading/writing 2D surface mesh made of
+    triangles and with time-dependent data on it. Primarily it supports the
+    MED format (MED-file, MEDCoupling) but it is intended to be an easy to use
+    interface with different I/O backends behind.
 
-    The idea is to have a way to write results in a file for storage.
+    .. code-block:: python
 
-    For visualization you can open files saved in the VTK file format inside
-    ParaView, while for MEDCoupliung and HDF5 file formats you need additional
-    plugin readers.
+       import l2g.mesh
+       m = l2g.mesh.Mesh("/path/to/file.med")
 
-    There is no plan to make this class complex, it should be as simple as
-    possible.
+       # Get mesh data
+       vertices, triangles = m.getMeshData()
+       # Get measurements of cells (Useful for integrating flux quantities)
+       measurements = m.getMeasurements()
+
+       # See if the field exists in the file
+       ok = m.doesItContainField("field_name")
+
+       # See if the field has an entry with the index n
+       ok = m.doesItContainFieldWithIndex("field_name", 0)
+
+       # Get all field iterations available
+       iterations = m.getAllFieldIterations("field_name")
+
+       # Get field at index n
+       n = 5 # Or some integer value
+       m.setIndex(n)
+       field_numpy_array = m.getField("field_name")
+
+       # Add a field
+       import numpy as np
+       custom_array = np.random.random(vertices.shape[0], np.float)
+
+       # Specify the time index of the field. Important before adding fields.
+       m.setIndex(0)
+
+       m.addField("custom_field_name", custom_array)
+
+       # Maybe we have a vector field.
+       vector_array = np.random.random(vertices.shape, np.float)
+       # Let's also add information on each component of the vector
+       infoOnComponents = ["x", "y", "z"]
+       m.addField("custom_vector_field", vector_array, infoOnComponents)
+
+       # You can now add fields at different time indexes if you want to write
+       # it in bulk.
+
+       # Finally write the fields.
+       m.writeFields()
+
+
 
     """
     def __init__(self, file_path: str=""):
@@ -113,9 +158,12 @@ class Mesh():
 
 
     def openFile(self, file_path: str):
-        """This function does not really open the file because depending on the
-        backend, you can either read/write at once, meaning you do not have a
-        file handle or you can have it. The backend submodules handle that.
+        """Open the file by creating the appropriate backend objects necessary
+        for I/O operations.
+
+        If the function succeeds it returns nothing. Otherwise if the file
+        extension does not match or the file does not exist, it raises either
+        WrongFileExtensionException or FileDoesNotExistException respectively.
         """
         # Get the extension
         ext = os.path.splitext(file_path)[-1].lower()
@@ -127,7 +175,11 @@ class Mesh():
             log.info(f"Supported exts: {' '.join(supportedFileExts())}")
             self.backend_name = None
             self.backend = None
-            return
+            raise WrongFileExtensionException()
+
+        if not os.path.exists(file_path):
+            log.error(f"File {file_path} does not exist!")
+            raise FileDoesNotExistException()
 
         self.file_path = file_path
 
@@ -147,23 +199,45 @@ class Mesh():
             self.backend_name = "UNKNOWN"
             self.backend = None
 
-    def isOpen(self) -> bool:
-        if self.backend_name == "UNKNOWN":
-            return False
-        return True
-
     def getMeshData(self) -> Tuple[np.ndarray, np.ndarray]:
-        """Get the vertices and triangles of the mesh.
+        """Get the vertices and triangles of the mesh. Only the triangle cells
+        are obtained as it is assumed that this class works with surface type
+        meshes.
+
+        Returns:
+            vertices (np.ndarray): 2D array of points with the shape
+                (N_vertices, 3).
+            triangles (np.ndarray): 2D array of triangles with the shape
+                (N_triangles, 3).
+
         """
         if self.vertices.size == 0:
             self.readMeshData()
 
         return self.vertices, self.triangles
 
+    def getCellMeasurements(self) -> np.ndarray:
+        """Returns a 1D array containing the measurements of the cells. The
+        index of a value corresponds to the index of a cell.
+
+        Measurements:
+         - 1D cell = length.
+         - 2D cell = area.
+         - 3D cell = volume.
+
+        Returns:
+            measurements (np.ndarray): 1D array of floats.
+
+        """
+        if self.backend is None:
+            return np.array([])
+
+        return self.backend.getMeasurements(self.file_path)
+
+
     def readMeshData(self) -> None:
-        """Returns 2 arrays, vertices and triangles where the shapes of the
-        arrays are (N_vertices, 3) with dtype float32 and (N_triangles, 3) with
-        dtype uint32 respectively.
+        """Function that calls the backends to fetch the mesh data of the file
+        and storing it.
         """
         if self.backend is None:
             return
@@ -174,12 +248,23 @@ class Mesh():
             self.triangles = t
 
     def setIndex(self, index: int):
-        """Sets the index for reading fields.
+        """Sets the index for reading/writing fields. This value is used when
+        writing functions with the :py:meth:`l2g.mesh.Mesh.writeFields` as it
+        holds information at which index to write the fields.
+
+        In the :py:meth:`l2g.mesh.Mesh.getField` this index is used to obtain
+        the field data at that index.
         """
         self.index = index
 
     def setTime(self, time: int):
-        """Sets the time for reading fields.
+        """Sets the time information. This value is used only as description,
+        as in, when you visualize the results in software like ParaView, this
+        field will be describing the time of the time step (index) of the
+        data.
+
+        This information is used when using the function
+        :py:meth:`l2g.mesh.Mesh.writeFields`.
         """
         self.time = time
 
@@ -207,7 +292,71 @@ class Mesh():
         flt_field = "conlen"
         return self.backend.getNumberOfTimeSteps(self.file_path, flt_field)
 
-    def getField(self, field_name, index=None) -> np.ndarray:
+    def doesItContainField(self, field_name: str) -> bool:
+        """Checks if the mesh object contains the field with the name.
+
+        Returns:
+            ok (bool): True if mesh contains field with this name
+        """
+        if self.backend:
+            return self.backend.checkIfFieldExists(self.file_path, field_name)
+        else:
+            return False
+
+    def doesItContainFieldWithIndex(self, field_name: str, index: int) -> bool:
+        """Checks if the mesh object contains the field with the index
+        provided. Warning! This function returns False if the mesh object
+        does not contain the field, therefore use also the method
+        :py:meth:`l2g.mesh.Mesh.doesItContainField` to know for sure what
+        is/isn't in the mesh object.
+
+        Returns:
+            ok (bool): True if mesh contains a field with the provided field
+                named and with the index.
+
+        """
+        if not self.doesItContainField(field_name):
+            return False
+
+        # With the doesItContainField we know if we have a backend available
+        # or not.
+        if self.backend_name == "MED":
+            # The getOrderValueOfField returns None if there is no field
+            # at this time step.
+            order = self.backend.getOrderValueOfField(self.file_path,
+                                                      field_name, index,
+                                                      -1)
+            if not order is None:
+                return True
+
+        return False
+
+    def getAllFieldNames(self) -> list:
+        """Get the name of all quantities in the mesh files.
+        """
+
+        if self.backend:
+            return self.backend.getAllFieldNames(self.file_path)
+        return []
+
+    def getAllFieldIterations(self, field_name: str) -> List:
+        """Returns all indexes and times of the field inside the file.
+
+        Returns:
+            out (List[Tuple[int, float]]): A list containing pairs of index
+                and times (i.e., [[0, 0.0], [1, 0.5]].
+        """
+
+        out = []
+
+        if self.doesItContainField(field_name):
+            out = self.backend.getAllFieldIterations(self.file_path, field_name)
+            out = [[_[0], _[2]] for _ in out]
+
+        return out
+
+    def getField(self, field_name: str,
+                 index: Optional[int]=None) -> Optional[np.ndarray]:
         """Returns a field of the the opened file. Index is always provided,
         where it signifies the time step of the field.
 
@@ -217,7 +366,11 @@ class Mesh():
         if index is None:
             index = self.index
         if self.backend:
-            return self.backend.getField(self.file_path, field_name, index)
+            field = self.backend.getField(self.file_path, field_name, index)
+            if field is None:
+                msg = f"There is no {field_name} at index {index} in {self.file_path}"
+                log.error(msg)
+            return field
 
     def writeMeshTo(self, file_path: str) -> 'Mesh':
         """In this case we wish to copy the mesh of a file to a new location.
@@ -300,7 +453,10 @@ class Mesh():
         self.times[array_name][index] = self.time
 
     def writeFields(self):
-        """Write the fields to the file.
+        """Write the fields added with the function
+        :py:meth:`l2g.mesh.Mesh.addField` to the file. After the operation it
+        clears all added fields so far, added with the
+        :py:meth:`l2g.mesh.Mesh.addField` function.
         """
         if self.backend_name == "MED":
             for array_name in self.arrays:

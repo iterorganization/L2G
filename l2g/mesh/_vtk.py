@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import List, Tuple
 import vtk
 from vtk.util import numpy_support
 import numpy as np
@@ -170,6 +170,16 @@ def copyVtkObj(orig_obj: vtk.vtkUnstructuredGrid):
     obj = vtk.vtkUnstructuredGrid()
     obj.DeepCopy(orig_obj)
     return obj
+
+def checkIfFieldExists(file_path: str, field_name: str) -> bool:
+    # Do nothing for now
+    return True
+
+def getAllFieldIterations(file_path: str, field_name: str) -> List:
+    return []
+
+def getAllFieldNames(file_path: str):
+    return []
 
 def getField(file_path: str, field_name: str, index: int) -> np.ndarray:
     reader = getReader(file_path)

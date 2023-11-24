@@ -1,4 +1,4 @@
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 import medcoupling as mc
 import numpy as np
 
@@ -190,8 +190,46 @@ def getNumberOfTimeSteps(file_path: str, *args):
     iterations = mc.GetAllFieldIterations(file_path, field_name)
     return len(iterations)
 
+def getAllFieldIterations(file_path: str, field_name: str) -> List:
+    return mc.GetAllFieldIterations(file_path, field_name)
+
+def getAllFieldNames(file_path: str) -> List:
+    return mc.GetAllFieldNames(file_path)
+
+def getOrderValueOfFieldAtIndex(file_path: str, field_name: str, index: int, order: int):
+    """Checks if the field in the file_path has an entry of the index and order
+    supplied. If not, then return the other order if there is only one entry
+    of the field at this index.
+
+    Additionally the function gives information if there are entries of the
+    field at this index.
+    """
+
+    # The field has to exist, otherwise an exception is raised.
+    field_iterations = mc.GetAllFieldIterations(file_path, field_name)
+
+    orders_at_index = []
+    for iteration in field_iterations:
+        # Find the index
+        if iteration[0] == index:
+            orders_at_index.append(iteration[1])
+
+    if order in orders_at_index:
+        return order
+
+    # Now see if how many time steps are at this order
+    if orders_at_index:
+        return orders_at_index[0]
+    else:
+        return None
+
 def getField(file_path: str, field_name: str, index: int, order: int=-1):
     if checkIfFieldExists(file_path, field_name):
+        # Additionally check if the order parameter is okay. Order parameter
+        # is not understood yet completely.
+        order = getOrderValueOfFieldAtIndex(file_path, field_name, index, order)
+        if order is None:
+            return None
         return fieldToNumpy(file_path, field_name, index, order)
     else:
         return None
@@ -207,3 +245,17 @@ def writeField(file_path: str, array_name: str, array: np.ndarray, index: int,
     field = numpyArrayToField(arr=array, field_name=array_name, mesh=med, iteration=index,
             associated_time=time, info_on_component=info_on_component)
     writeFieldToAlreadyExistingMesh(field, file_path)
+
+def getMeasurements(file_path: str) -> np.ndarray:
+    """Get the array of measurements of the cells.
+
+    1D: Length of edge.
+    2D: Area of cell.
+    3D: Volume of cell.
+    """
+    global __med__
+
+    if file_path not in __med__:
+        openFile(file_path)
+    med = __med__[file_path]
+    return med.getMeasureField(True).getArray().toNumPyArray()
