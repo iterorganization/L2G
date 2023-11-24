@@ -156,4 +156,6 @@ def custom(drsep: np.ndarray, points: np.ndarray,
         interp = interp1d(points, profile, fill_value=outside_value,
                           bounds_error=False)
     q = interp(drsep)
+    # Set negatives to zero
+    q[q < 0.0] = 0.0
     return q
