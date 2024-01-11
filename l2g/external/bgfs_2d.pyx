@@ -2,11 +2,19 @@
 # cython: language_level = 3
 
 from l2g.external.bgfs_2d cimport PyBgfs2d
-from l2g.external.bicubic cimport PyBicubic
+from l2g.external.bicubic cimport PyBicubic, BICUBIC_INTERP
+
+# TODO:
+# Stop when new position is outside the defined domain.
+
 
 cdef class PyBgfs2d:
     def __cinit__(self):
-        pass
+        # Set the default bounds to something extremely large
+        self.bx1 = -1e9
+        self.bx2 = 1e9
+        self.by1 = -1e9
+        self.by2 = 1e9
 
     def __init__(self):
         pass
@@ -16,8 +24,37 @@ cdef class PyBgfs2d:
         """
         self.c_bicubic = obj.c_bicubic
 
+    cdef void c_set_interpolator(self, BICUBIC_INTERP *interp):
+        """Cython function for setting the bicubic object. Used only in other
+        cython cdef code.
+        """
+        self.c_bicubic = interp
+
+    def setBounds(self, x1: float, x2: float, y1: float, y2: float):
+        # Set the bounds for the search area.
+        self.bx1 = x1
+        self.bx2 = x2
+        self.by1 = y1
+        self.by2 = y2
+
     cdef double line_search(self, double x, double y, double p1, double p2):
-        """Backtrack line search with Wolfe conditions. In other words
+        """Backtrack line search with Wolfe conditions. In other words when
+        trying to solve the problem of finding the minimum of an objective
+        function, the line_search calculates an acceptable step length of a
+        search direction that reduces the objective function sufficiently.
+
+        The function is modified, that in the presence of a saddle point, it
+        also moves into that direction and gets trapped.
+
+        The conditions to determine a suitable step length:
+         1.) The Armijo rule
+            f(x_k + \alpha-k p_k) <= f(x_k) + c_1 \qlpha_k p_k^T \nabla f(x_k)
+         2.) The curvature condition
+            -p_k^T \nabla f(x_k + \alpha_k p_k) <= -c_2 p_k^T \nabla f(x_k)
+
+        with 0 < c1 < c2 < 1, p_k is the descent direction. c_1 is usually
+        chosen to be quite small while c_2 is larger.
+
 
         Arguments:
             x (float): Starting position x.
@@ -39,14 +76,20 @@ cdef class PyBgfs2d:
         c2 = 0.9
 
         self.c_bicubic.getValues(x, y, fx, fdx, fdy)
+
+        # dot1 used for Armijo rule
         dot1 = fx + c1 * a * (fdx * p1 + fdy * p2)
+        # dot3 is the rhs of the curvature condition
         dot3 = c2 * (fdx * p1 + fdy * p2)
 
         x_new = x + a * p1
         y_new = y + a * p2
 
         self.c_bicubic.getValues(x_new, y_new, fx_new, fdx_new, fdy_new)
+        # dot 2 is the lhs of the curvature condition
         dot2 = fdx_new * p1 + fdy_new * p2
+
+        #      Armijo rule      Curvature condition
         while fx_new >= dot1 or dot2 <= dot3:
             # Advance
             a = a * 0.5
@@ -67,10 +110,10 @@ cdef class PyBgfs2d:
         return a
 
     def findMinimum(self, double guess_x, double guess_y, int max_it):
-        """This function tries to find a point in the function domain space
-        where the gradient is close to zero (the function also gets trapped
-        into saddle points and instead of looping infinitely it returns the
-        point as a extrema point).
+        """This is a gradient-descent minimizer function that  tries to find a
+        point in the function domain space where the gradient is close to
+        zero (the function also gets trapped into saddle points and instead of
+        looping infinitely it returns the point as a extrema point).
 
         The main use of the function is finding the minimum of the function,
         hence the name remained, although it can get trapped and returns the
@@ -100,6 +143,18 @@ cdef class PyBgfs2d:
             double li11, li12, li21, li22
             double ri11, ri12, ri21, ri22
             Py_ssize_t it
+
+            # Bounds values
+            double bx1, bx2, by1, by2
+            boold out_of_bounds
+
+        # Bounds values
+        bx1 = self.bx1
+        bx2 = self.bx2
+        by1 = self.by1
+        by2 = self.by2
+        out_of_bounds = False
+
         self.c_bicubic.getValues(guess_x, guess_y, f, fdx, fdy)
 
         # Initial Hessian
@@ -122,16 +177,30 @@ cdef class PyBgfs2d:
             p1 = -(h11 * fdx + h12 * fdy)
             p2 = -(h21 * fdx + h22 * fdy)
 
+            # Step estimation
             a = self.line_search(x, y, p1, p2)
+
+            # Movement
             s1 = a * p1
             s2 = a * p2
             x_new = x + a * p1
             y_new = y + a * p2
+
+            # Check if out of bounds
+            if x_new < bx1 or x_new > bx2:
+                out_of_bounds = True
+                break
+            if y_new < by1 or y_new > by2:
+                out_of_bounds = True
+                break
+
             self.c_bicubic.getValues(x_new, y_new, f_new, fdx_new, fdy_new)
 
+            # Difference in gradients
             y1 = fdx_new - fdx
             y2 = fdy_new - fdy
 
+            # Start calculating the update to the Hessian matrix.
             r = 1.0 / (y1*s1 + y2*s2)
 
             li11 = 1.0 - r * s1 * y1
@@ -164,7 +233,7 @@ cdef class PyBgfs2d:
             # Calculate the norm of gradient
             gradnorm = fdx*fdx + fdy*fdy
 
-        return x, y
+        return out_of_bounds, x, y
 
     def secondDerivativeTest(self, double x, double y) -> bool:
         """Return the value of the second derivative test D.

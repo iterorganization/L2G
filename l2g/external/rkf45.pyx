@@ -5,6 +5,7 @@ import numpy as np
 cimport numpy as np
 
 from libc.math cimport atan2
+from libc.stdio cimport printf
 
 from l2g.external.bicubic cimport PyBicubic
 from l2g.external.rkf45 cimport PyRKF45FLT
@@ -12,6 +13,7 @@ from l2g.external.rkf45 cimport PyRKF45FLT
 cdef class PyRKF45FLT:
     def __cinit__(self):
         self.c_rkf45 = new RKF45()
+        self.c_rkf45.set_omp_thread(0)
 
     def __init__(self):
         self.c_relerr = 1e-4
@@ -36,7 +38,6 @@ cdef class PyRKF45FLT:
             double yp[2]
             double relerr, abserr, time, new_time
             int flag
-
         relerr = self.c_relerr
         abserr = self.c_abserr
         y[0] = r
@@ -46,7 +47,6 @@ cdef class PyRKF45FLT:
         new_time = th + time_step
         flag = 1
         flag = self.c_rkf45.r8_rkf45(y, yp, &time, new_time, &relerr, abserr, flag)
-
         return  y[0], y[1], time
 
     def run_n_steps(self, double r, double z, double th, double time_step, int n):

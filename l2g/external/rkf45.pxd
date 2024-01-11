@@ -12,7 +12,7 @@ cdef extern from "rkf45.hpp" nogil:
         void set_r_move(double r_move)
         void set_z_move(double z_move)
         void set_vacuum_fpol(double vacuum_fpol)
-
+        void set_omp_thread(int omp_thread)
         void set_interpolator(BICUBIC_INTERP *interp)
         int r8_rkf45(double y[2], double yp[2], double *t, double tout,
                      double *relerr, double abserr, int flag)
