@@ -1,6 +1,7 @@
 *.c
 *.cpp
 *.html
+*.so
 l2g.egg-info
 build
 __pycache__
