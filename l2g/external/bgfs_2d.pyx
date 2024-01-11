@@ -4,6 +4,8 @@
 from l2g.external.bgfs_2d cimport PyBgfs2d
 from l2g.external.bicubic cimport PyBicubic, BICUBIC_INTERP
 
+from libcpp cimport bool
+
 # TODO:
 # Stop when new position is outside the defined domain.
 
@@ -146,7 +148,7 @@ cdef class PyBgfs2d:
 
             # Bounds values
             double bx1, bx2, by1, by2
-            boold out_of_bounds
+            bool out_of_bounds
 
         # Bounds values
         bx1 = self.bx1
