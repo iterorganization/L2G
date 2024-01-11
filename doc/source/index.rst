@@ -17,7 +17,7 @@ Welcome to L2G_py's documentation!
    examples.rst
    code_documentation.rst
    dev_tooltips.rst
-
+   faq.rst
 
 Indices and tables
 ==================
