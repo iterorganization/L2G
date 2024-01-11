@@ -1,0 +1,6 @@
+*.c
+*.cpp
+*.html
+l2g.egg-info
+build
+__pycache__
