@@ -552,7 +552,6 @@ class EQ:
         N = len(RLIM)
 
         RMAXIS, ZMAXIS = self._eq.mag_axis_r, self._eq.mag_axis_z
-        c = 0
 
         log.info(f"Creating points on the limiter with resolution: {Resolution} m")
         for i in range(N - 1):
@@ -580,7 +579,6 @@ class EQ:
             Npoints = int(abs(Npoints))
 
             for j in range(Npoints):
-                c += 1
                 if verticalFlag:
                     point = RLIM[i], ZLIM[i] + j * dR
                 else:
