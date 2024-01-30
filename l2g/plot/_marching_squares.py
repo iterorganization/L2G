@@ -181,14 +181,11 @@ class Marching(object):
 
 
         segment_map: Dict[Tuple, Segment] = {}
-        saddle_segments: List[Segment] = []
+        saddle_segments: Dict[Tuple, List] = {}
+        saddle_indexes: List[Tuple] = []
 
         x = self.c_x
         y = self.c_y
-
-        # Edges indexes
-        columns_x = x.size - 1
-        rows_y = y.size - 1
 
         for i in range(x.shape[0] - 1):
             for j in range(y.shape[0] - 1):
@@ -211,11 +208,14 @@ class Marching(object):
                     sad_obj1 = Segment()
                     sad_obj1.i = i
                     sad_obj1.j = j
+                    sad_obj1.id = (i, j)
                     sad_obj2 = Segment()
                     sad_obj2.i = i
                     sad_obj2.j = j
-                    # Do not map it in the segment map
+                    sad_obj2.id = (i, j)
 
+                    # Do not map it in the segment map
+                    saddle_indexes.append((i, j))
                     if ind == 5:
                         sad_obj1.next = i, j + 1
                         sad_obj2.next = i, j - 1
@@ -237,8 +237,7 @@ class Marching(object):
                         p1 = bisect(fun_hor, x[i], x[i+1], args=(y[j])), y[j]
                         p2 = x[i], bisect(fun_ver, y[j], y[j+1], args=(x[i]))
                         sad_obj2.points = p1, p2
-                    saddle_segments.append(sad_obj1)
-                    saddle_segments.append(sad_obj2)
+                    saddle_segments[(i, j)] = [sad_obj1, sad_obj2]
 
                     continue
 
@@ -334,8 +333,26 @@ class Marching(object):
                 # points_y.append(el.points[1][1])
                 if segment.next is None:
                     break
+                elif segment.next in saddle_indexes:
+                    # Continue from the saddle point that goes diagonally
+                    # away.
 
-                if segment.next not in segment_map:
+                    dind = (segment.next[0] - segment.id[0],
+                            segment.next[1] - segment.id[1])
+
+                    for i in range(2):
+
+                        saddle_segment = saddle_segments[segment.next][i]
+                        dind_saddle = (saddle_segment.next[0] - saddle_segment.id[0],
+                                       saddle_segment.next[1] - saddle_segment.id[1])
+
+                        if dind == dind_saddle:
+                            # Continue with this one
+                            segment_id = saddle_segment.next
+                            segment =  saddle_segment
+                            break
+                    continue
+                elif segment.next not in segment_map:
                     # print(f"Element {segment.next} not in segment map")
                     # Closing
                     if segment.next == starting_id:
@@ -362,6 +379,7 @@ class Marching(object):
                         if not new_path:
                             break
                     break
+
                 segment_id = segment.next
                 segment = segment_map.pop(segment.next)
 
@@ -407,8 +425,8 @@ if __name__ == "__main__":
     # Creating a function with a saddle point.
 
     # First some elipse shapped contours
-    data = np.sqrt((0.5*(rr - 35)**2 + 0.1*(zz-25)**2)) * \
-           5e-3*((rr - 15)**2 + (zz - 25)**2)
+    data = np.sqrt((0.5*(zz - 35)**2 + 0.1*(rr-25)**2)) * \
+           5e-3*((zz - 15)**2 + (rr - 25)**2)
 
     march = Marching()
     march.setData(r, z, data)
@@ -435,7 +453,14 @@ if __name__ == "__main__":
     # # print(contour_path)
     # plot_paths(plt, contour_path, 'r-')
 
-    val = 4.5
+    val = 4.187
+
+    val_x = 28
+    val_y = 25
+
+    val = np.sqrt((0.5*(val_x - 35)**2 + 0.1*(val_y-25)**2)) * \
+           5e-3*((val_x - 15)**2 + (val_y - 25)**2)
+
     contour_paths = march.getContourPath(val)
     print(f"{len(contour_paths)=}")
     print(f"{calculate_length(contour_paths)=}")
