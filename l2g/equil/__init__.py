@@ -8,7 +8,7 @@ def getEquilibriumFromEQFile(eqdsk_file: str, correct_helicity: bool = True) -> 
     """
 
     eqdsk = EQDSKIO(eqdsk_file)
-    return getEquilibriumFromEQDSKG(eqdsk)
+    return getEquilibriumFromEQDSKG(eqdsk, correct_helicity)
 
 def getEquilibriumFromEQDSKG(eqdsk_obj: EQDSKIO, correct_helicity=True) -> Equilibrium:
     """Gather the data required from an EQDSKIO object and populate the
