@@ -1,4 +1,3 @@
-from imas.equilibrium import vacuum_toroidal_field__structure
 from l2g.equil import (getEquilibriumFromIMAS, getEquilibriumFromEQDSKG,
                        EQDSKIO, Equilibrium)
 import glob
@@ -114,6 +113,11 @@ class EquilibriumIterator(object):
             if not isinstance(d["times"], list):
                 times = [times]
 
+        time_samples = None
+        if "time_samples" in d:
+            time_samples = d["time_samples"]
+
+
         # OLD API
         # self._ids = imas.ids(shot, run)
         # self._ids.open_env(user, device, version)
@@ -154,6 +158,11 @@ class EquilibriumIterator(object):
                 time_start <= self._ids_summary.time,
                 self._ids_summary.time <= time_end))[0]
             times = self._ids_summary.time[times_indexes]
+
+        # Sample the number of times
+        if time_samples and time_samples < len(times):
+            idx = np.round(np.linspace(0, len(times) - 1, time_samples)).astype(int)
+            times = times[idx]
 
         # Extract the times
 
