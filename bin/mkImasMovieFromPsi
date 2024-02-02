@@ -31,6 +31,11 @@ parser.add_argument('-miny', '--min_y', type=float, help="Ordinate lower limit",
                     metavar="MIN Y")
 parser.add_argument('-maxy', '--max_y', type=float, help="Ordinate upper limit",
                     metavar="MAX Y")
+parser.add_argument("-ns", '--number_of_samples', type=int,
+                    metavar="#number_of_samples", default=100,
+                    help="Number of samples to take. If the " +
+                    "number of time slices in the IMAS IDS is lower than this" +
+                    " then it is ignored.")
 
 args = parser.parse_args()
 
@@ -76,42 +81,79 @@ ax.plot(wall_contour_r, wall_contour_z, 'r-')
 ax.set_title(f"S={args.shot} R={args.run} U={args.user} D={args.device}")
 
 N = len(summary_ids.time)
+
+# Check how many time slices are in the summar_ids
+number_of_time_slices = len(np.logical_and(summary_ids.time >= args.time_start,
+                                           summary_ids.time <= args.time_end))
+number_of_samples = args.number_of_samples
+
 i = 0
 
 # Labels
 times = []
-from time import sleep
-
+import l2g
+l2g.enableDebugging()
+l2g.addStreamHandler()
 import l2g.equil
+import l2g.external.equilibrium_analysis
 import l2g.plot._marching_squares
 
 it = l2g.equil.EquilibriumIterator()
 
-dictionary = {
-    "user": args.user,
-    "shot": args.shot,
-    "run": args.run,
-    "time_start": args.time_start,
-    "time_end": args.time_end,
-    "device": args.device,
-}
+if number_of_time_slices < number_of_samples:
+    dictionary = {
+        "user": args.user,
+        "shot": args.shot,
+        "run": args.run,
+        "time_start": args.time_start,
+        "time_end": args.time_end,
+        "device": args.device,
+    }
+else:
+    dictionary = {
+        "user": args.user,
+        "shot": args.shot,
+        "run": args.run,
+        "device": args.device,
+    }
+    dictionary["times"] = np.linspace(args.time_start, args.time_end, number_of_samples).tolist()
 
+print("Loading equilibriums from IMAS")
 it.loadIMASEquilibriums(dictionary)
+print("Done")
 paths_to_plot = []
+secondary_paths_to_plot = []
 x = l2g.plot._marching_squares.Marching()
+print("Processing equilibrium")
 for index, time, equilibrium in it:
-    print(time)
-    eq = l2g.equil.EQ(equilibrium)
-    eq.evaluate()
-
+    print(time, flush=True)
     x.setData(equilibrium.grid_r, equilibrium.grid_z, equilibrium.psi)
+    # eq = l2g.equil.EQ(equilibrium)
+    # eq.evaluate()
+    # # Get the contour path
+    # paths = x.getContourPath(eq.psiLCFS)
+    # paths_to_plot.append(paths[0])
+    # if eq.psiLCFS2:
+    #     paths = x.getContourPath(eq.psiLCFS2)
+    #     print(f"2ndX: {eq.psiLCFS2} {eq.uppXPoint}")
+    #     secondary_paths_to_plot.append(paths[0])
+    # else:
+    #     secondary_paths_to_plot.append([])
 
-    # Get the contour path
-    paths = x.getContourPath(eq.psiLCFS)
-    paths_to_plot.append(paths)
+    eq = l2g.external.equilibrium_analysis.EQA(equilibrium)
+    eq.evaluate()
+    paths = x.getContourPath(eq.getBoundaryFluxValue())
+    paths_to_plot.append(paths[0])
+    plasma_type = eq.getType()
+    if plasma_type == "div":
+        print(f"2ndX: {eq.getSecondaryXFluxValue()} {eq.getUpperXPoint()}")
+        paths = x.getContourPath(eq.getSecondaryXFluxValue())
+        secondary_paths_to_plot.append(paths[0])
+    else:
+        secondary_paths_to_plot.append([])
 
     times.append(f"t={time:12.4f}s")
-
+print("Done")
 
 # Now make the animation
 
@@ -122,6 +164,10 @@ def update(i, bdry_path, lines, labels):
 
     for path in bdry_path[i]:
         lines += ax.plot(path[0], path[1], '-', c='b')
+
+    if secondary_paths_to_plot[i]:
+        for path in secondary_paths_to_plot[i]:
+            lines += ax.plot(path[0], path[1], '-', c='g')
 
     # if len(sr[i]):
     #     for j in range(len(sr[i])):
