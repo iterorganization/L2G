@@ -7,9 +7,9 @@ from l2g.external.bicubic import PyBicubic
 bicubic = PyBicubic(equilibrium.grid_r, equilibrium.grid_z, equilibrium.psi)
 
 print(bicubic.getValues(4.0, 4.0))
-from l2g.external.bfgs_2d import PyBgfs2d
+from l2g.external.bfgs_2d import PyBfgs2d
 
-min_obj = PyBgfs2d()
+min_obj = PyBfgs2d()
 min_obj.setInterpolator(bicubic)
 
 # Get bounds
