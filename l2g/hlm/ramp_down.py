@@ -2,6 +2,7 @@
 def decay_length_L_mode_diverted(a: float, R: float, Ip: float, Area: float):
     r"""Calculates the decay length of a L-mode diverted equilibrium, by the
     use of the most suitable scaling law from Horacek, et.al, 2020.
+    DOI 10.1088/1741-4326/ab7e47
 
     For convenience the data stored in a IMAS IDS is in the following:
 
