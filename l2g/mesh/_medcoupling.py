@@ -63,18 +63,30 @@ def numpyArrayToField(arr: np.ndarray, field_name: str,
     if info_on_component:
         # Vector field. Check if the length of the component info is the same
         # as the ratio between the number of values in a numpy array and.
+
+        # Check if the array has the 2D shape first
         num_of_components = len(info_on_component)
-        N_cells = mesh.getNumberOfCells()
-        ratio = int(len(arr) / N_cells)
-        if ratio == num_of_components:
-            arr = arr.reshape((N_cells, ratio))
+        if len(arr.shape) == 2:
+            if arr.shape[1] == num_of_components:
+                # Everything is okay.
+                pass
+            else:
+                msg = f"Shape of array {arr.shape} does not match the number of "
+                msg += f"components {info_on_component}"
+                raise FieldComponentException(msg)
+
         else:
-            # Raise exception, otherwise medcoupling will raise it due to
-            # mismatch in numbers of components and the size of the field. Or
-            # not, maybe it will trigger just an UB.
-            msg = f"Shape of array {arr.shape} does not match the number of "
-            msg += f"components {info_on_component}"
-            raise FieldComponentException(msg)
+            N_cells = mesh.getNumberOfCells()
+            ratio = int(len(arr) / N_cells)
+            if ratio == num_of_components:
+                arr = arr.reshape((N_cells, ratio))
+            else:
+                # Raise exception, otherwise medcoupling will raise it due to
+                # mismatch in numbers of components and the size of the field. Or
+                # not, maybe it will trigger just an UB.
+                msg = f"Shape of array {arr.shape} does not match the number of "
+                msg += f"components {info_on_component}"
+                raise FieldComponentException(msg)
 
     mcArray = mc.DataArrayDouble(np.asarray(arr, dtype=np.float))
     if info_on_component:
