@@ -4,7 +4,6 @@
 import numpy as np
 cimport numpy as np
 from libcpp cimport bool
-from libc.stdio cimport printf
 from libcpp.vector cimport vector
 from libc.math cimport sqrt
 
@@ -19,7 +18,7 @@ from l2g.external.bgfs_2d cimport PyBgfs2d
 import logging
 log = logging.getLogger(__name__)
 
-
+@cython.wraparound(False)
 cdef bool check_if_on_edge(const float px1, const float py1, const float px2,
                         const float py2, const float tx, const float ty):
     """Checks if point (tx, ty) lies on the edge. Using cross product instead
@@ -81,22 +80,25 @@ cdef bool check_if_point_in_poly(const double[:] polyX, const double[:] polyY,
 
 cdef class EQA:
     cdef:
-        BICUBIC_INTERP *c_bicubic
-        RKF45 *c_rkf45
+        BICUBIC_INTERP *c_bicubic # For normal interpolation
+        BICUBIC_INTERP *c_saddle_bicubic # For finding saddle points
+        RKF45 *c_rkf45 # For tracing a magnetic surface
         PyBgfs2d c_bgfs
         bool evaluated
         object equilibrium
         str plasma_type
-        tuple o_point, low_x_point, upp_x_point, contact_point
+        list o_point, low_x_point, upp_x_point, contact_point, lcfs_points
         double[:] wall_contour_r, wall_contour_z
         float psi_x, psi_upp_x, psi_lcfs, mag_axis_r, mag_axis_z, r_displ
-        float min_z, max_z, min_r, max_r
         float z_displ, psi_grad_sign
+        object psi_dxdy
 
 
     def __cinit__(self):
         self.c_bicubic = new BICUBIC_INTERP()
         self.c_bicubic.prepareContainers()
+        self.c_saddle_bicubic = new BICUBIC_INTERP()
+        self.c_saddle_bicubic.prepareContainers()
 
         self.c_rkf45 = new RKF45()
         self.c_rkf45.set_omp_thread(0)
@@ -105,6 +107,7 @@ cdef class EQA:
         self.c_bgfs = PyBgfs2d()
         self.resetValues()
         self.setEquilibrium(equilibrium)
+        self.lcfs_points = []
 
     def resetValues(self):
         self.evaluated = False
@@ -138,6 +141,7 @@ cdef class EQA:
         """Sets the equilibrium objects and propagates the
         flux data to the interpolation and solver objects.
         """
+
         self.resetValues()
 
         self.equilibrium = obj
@@ -146,9 +150,23 @@ cdef class EQA:
         # Set the arrays
         self.c_bicubic.setArrays(obj.grid_r,
                                  obj.grid_z, obj.psi)
+
+        # Take the finite differences values array and use it for the saddle
+        # points.
+        # Remember: Z is the rows and R is the column
+        self.psi_dxdy = np.zeros((obj.grid_z.size, obj.grid_r.size), dtype=float)
+        for i in range(obj.grid_z.size):
+            for j in range(obj.grid_r.size):
+                self.psi_dxdy[i, j] = self.c_bicubic.m_fdx[i][j]*self.c_bicubic.m_fdx[i][j] + self.c_bicubic.m_fdy[i][j]*self.c_bicubic.m_fdy[i][j]
+        self.c_saddle_bicubic.setArrays(obj.grid_r, obj.grid_z, self.psi_dxdy)
         self.c_rkf45.set_interpolator(self.c_bicubic)
         self.c_rkf45.set_vacuum_fpol(self.equilibrium.fpol_vacuum)
         self.c_bgfs.c_set_interpolator(self.c_bicubic)
+
+        self.c_bgfs.setBounds(min(self.equilibrium.grid_r),
+                              max(self.equilibrium.grid_r),
+                              min(self.equilibrium.grid_z),
+                              max(self.equilibrium.grid_z))
 
         # Clean the Wall contour
         RLIM, ZLIM = self.equilibrium.wall_contour_r, self.equilibrium.wall_contour_z
@@ -175,16 +193,6 @@ cdef class EQA:
     def setDisplacement(self, r_displ: double, z_displ: double):
         self.r_displ = r_displ
         self.z_displ = z_displ
-
-    def getBoundaryFluxValue(self):
-        if not self.plasma_type:
-            log.error(f"No plasma type: {self.plasma_type}")
-            return None
-
-        if self.plasma_type == "div":
-            return self.psi_x
-        else:
-            return self.psi_lcfs
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
@@ -321,9 +329,6 @@ cdef class EQA:
             contact_flux[0] = wall_max_flux
             contact_r[0] = max_point_r
             contact_z[0] = max_point_z
-        print("contact_flux %f\n", contact_flux[0])
-        print("contact_r %f\n", contact_r[0])
-        print("contact_z %f\n", contact_z[0])
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
@@ -338,15 +343,13 @@ cdef class EQA:
             int N_RLIM
 
             # Rkf45 variables
-            int flag
+            int flag, i
             double relerr, abserr, time, new_time, time_step
             double y[2]
             double yp[2]
+            double prev_distance
 
         self.get_contact_point(contact_flux, contact_r, contact_z)
-        print("contact_flux %f\n", contact_flux[0])
-        print("contact_r %f\n", contact_r[0])
-        print("contact_z %f\n", contact_z[0])
         if contact_r[0] == 0.0:
             log.debug("No contact point found")
             is_closed[0] = False
@@ -359,7 +362,7 @@ cdef class EQA:
         abserr = 1e-4
 
         # Do one loop around the tokamak.
-        time_step = 2*np.pi/200
+        time_step = 0.01
 
         y[0] = contact_r[0]
         y[1] = contact_z[0]
@@ -374,16 +377,41 @@ cdef class EQA:
         # Set displacements
         self.c_rkf45.set_r_move(self.r_displ)
         self.c_rkf45.set_z_move(self.z_displ)
-        printf("I'm here: %f %f %f %f\n", y[0], y[1], time, new_time)
-        for i in range(200):
+
+        i = 0
+        prev_distance = 0
+        log.debug("Tracking mgnetic surface.")
+        while i < 100000:
             flag = self.c_rkf45.r8_rkf45(y, yp,  &time, new_time, &relerr, abserr, flag)
-            printf("%f %f\n", y[0], y[1])
+            if flag != 2:
+                # Redoing the step
+                flag = 2
+                continue
             new_time = time + time_step
-            printf("asd")
+            flag = 2
+            i += 1
+            # Store the points
+
+            self.lcfs_points.append([y[0], y[1]])
+
+            # Check if the point goes out of bounds.
+
+
             is_closed[0] = check_if_point_in_poly(RLIM, ZLIM, N_RLIM, y[0], y[1])
-            printf("Seeing if check_point succeeded")
             if not is_closed[0]:
+                log.debug("Magnetic surface not closed!")
                 break
+
+            # Get the distance from start
+            if i > 100:
+                # Also make sure that the distance is going down not above.
+                d = (contact_r[0] - y[0])**2 + (contact_z[0] - y[1])**2
+
+                if d < 0.1 and d < prev_distance: # less than 0.1 m^2, which corresponds to 0.01m
+                    log.debug("Periodicity found after more than 100 steps! Stopped tracking magnetic surface")
+                    break
+                prev_distance = d
+        log.debug(f"Magnetic surface followed. Is it closed? {is_closed[0]}")
 
     cpdef evaluate(self):
         """Evaluates the magnetic poloidal flux function.
@@ -392,10 +420,21 @@ cdef class EQA:
             bool is_closed=True
             double contact_r, contact_z, contact_flux
 
+            double flux, dummy
+
+        # Initializing flux and dummy to squash warnings
+        flux = 0
+        dummy = 0
+
         # Use the information of the mag axis to find the O point.
-        self.o_point = self.c_bgfs.findMinimum(self.equilibrium.mag_axis_r,
+        out_of_bounds, *point = self.c_bgfs.findMinimum(self.equilibrium.mag_axis_r,
                                                self.equilibrium.mag_axis_z,
                                                100)
+        if not out_of_bounds:
+            self.o_point = point
+            log.debug(f"O point: {self.o_point}")
+        else:
+            log.debug("Could not find O point!")
 
         contact_r = 0.0
         contact_z = 0.0
@@ -419,39 +458,83 @@ cdef class EQA:
         if is_closed:
             log.debug("Closed flux surface found. Limiter configuration")
             self.plasma_type = "lim"
-            self.contact_point = (contact_r, contact_z)
+            self.psi_lcfs = contact_flux
+            self.contact_point = [contact_r, contact_z]
             log.debug("Finished evaluating")
+            self.evaluated = True
             return
 
         # If we are here, it is not limiter!
         log.debug("No closed flux surface found. Diverted configuration")
         self.plasma_type = "div"
 
-        # Now get the X-points!
-        log.debug("Finding O point.")
-        self.o_point = self.c_bgfs.findMinimum(self.equilibrium.mag_axis_r,
-                                               self.equilibrium.mag_axis_z,
-                                               100)
-        log.debug(f"O point: {self.o_point}")
+        # Set the flux value interpolator
+        self.c_bgfs.c_set_interpolator(self.c_bicubic)
+
         minR = min(self.equilibrium.grid_r)
         maxR = max(self.equilibrium.grid_r)
         minZ = min(self.equilibrium.grid_z)
         maxZ = max(self.equilibrium.grid_z)
         half_r = (maxR + minR) * 0.5
 
+        # Set the derivative points interpoaltor
+        self.c_bgfs.c_set_interpolator(self.c_saddle_bicubic)
+
         upper_z = minZ + 0.85 * (maxZ - minZ)
-        self.upp_x_point = self.c_bgfs.findMinimum(half_r, upper_z, 100)
-        log.debug(f"Upper X point: {self.upp_x_point}")
+        log.debug("")
+        log.debug("Upper X point search")
+        out_of_bounds, *point = self.c_bgfs.findMinimum(half_r, upper_z, 1000)
+        if not out_of_bounds:
+            self.upp_x_point = point
+            self.c_bicubic.getValues(self.upp_x_point[0] - self.r_displ,
+                                     self.upp_x_point[1] - self.z_displ,
+                                     flux,
+                                     dummy, dummy)
+            self.psi_upp_x = flux
+            log.debug(f"Upper X point: {self.upp_x_point}")
+        else:
+            log.debug(f"Could not find upper X point!")
 
         # Setup the guesses for the X points
         lower_z = minZ + 0.15 * (maxZ - minZ)
-        self.low_x_point = self.c_bgfs.findMinimum(half_r, lower_z, 100)
-        log.debug(f"Lower X point: {self.low_x_point}")
+        log.debug("")
+        log.debug("Lower X point search")
+        out_of_bounds, *point = self.c_bgfs.findMinimum(half_r, lower_z, 1000)
 
+        if not out_of_bounds:
+            self.low_x_point = point
+            log.debug(f"Lower X point: {self.low_x_point}")
+            self.c_bicubic.getValues(self.low_x_point[0] - self.r_displ,
+                                     self.low_x_point[1] - self.z_displ,
+                                     flux,
+                                     dummy, dummy)
+            self.psi_x = flux
+        else:
+            log.debug(f"Could not find lower X point!")
+        # This is also the location of the separatrix
         log.debug("Finished evaluating")
+        self.evaluated = True
 
     def getType(self):
         return self.plasma_type
+
+    def getBoundaryFluxValue(self):
+        if not self.plasma_type:
+            # log.error(f"No plasma type: {self.plasma_type}")
+            return None
+
+        if self.plasma_type == "div":
+            return self.psi_x
+        else:
+            return self.psi_lcfs
+
+    def getSecondaryXFluxValue(self):
+        if not self.plasma_type:
+            # log.error(f"No plasma type: {self.plasma_type}")
+            return None
+        if not self.plasma_type == "div":
+            log.error(f"Plasma is not diverted type or does not have upper X point")
+        return self.psi_upp_x
 
     def getContactPoint(self):
         return self.contact_point
@@ -461,3 +544,251 @@ cdef class EQA:
 
     def getUpperXPoint(self):
         return self.upp_x_point
+
+    cdef double bisection(self, double flux, double Z, double a, double b):
+        cdef:
+            double c, tol
+            double vala, valb, valc, dummy
+            int n, max_iter
+
+        log.debug(f"Borders a={a}, b={b}, flux={flux}, Z={Z}")
+        tol = 1e-6
+
+        n = 0
+        max_iter = 100
+
+        dummy = 0
+        vala = 0
+        valb = 0
+        valc = 0
+
+        self.c_bicubic.getValues(a - self.r_displ, Z - self.z_displ,
+                                 vala, dummy, dummy)
+        self.c_bicubic.getValues(b - self.r_displ, Z - self.z_displ,
+                                 valb, dummy, dummy)
+
+        log.debug("Starting bisection method")
+        while n < max_iter:
+            # Get the midpoint
+            c = 0.5 * (a + b)
+
+            self.c_bicubic.getValues(c - self.r_displ, Z - self.z_displ,
+                                     valc, dummy, dummy)
+
+            if abs(valc - flux) == 0 or 0.5 * (b - a) < tol:
+                log.debug(f"Bisection finished after {n} steps, c={c}")
+                return c
+
+            n += 1
+            if (valc - flux) * (vala - flux) > 0: # Same sign
+                a = c
+                vala = valc
+            else:
+                b = c
+                valb = valc
+
+        log.error("Bisection failed.")
+        return 0
+
+    def getMidplaneInfo(self, lcfs: float=None, which:str='owl'):
+        cdef:
+            # For the bisection
+            double a, b # For the borders
+            double st, da # For finding the borders
+            # For the magnetic component
+            double psidr, psidz
+            double br, bphi, bz, Btotal, Bpm
+            double Rb, Z, flux
+            bool found_borders
+            # For the interpolation
+            double dummy, fl, pr_fl
+            Py_ssize_t i
+
+        # Initialize the values to suppress the warnings
+        flux = 0
+        dummy = 0
+        fl = 0
+        pr_fl = 0
+        psidr = 0
+        psidz = 0
+        found_borders = False
+
+        if lcfs is None:
+            if self.plasma_type == "div":
+                flux = self.psi_x
+            else:
+                flux = self.psi_lcfs
+
+        Z = self.o_point[1] # Height of the magnetic axis
+
+        # Find the interval so that we have a valid border conditions for the
+        # bisection method.
+
+        if which == "iwl":
+            a = self.equilibrium.grid_r[0]
+            b = self.o_point[0]
+            da = -(b - a) / 100.0
+            st = b
+        elif which == "owl":
+            a = self.o_point[0]
+            b = self.equilibrium.grid_r[-1]
+            da = (b - a) / 100.0
+            st = a
+        else:
+            log.error(f"Wrong side specified: {which}")
+            return -1, -1, -1, -1
+
+
+        self.c_bicubic.getValues(st - self.r_displ, Z - self.z_displ,
+                                 pr_fl, dummy, dummy)
+
+        for i in range(1, 101):
+            self.c_bicubic.getValues(st + i * da - self.r_displ,
+                                     Z - self.z_displ, fl, dummy, dummy)
+
+            if (pr_fl - flux) * (fl - flux) < 0.0:
+                b = a + i * da
+                a = b - da
+                found_borders = True
+                break
+
+        if not found_borders:
+            log.error("Cannot find the magnetic surface on the midplane")
+            return -1, -1, -1, -1
+        # Now get the major radius of the magnetic surface
+        Rb = self.bisection(flux, Z, a, b)
+
+        self.c_bicubic.getValues(Rb - self.r_displ, Z - self.z_displ,
+                                 dummy, psidr, psidz)
+
+
+        # Calculate the poloidal component of the magnetic field
+        Bpm = sqrt(psidr * psidr + psidz * psidz) / Rb
+        # Not really needed, Toroidal component of the magnetic field
+        # Btor = self.equilibrium.fpol_vacuum / Rb
+
+        # Calculate the total component of the magnetic field.
+        br = psidz / Rb
+        bphi = self.equilibrium.fpol_vacuum / Rb
+        bz = psidr / Rb
+        Btotal = sqrt(br * br + bphi * bphi + bz * bz)
+
+        return Rb, Z, Btotal, Bpm
+
+    def alignLcfsToPoint(self, point: list) -> list:
+        """Finds the shortest displacement required to put the limiter LCFS
+        to point p.
+
+        Arguments:
+            p (list): 1D array with 2 values.
+        Returns:
+            displ (np.ndarray): New evaluated displacement.
+        """
+
+        cdef:
+            int i, mini
+            double dist, min_dist
+            list displacement
+
+        if not self.plasma_type == "lim":
+            log.error("alignLcfsToPoint only used for Limiter state.")
+            return
+
+        if not self.evaluated:
+            log.error("Equilibrium not yet evaluated. Run .evaluate() first")
+            return
+
+        if not self.lcfs_points:
+            log.error("No LCFS points stored in order to find the shortest distance.")
+            return
+        mini = -1
+        min_dist = 1e6
+        for i in range(len(self.lcfs_points)):
+            dist = (self.lcfs_points[i][0] - point[0]) ** 2 + \
+                   (self.lcfs_points[i][1] - point[1])
+
+            if dist < min_dist:
+                min_dist = dist
+                mini = i
+
+        return [point[0] - self.lcfs_points[mini][0], point[1] - self.lcfs_points[mini][1]]
+
+    def distanceBetweenPsiOnMidplane(self, sep1: float, sep2: float) -> float:
+        """Calculates the difference between the provided magnetic surface on
+        the midplane.
+
+        Returns:
+            drsep (float): Distance between separatrixes, in mm
+        """
+
+        cdef:
+            double drsep, Z
+            # For the bisection
+            double a, b # For the borders
+            double st, da # For finding the borders
+            bool found_borders
+            # For the magnetic component
+            double fl, pr_fl, dummy
+
+            double sep1r, sep2r
+
+        # Variable initialization
+        drsep = 0
+        fl = 0
+        pr_fl = 0
+        dummy = 0
+        Z = self.o_point[1]
+
+        # Find the borders for for sep1 and then sep2
+        a = self.o_point[0]
+        b = self.equilibrium.grid_r[-1]
+        st = a
+        da = (b - a) / 100.0
+
+        # Get the first distance
+        self.c_bicubic.getValues(a - self.r_displ, Z - self.z_displ, pr_fl,
+                                 dummy, dummy)
+        found_borders = False
+        for i in range(1, 101):
+            self.c_bicubic.getValues(st + i * da - self.r_displ,
+                                     Z - self.z_displ, fl, dummy, dummy)
+
+            if (pr_fl - sep1) * (fl - sep1) < 0.0:
+                b = a + i * da
+                a = b - da
+                found_borders = True
+                break
+        if not found_borders:
+            log.error("Cannot find the magnetic surface on the midplane")
+            return 0
+
+        sep1r = self.bisection(sep1, Z, a, b)
+
+        # Find the borders for for sep1 and then sep2
+        a = self.o_point[0]
+        b = self.equilibrium.grid_r[-1]
+        st = a
+        da = (b - a) / 100.0
+
+        # Get the first distance
+        self.c_bicubic.getValues(a - self.r_displ, Z - self.z_displ, pr_fl,
+                                 dummy, dummy)
+        found_borders = False
+        for i in range(1, 101):
+            self.c_bicubic.getValues(st + i * da - self.r_displ,
+                                     Z - self.z_displ, fl, dummy, dummy)
+
+            if (pr_fl - sep2) * (fl - sep2) < 0.0:
+                b = a + i * da
+                a = b - da
+                found_borders = True
+                break
+        if not found_borders:
+            log.error("Cannot find the magnetic surface on the midplane")
+            return 0
+
+        sep2r = self.bisection(sep2, Z, a, b)
+        return abs(sep1r - sep2r) * 1e3
+
+    def getPsiDxDy(self):
+        return self.psi_dxdy
