@@ -565,7 +565,7 @@ def load_flt_results_from_mesh(mesh_results: L2GResults, mesh_object: Mesh):
     It is necessary to set the index of the fields *before* calling this \
     function.
     """
-    if not mesh_object.isOpen():
+    if mesh_object.backend is None:
         log.error("Mesh file is not open to load data from")
         return
 
