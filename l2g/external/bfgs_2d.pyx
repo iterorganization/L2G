@@ -1,7 +1,7 @@
 # distutils: language = c++
 # cython: language_level = 3
 
-from l2g.external.bgfs_2d cimport PyBgfs2d
+from l2g.external.bfgs_2d cimport PyBfgs2d
 from l2g.external.bicubic cimport PyBicubic, BICUBIC_INTERP
 
 from libc.math cimport sqrt
@@ -11,7 +11,7 @@ from libcpp cimport bool
 import logging
 log = logging.getLogger(__name__)
 
-cdef class PyBgfs2d:
+cdef class PyBfgs2d:
     def __cinit__(self):
         # Set the default bounds to something extremely large
         self.bx1 = -1e9

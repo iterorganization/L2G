@@ -13,7 +13,7 @@ from l2g.equil import Equilibrium
 
 from l2g.external.bicubic cimport BICUBIC_INTERP
 from l2g.external.rkf45 cimport RKF45
-from l2g.external.bgfs_2d cimport PyBgfs2d
+from l2g.external.bfgs_2d cimport PyBfgs2d
 
 import logging
 log = logging.getLogger(__name__)
@@ -83,7 +83,7 @@ cdef class EQA:
         BICUBIC_INTERP *c_bicubic # For normal interpolation
         BICUBIC_INTERP *c_saddle_bicubic # For finding saddle points
         RKF45 *c_rkf45 # For tracing a magnetic surface
-        PyBgfs2d c_bgfs
+        PyBfgs2d c_bfgs
         bool evaluated
         object equilibrium
         str plasma_type
@@ -104,7 +104,7 @@ cdef class EQA:
         self.c_rkf45.set_omp_thread(0)
 
     def __init__(self, equilibrium: Equilibrium):
-        self.c_bgfs = PyBgfs2d()
+        self.c_bfgs = PyBfgs2d()
         self.resetValues()
         self.setEquilibrium(equilibrium)
         self.lcfs_points = []
@@ -161,9 +161,9 @@ cdef class EQA:
         self.c_saddle_bicubic.setArrays(obj.grid_r, obj.grid_z, self.psi_dxdy)
         self.c_rkf45.set_interpolator(self.c_bicubic)
         self.c_rkf45.set_vacuum_fpol(self.equilibrium.fpol_vacuum)
-        self.c_bgfs.c_set_interpolator(self.c_bicubic)
+        self.c_bfgs.c_set_interpolator(self.c_bicubic)
 
-        self.c_bgfs.setBounds(min(self.equilibrium.grid_r),
+        self.c_bfgs.setBounds(min(self.equilibrium.grid_r),
                               max(self.equilibrium.grid_r),
                               min(self.equilibrium.grid_z),
                               max(self.equilibrium.grid_z))
@@ -427,7 +427,7 @@ cdef class EQA:
         dummy = 0
 
         # Use the information of the mag axis to find the O point.
-        out_of_bounds, *point = self.c_bgfs.findMinimum(self.equilibrium.mag_axis_r,
+        out_of_bounds, *point = self.c_bfgs.findMinimum(self.equilibrium.mag_axis_r,
                                                self.equilibrium.mag_axis_z,
                                                100)
         if not out_of_bounds:
@@ -469,7 +469,7 @@ cdef class EQA:
         self.plasma_type = "div"
 
         # Set the flux value interpolator
-        self.c_bgfs.c_set_interpolator(self.c_bicubic)
+        self.c_bfgs.c_set_interpolator(self.c_bicubic)
 
         minR = min(self.equilibrium.grid_r)
         maxR = max(self.equilibrium.grid_r)
@@ -478,12 +478,12 @@ cdef class EQA:
         half_r = (maxR + minR) * 0.5
 
         # Set the derivative points interpoaltor
-        self.c_bgfs.c_set_interpolator(self.c_saddle_bicubic)
+        self.c_bfgs.c_set_interpolator(self.c_saddle_bicubic)
 
         upper_z = minZ + 0.85 * (maxZ - minZ)
         log.debug("")
         log.debug("Upper X point search")
-        out_of_bounds, *point = self.c_bgfs.findMinimum(half_r, upper_z, 1000)
+        out_of_bounds, *point = self.c_bfgs.findMinimum(half_r, upper_z, 1000)
         if not out_of_bounds:
             self.upp_x_point = point
             self.c_bicubic.getValues(self.upp_x_point[0] - self.r_displ,
@@ -499,7 +499,7 @@ cdef class EQA:
         lower_z = minZ + 0.15 * (maxZ - minZ)
         log.debug("")
         log.debug("Lower X point search")
-        out_of_bounds, *point = self.c_bgfs.findMinimum(half_r, lower_z, 1000)
+        out_of_bounds, *point = self.c_bfgs.findMinimum(half_r, lower_z, 1000)
 
         if not out_of_bounds:
             self.low_x_point = point

@@ -3,7 +3,7 @@
 
 from l2g.external.bicubic cimport BICUBIC_INTERP
 
-cdef class PyBgfs2d:
+cdef class PyBfgs2d:
     cdef BICUBIC_INTERP *c_bicubic
     cdef double bx1
     cdef double bx2
