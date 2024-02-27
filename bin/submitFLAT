@@ -61,7 +61,7 @@ if [ "${REDIRECT_OUTPUT_TO_LOG_FILE}" = "1" ]; then
     LOG_NAME="${LOG_NAME}_slurm.log"
 
     # Now modify the SLURM_COMMAND
-    SLURM_COMMAND="${SLURM_COMMAND} --output=${LOG_NAME}"
+    SLURM_COMMAND="${SLURM_COMMAND} --job-name=${JOB_NAME} --output=${LOG_NAME}"
     echo "Log file: ${LOG_NAME}"
 fi
 
