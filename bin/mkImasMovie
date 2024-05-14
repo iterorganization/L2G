@@ -66,8 +66,17 @@ ax.axis('equal')
 ax.set_xlabel('R [m]')
 ax.set_ylabel('Z [m]')
 
-wall_contour_r = wall_ids.description_2d[0].limiter.unit[0].outline.r
-wall_contour_z = wall_ids.description_2d[0].limiter.unit[0].outline.z
+try:
+    wall_contour_r = wall_ids.description_2d[0].limiter.unit[0].outline.r
+    wall_contour_z = wall_ids.description_2d[0].limiter.unit[0].outline.z
+except:
+    import l2g.equil
+    wall_backup = l2g.equil.getBackUpIMASWallIds()
+
+    wall_contour_r = np.concatenate([wall_backup.description_2d[0].limiter.unit[0].outline.r,
+                             wall_backup.description_2d[0].limiter.unit[1].outline.r[::-1]])
+    wall_contour_z = np.concatenate([wall_backup.description_2d[0].limiter.unit[0].outline.z,
+                             wall_backup.description_2d[0].limiter.unit[1].outline.z[::-1]])
 Z_LIMITS = np.min(wall_contour_z) - 1, np.max(wall_contour_z) + 1
 R_LIMITS = np.min(wall_contour_r) - 1, np.max(wall_contour_r) + 1
 

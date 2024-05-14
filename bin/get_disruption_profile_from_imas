@@ -22,14 +22,13 @@ import argparse
 parser = argparse.ArgumentParser(description=description)
 
 parser.add_argument('-s', '--shot', metavar='SHOT', type=int,
-                    help='Shot number',
-                    required=True)
+                    help='Shot number', required=True)
 parser.add_argument('-r', '--run', metavar='RUN', type=int,
                     help='Run number', required=True)
 parser.add_argument('-u', '--user', metavar='USER', type=str, default="public",
                     help='Username')
-parser.add_argument('-d', '--device',
-                    metavar="DEVICE", type=str, default="ITER_DISRUPTIONS", help='Device')
+parser.add_argument('-d', '--device', metavar="DEVICE", type=str,
+                    default="ITER_DISRUPTIONS", help='Device')
 parser.add_argument('-o', '--output-directory', help="Output directory",
                     metavar="OUTPUT_DIRECTORY", default=".", )
 

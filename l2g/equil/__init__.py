@@ -62,6 +62,21 @@ def getEquilibriumFromEQDSKG(eqdsk_obj: EQDSKIO, correct_helicity=True) -> Equil
 
     return obj
 
+def getBackUpIMASWallIds(shot=116000, run=4, db_name="ITER_MD",
+        user_name="public"):
+    """Gets the default Wall IDS machine description from the ITER ITER_MD
+    machine description database. 116000/4
+    """
+
+    import imas
+    import imas.imasdef
+
+    db_entry = imas.DBEntry(shot=shot, run=run, db_name=db_name,
+            user_name=user_name, backend_id=imas.imasdef.MDSPLUS_BACKEND)
+    db_entry.open()
+
+    return db_entry.get("wall")
+
 def getEquilibriumFromIMASSlice(shot: int, run: int, user: str = "public",
         machine: str = "iter", time: float = 0.0, data_version: str = "3",
         correct_helicity: bool = True) -> Equilibrium:
@@ -83,6 +98,8 @@ def getEquilibriumFromIMASSlice(shot: int, run: int, user: str = "public",
         wall_ids, summary_ids, correct_helicty=correct_helicity)
     return equilibrium
 
+
+
 def getEquilibriumFromIMAS(equilibrium_ids_time_slice,
                            vacuum_toroidal_field_ids, wall_ids,
                            summary_ids=None, correct_helicty=True) -> Equilibrium:
@@ -98,9 +115,20 @@ def getEquilibriumFromIMAS(equilibrium_ids_time_slice,
     import numpy as np
     obj = Equilibrium()
 
-    # Write the wall limiter
-    obj.wall_contour_r = list(wall_ids.description_2d[0].limiter.unit[0].outline.r)
-    obj.wall_contour_z = list(wall_ids.description_2d[0].limiter.unit[0].outline.z)
+    try:
+        # Write the wall limiter
+        obj.wall_contour_r = list(wall_ids.description_2d[0].limiter.unit[0].outline.r)
+        obj.wall_contour_z = list(wall_ids.description_2d[0].limiter.unit[0].outline.z)
+    except:
+        # Soooooo let's try the backup wall...
+        wall_backup = getBackUpIMASWallIds()
+
+        wall_r = np.concatenate([wall_backup.description_2d[0].limiter.unit[0].outline.r,
+                                 wall_backup.description_2d[0].limiter.unit[1].outline.r[::-1]])
+        wall_z = np.concatenate([wall_backup.description_2d[0].limiter.unit[0].outline.z,
+                                 wall_backup.description_2d[0].limiter.unit[1].outline.z[::-1]])
+        obj.wall_contour_r = list(wall_r)
+        obj.wall_contour_z = list(wall_z)
 
     # Write the magnetic axis position
     obj.mag_axis_r = equilibrium_ids_time_slice.global_quantities.magnetic_axis.r

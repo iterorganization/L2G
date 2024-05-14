@@ -71,8 +71,18 @@ ax.axis('equal')
 ax.set_xlabel('R [m]')
 ax.set_ylabel('Z [m]')
 
-wall_contour_r = wall_ids.description_2d[0].limiter.unit[0].outline.r
-wall_contour_z = wall_ids.description_2d[0].limiter.unit[0].outline.z
+try:
+    wall_contour_r = wall_ids.description_2d[0].limiter.unit[0].outline.r
+    wall_contour_z = wall_ids.description_2d[0].limiter.unit[0].outline.z
+except:
+    import l2g.equil
+    wall_backup = l2g.equil.getBackUpIMASWallIds()
+
+    wall_contour_r = np.concatenate([wall_backup.description_2d[0].limiter.unit[0].outline.r,
+                             wall_backup.description_2d[0].limiter.unit[1].outline.r[::-1]])
+    wall_contour_z = np.concatenate([wall_backup.description_2d[0].limiter.unit[0].outline.z,
+                             wall_backup.description_2d[0].limiter.unit[1].outline.z[::-1]])
+
 Z_LIMITS = np.min(wall_contour_z) - 1, np.max(wall_contour_z) + 1
 R_LIMITS = np.min(wall_contour_r) - 1, np.max(wall_contour_r) + 1
 
@@ -82,9 +92,12 @@ ax.set_title(f"S={args.shot} R={args.run} U={args.user} D={args.device}")
 
 N = len(summary_ids.time)
 
+TIME_START = max(args.time_start, summary_ids.time[0])
+TIME_END = min(args.time_end, summary_ids.time[-1])
+
 # Check how many time slices are in the summar_ids
-number_of_time_slices = len(np.logical_and(summary_ids.time >= args.time_start,
-                                           summary_ids.time <= args.time_end))
+number_of_time_slices = len(np.logical_and(summary_ids.time >= TIME_START,
+                                           summary_ids.time <= TIME_END))
 number_of_samples = args.number_of_samples
 
 i = 0
@@ -105,8 +118,8 @@ if number_of_time_slices < number_of_samples:
         "user": args.user,
         "shot": args.shot,
         "run": args.run,
-        "time_start": args.time_start,
-        "time_end": args.time_end,
+        "time_start": TIME_START,
+        "time_end": TIME_END,
         "device": args.device,
     }
 else:
@@ -116,7 +129,7 @@ else:
         "run": args.run,
         "device": args.device,
     }
-    dictionary["times"] = np.linspace(args.time_start, args.time_end, number_of_samples).tolist()
+    dictionary["times"] = np.linspace(TIME_START, TIME_END, number_of_samples).tolist()
 
 print("Loading equilibriums from IMAS")
 it.loadIMASEquilibriums(dictionary)

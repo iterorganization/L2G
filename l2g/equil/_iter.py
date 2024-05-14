@@ -16,6 +16,21 @@ def truncate(number: float, digits: int) -> float:
     stepper = 10.0 ** digits
     return math.trunc(number * stepper) / stepper
 
+def getBackUpIMASWallIds(shot=116000, run=4, db_name="ITER_MD",
+        user_name="public"):
+    """Gets the default Wall IDS machine description from the ITER ITER_MD
+    machine description database. 116000/4
+    """
+
+    import imas
+    import imas.imasdef
+
+    db_entry = imas.DBEntry(shot=shot, run=run, db_name=db_name,
+            user_name=user_name, backend_id=imas.imasdef.MDSPLUS_BACKEND)
+    db_entry.open()
+
+    return db_entry.get("wall")
+
 class EquilibriumIterator(object):
     """Iterator object that has equilibriums and acts as a iterator over them.
     """
@@ -144,7 +159,11 @@ class EquilibriumIterator(object):
             data_version=version)
         self._ids.open()
 
-        self._ids_wall = self._ids.get("wall")
+        try:
+            self._ids_wall = self._ids.get("wall")
+        except:
+            # Get backup wall IDS
+            self._ids_wall = getBackUpIMASWallIds()
 
 
         log.info(f"Opening and reading data from SHOT={shot}, RUN={run}, device={device}, username={user}")

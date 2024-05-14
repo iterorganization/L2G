@@ -42,10 +42,19 @@ if args.input_type == "imas":
 
 
     # Get wall silhouette
-    wall_ids = ids.get("wall")
-    WALL_R = wall_ids.description_2d[0].limiter.unit[0].outline.r
-    WALL_Z = wall_ids.description_2d[0].limiter.unit[0].outline.z
-
+    try:
+        wall_ids = ids.get("wall")
+        WALL_R = wall_ids.description_2d[0].limiter.unit[0].outline.r
+        WALL_Z = wall_ids.description_2d[0].limiter.unit[0].outline.z
+    except:
+        import l2g.equil
+        wall_ids = l2g.equil.getBackUpIMASWallIds()
+        wall_r = np.concatenate([wall_ids.description_2d[0].limiter.unit[0].outline.r,
+                                 wall_ids.description_2d[0].limiter.unit[1].outline.r[::-1]])
+        wall_z = np.concatenate([wall_ids.description_2d[0].limiter.unit[0].outline.z,
+                                 wall_ids.description_2d[0].limiter.unit[1].outline.z[::-1]])
+        WALL_R = wall_r
+        WALL_Z = wall_z
     # Get LCFSs
 
     equilibrium = ids.get_slice("equilibrium", args.time_slice,
