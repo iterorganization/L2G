@@ -7,6 +7,8 @@ cimport numpy as np
 # External CPP class
 from l2g.external.embree cimport EmbreeAccell
 
+from libcpp.limits cimport numeric_limits
+
 cdef class PyEmbreeAccell:
     """This class wraps the EmbreeAccell class from L2G_cpp and is used to
     provide geometries to Embree and holds information about the geometries,
@@ -117,3 +119,45 @@ cdef class PyEmbreeAccell:
         if name in self.name_to_mesh:
             return True
         return False
+
+    def prepareThreadContainers(self):
+        self.c_eacc.prepareThreadContainers()
+
+    def castInfRay(self, float ox, float oy, float oz, float dx, float dy,
+                   float dz):
+        """Cast an infinite ray from origin point (ox, oy, oz) with direction
+        vector (dx, dy, dz).
+        """
+
+        cdef:
+            double tnear, tfar
+
+        tnear = 0.05
+        tfar = numeric_limits[double].infinity()
+        self.c_eacc.castRay(ox, oy, oz, dx, dy, dz, tnear, tfar)
+
+    def castRay(self, float ox, float oy, float oz, float dx, float dy,
+                   float dz, float tnear, float tfar):
+        """Cast an infinite ray from origin point (ox, oy, oz) with direction
+        vector (dx, dy, dz).
+        """
+
+        self.c_eacc.castRay(ox, oy, oz, dx, dy, dz, tnear, tfar)
+
+    def checkIfHit(self):
+        """After calling castInfRay, check if there is a hit with this
+        function.
+        """
+        return self.c_eacc.checkIfHit()
+
+    def returnGeomId(self):
+        """Returns the id of the geometry that was hit. Geometry here
+        corresponds to the mesh.
+        """
+        return self.c_eacc.returnGeomId()
+
+    def returnPrimId(self):
+        """Returns the id of the primitive that was hit. Here the id primitive
+        corresponds to the cell (triangle) of the hit geometry.
+        """
+        return self.c_eacc.returnPrimId()
