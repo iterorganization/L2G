@@ -302,6 +302,13 @@ def set_parameters_and_options(d: dict, flt_obj) -> None:
     """Set parameters to a FieldLineTracer object from a dictionary.
     """
     # Set the parameters. If unknown, just print and ignore
+
+    if "cutoff_conlen" in d:
+        if not hasattr(flt_obj.parameters, "cutoff_conlen"):
+            log.info(f"Illegal parameter: cutoff_conlen. Ignored")
+        else:
+            setattr(flt_obj.parameters, "cutoff_conlen", d["cutoff_conlen"])
+
     if "parameters" in d:
         for parameter in d['parameters']:
             if not hasattr(flt_obj.parameters, parameter):
