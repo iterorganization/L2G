@@ -705,7 +705,7 @@ cdef class EQA:
         min_dist = 1e6
         for i in range(len(self.lcfs_points)):
             dist = (self.lcfs_points[i][0] - point[0]) ** 2 + \
-                   (self.lcfs_points[i][1] - point[1])
+                   (self.lcfs_points[i][1] - point[1]) ** 2
 
             if dist < min_dist:
                 min_dist = dist
