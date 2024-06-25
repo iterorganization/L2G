@@ -31,7 +31,11 @@ parser.add_argument('-miny', '--min_y', type=float, help="Ordinate lower limit",
                     metavar="MIN Y")
 parser.add_argument('-maxy', '--max_y', type=float, help="Ordinate upper limit",
                     metavar="MAX Y")
-
+parser.add_argument("-ns", '--number_of_samples', type=int,
+                    metavar="#number_of_samples", default=100,
+                    help="Number of samples to take. If the " +
+                    "number of time slices in the IMAS IDS is lower than this" +
+                    " then it is ignored.")
 args = parser.parse_args()
 
 import imas
@@ -99,7 +103,16 @@ secondary_contour_z = []
 # Labels
 times = []
 from time import sleep
-for time in summary_ids.time:
+
+mask = np.logical_and(summary_ids.time >= args.time_start,
+                      summary_ids.time <= args.time_end)
+time_slices = summary_ids.time[mask]
+
+if time_slices.size > args.number_of_samples:
+    idx = np.round(np.linspace(0, time_slices.size - 1, args.number_of_samples)).astype(int)
+    time_slices = time_slices[idx]
+
+for time in time_slices:
 
     if time < args.time_start:
         continue

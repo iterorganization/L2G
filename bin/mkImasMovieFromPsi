@@ -96,8 +96,8 @@ TIME_START = max(args.time_start, summary_ids.time[0])
 TIME_END = min(args.time_end, summary_ids.time[-1])
 
 # Check how many time slices are in the summar_ids
-number_of_time_slices = len(np.logical_and(summary_ids.time >= TIME_START,
-                                           summary_ids.time <= TIME_END))
+number_of_time_slices = np.sum(np.logical_and(summary_ids.time >= TIME_START,
+                                              summary_ids.time <= TIME_END))
 number_of_samples = args.number_of_samples
 
 i = 0
@@ -113,7 +113,7 @@ import l2g.plot._marching_squares
 
 it = l2g.equil.EquilibriumIterator()
 
-if number_of_time_slices < number_of_samples:
+if number_of_time_slices <= number_of_samples:
     dictionary = {
         "user": args.user,
         "shot": args.shot,
