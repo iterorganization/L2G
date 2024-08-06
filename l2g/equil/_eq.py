@@ -125,6 +125,9 @@ class EQ:
     """Class for evaluating values from a given equilibrium.
     """
     def __init__(self, equilibrium=None, r_displ=0.0, z_displ=0.0):
+        from warnings import warn
+        warn("This class will be removed from use. Use " +
+             "l2g.external.equilibrium_analysis.EQA instead")
         self.resetValues()
         if equilibrium is not None:
             self.setEquilibrium(equilibrium)
