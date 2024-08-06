@@ -1,5 +1,5 @@
-# distutils: language = c++
-# cython: language_level = 3
+#distutils: language = c++
+#cython: language_level = 3
 
 import numpy as np
 cimport numpy as np
@@ -12,9 +12,7 @@ from libcpp.vector cimport vector
 cdef class PyBicubic:
     def __cinit__(self):
         self.c_bicubic = new BICUBIC_INTERP()
-        # In this case we assume we will only be using one thread so no need
-        # to prepare more than one container.
-        self.c_bicubic.prepareContainers()
+        # self.c_BI_DATA = BI_DATA()
 
     def __init__(self, x, y, f):
         """Initialize the class. If we provide the three arrays then
@@ -83,6 +81,7 @@ cdef class PyBicubic:
             vf.push_back(buff)
 
         self.c_bicubic.setArrays(vx, vy, vf)
+        self.c_bicubic.populateContext(&self.c_BI_DATA)
 
     def __call__(self, x, y):
         """Passed x,y can be an array.
@@ -115,15 +114,42 @@ cdef class PyBicubic:
         return self.prepared
 
     def getValues(self, double x, double y):
+        """Returns the interpolated value of the function at point (x, y)
 
-        cdef:
-            double val, valdx, valdy
+        Arguments:
+            x: X component of the point
+            y: Y component of the point
 
-        self.c_bicubic.getValues(x, y, val, valdx, valdy)
+        Returns:
+            val: Value of the function at point (x,y)
+            valdx: Value of the first derivative (df/dx) at (x, y)
+            valdy: Value of the first derivative (df/dy) at (x, y)
+        """
 
-        return val, valdx, valdy
+        self.c_BI_DATA.r = x
+        self.c_BI_DATA.z = y
+        self.c_bicubic.getValues(&self.c_BI_DATA)
 
-    def getSecondDerivatives(self, double x, double y):
-        cdef:
-            double valdxdx, valdydy
-        self.c_bicubic.getSecondDerivatives(x, y, valdxdx, valdydy)
+        return self.c_BI_DATA.val, self.c_BI_DATA.valdx, self.c_BI_DATA.valdy
+
+    def getSecondDerivativeValues(self, double x, double y):
+        """Returns the interpolated value of the function at point (x, y)
+
+        Arguments:
+            x: X component of the point
+            y: Y component of the point
+
+        Returns:
+            valdxdy: First mixed derivative value of the function at point (x,y)
+            valdxdx: Value of the second derivative (d^2f/dx^2) at (x, y)
+            valdydy: Value of the second derivative (d^2f/dy^2) at (x, y)
+        """
+        self.c_BI_DATA.r = x
+        self.c_BI_DATA.z = y
+        self.c_bicubic.getSecondDerivativeValues(&self.c_BI_DATA)
+
+        return self.c_BI_DATA.val, self.c_BI_DATA.valdx, self.c_BI_DATA.valdy
+    # def getSecondDerivatives(self, double x, double y):
+    #     cdef:
+    #         double valdxdx, valdydy
+    #     self.c_bicubic.getSecondDerivatives(x, y, valdxdx, valdydy)

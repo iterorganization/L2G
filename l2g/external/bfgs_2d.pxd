@@ -1,15 +1,18 @@
 # distutils: language = c++
 # cython: language_level = 3
 
-from l2g.external.bicubic cimport BICUBIC_INTERP
+from l2g.external.bicubic cimport BICUBIC_INTERP, BI_DATA
 
 cdef class PyBfgs2d:
-    cdef BICUBIC_INTERP *c_bicubic
-    cdef double bx1
-    cdef double bx2
-    cdef double by1
-    cdef double by2
+    cdef double bx1, bx2, by1, by2
     cdef list _store
+    cdef BI_DATA c_BI_DATA
+    # For some reason if the following line is above the doubles the code
+    # randomly segfaults, when creating an instance of the class. Debug info
+    # shows that it happens when assigning values to bx* and by*. It happens
+    # when the code is compiled with -O3 and with gcc 11.3.1. Cannot reproduce
+    # the problem with a minimal example...
+    cdef BICUBIC_INTERP *c_bicubic
 
     cdef void c_set_interpolator(self, BICUBIC_INTERP *interp)
 

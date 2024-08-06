@@ -120,9 +120,6 @@ cdef class PyEmbreeAccell:
             return True
         return False
 
-    def prepareThreadContainers(self):
-        self.c_eacc.prepareThreadContainers()
-
     def castInfRay(self, float ox, float oy, float oz, float dx, float dy,
                    float dz):
         """Cast an infinite ray from origin point (ox, oy, oz) with direction

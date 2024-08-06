@@ -13,27 +13,31 @@ log = logging.getLogger(__name__)
 
 cdef class PyBfgs2d:
     def __cinit__(self):
-        # Set the default bounds to something extremely large
-        self.bx1 = -1e9
-        self.bx2 = 1e9
-        self.by1 = -1e9
-        self.by2 = 1e9
+        pass
 
     def __init__(self):
+        # This crashes under -O3 with a segfault. Not with -O0. No idea why.
+        # Set the default bounds to something extremely large
+        self.bx1 = -1000000.0
+        self.bx2 = 2000000.0
+        self.by1 = -3000000.0
+        self.by2 = 4000000.0
         self._store = []
 
     def setInterpolator(self, PyBicubic obj):
         """Sets the Bicubic interpolator.
         """
         self.c_bicubic = obj.c_bicubic
+        self.c_bicubic.populateContext(&self.c_BI_DATA)
 
     cdef void c_set_interpolator(self, BICUBIC_INTERP *interp):
         """Cython function for setting the bicubic object. Used only in other
         cython cdef code.
         """
         self.c_bicubic = interp
+        self.c_bicubic.populateContext(&self.c_BI_DATA)
 
-    def setBounds(self, x1: float, x2: float, y1: float, y2: float):
+    def setBounds(self, double x1, double x2, double y1, double y2):
         # Set the bounds for the search area.
         self.bx1 = x1
         self.bx2 = x2
@@ -206,9 +210,25 @@ cdef class PyBfgs2d:
 
         while 1:
             # Get value at borders
-            self.c_bicubic.getValues(x + alo * p1, y + alo * p2, f1, fdx1, fdy1)
-            self.c_bicubic.getValues(x + ahi * p1, y + ahi * p2, f2, fdx2, fdy2)
-            self.c_bicubic.getValues(x +  ac * p1, y +  ac * p2, fc, dummy, dummy)
+
+            self.c_BI_DATA.r = x + alo * p1
+            self.c_BI_DATA.z = y + alo * p2
+            self.c_bicubic.getValues(&self.c_BI_DATA)
+            f1 = self.c_BI_DATA.val
+            fdx1 = self.c_BI_DATA.valdx
+            fdy1 = self.c_BI_DATA.valdy
+
+            self.c_BI_DATA.r = x + ahi * p1
+            self.c_BI_DATA.z = y + ahi * p2
+            self.c_bicubic.getValues(&self.c_BI_DATA)
+            f2 = self.c_BI_DATA.val
+            fdx2 = self.c_BI_DATA.valdx
+            fdy2 = self.c_BI_DATA.valdy
+
+            self.c_BI_DATA.r = x + ac * p1
+            self.c_BI_DATA.r = y + ac * p2
+            self.c_bicubic.getValues(&self.c_BI_DATA)
+            fc = self.c_BI_DATA.val
 
             da = ahi - alo
             # a2 and a1
@@ -241,7 +261,12 @@ cdef class PyBfgs2d:
                     # Too close to the borders or not successful
                     aj = alo + 0.5 * da
             # Let's look at aj now
-            self.c_bicubic.getValues(x + aj * p1, y + aj * p2, fj, fdxj, fdyj)
+            self.c_BI_DATA.r = x + aj * p1
+            self.c_BI_DATA.z = y + aj * p2
+            self.c_bicubic.getValues(&self.c_BI_DATA)
+            fj = self.c_BI_DATA.val
+            fdxj = self.c_BI_DATA.valdx
+            fdyj = self.c_BI_DATA.valdy
 
             # Zoom in to lower interval if we fail to check conditions
             if fj > f0 + c1 * aj * gk0 or fj >= f1:
@@ -280,6 +305,12 @@ cdef class PyBfgs2d:
         end of the search interval respectfully.
 
         See Wright and Nocedal, 'Numerical Optimization', 1999
+
+        Attributes:
+            x: X component of the starting point
+            y: Y component of the starting point
+            p1: X component of the direction vector
+            p2: Y component of the direction vector
         """
 
         cdef:
@@ -312,15 +343,26 @@ cdef class PyBfgs2d:
         maxiter = 10
 
         # Get the function value at the start and end
-        self.c_bicubic.getValues(x, y, f0, fdx0, fdy0)
+
+        self.c_BI_DATA.r = x
+        self.c_BI_DATA.z = y
+        self.c_bicubic.getValues(&self.c_BI_DATA)
+        f0 = self.c_BI_DATA.val
+        fdx0 = self.c_BI_DATA.valdx
+        fdy0 = self.c_BI_DATA.valdy
+
         gk0 = fdx0 * p1 + fdy0 * p2
         f1 = f0
         fdx1 = fdx0
         fdy1 = fdy0
 
-        self.c_bicubic.getValues(x + a2 * p1,
-                                 y + a2 * p2,
-                                 f2, fdx2, fdy2)
+
+        self.c_BI_DATA.r = x + a2 * p1
+        self.c_BI_DATA.z = y + a2 * p2
+        self.c_bicubic.getValues(&self.c_BI_DATA)
+        f2 = self.c_BI_DATA.val
+        fdx2 = self.c_BI_DATA.valdx
+        fdy2 = self.c_BI_DATA.valdy
 
         for i in range(maxiter):
             if a2 == 0.0:
@@ -354,8 +396,20 @@ cdef class PyBfgs2d:
             a1 = a2
             a2 = 2 * a2
             # Update F values.
-            self.c_bicubic.getValues(x + a1 * p1, y + a1 * p2, f1, fdx1, fdy1)
-            self.c_bicubic.getValues(x + a2 * p1, y + a2 * p2, f2, fdx2, fdy2)
+
+            self.c_BI_DATA.r = x + a1 * p1
+            self.c_BI_DATA.z = y + a1 * p2
+            self.c_bicubic.getValues(&self.c_BI_DATA)
+            f1 = self.c_BI_DATA.val
+            fdx1 = self.c_BI_DATA.valdx
+            fdy1 = self.c_BI_DATA.valdy
+
+            self.c_BI_DATA.r = x + a2 * p1
+            self.c_BI_DATA.z = y + a2 * p2
+            self.c_bicubic.getValues(&self.c_BI_DATA)
+            f2 = self.c_BI_DATA.val
+            fdx2 = self.c_BI_DATA.valdx
+            fdy2 = self.c_BI_DATA.valdy
 
         else:
             # Maximum iteration reached
@@ -419,7 +473,12 @@ cdef class PyBfgs2d:
         fdx_new = 0.0
         fdy_new = 0.0
 
-        self.c_bicubic.getValues(guess_x, guess_y, f, fdx, fdy)
+        self.c_BI_DATA.r = guess_x
+        self.c_BI_DATA.z = guess_y
+        self.c_bicubic.getValues(&self.c_BI_DATA)
+        f = self.c_BI_DATA.val
+        fdx = self.c_BI_DATA.valdx
+        fdy = self.c_BI_DATA.valdy
 
         # Initial Hessian
         h11 = 1.0
@@ -462,7 +521,12 @@ cdef class PyBfgs2d:
                 out_of_bounds = True
                 break
 
-            self.c_bicubic.getValues(x_new, y_new, f_new, fdx_new, fdy_new)
+            self.c_BI_DATA.r = x_new
+            self.c_BI_DATA.z = y_new
+            self.c_bicubic.getValues(&self.c_BI_DATA)
+            f_new = self.c_BI_DATA.val
+            fdx_new = self.c_BI_DATA.valdx
+            fdy_new = self.c_BI_DATA.valdy
 
             # Difference in gradients
             y1 = fdx_new - fdx
@@ -522,17 +586,18 @@ cdef class PyBfgs2d:
         """
 
         cdef:
-            double val, valdxdx, valdydy, valdxdy, dummy, D
+            double valdxdx, valdydy, valdxdy
 
-        val = 0.0
-        dummy = 0.0
-        valdx = 0.0
-        valdy = 0.0
         valdxdy = 0.0
         valdxdx = 0.0
         valdydy = 0.0
-        self.c_bicubic.getAllValues(x, y, val, dummy, dummy, valdxdy)
-        self.c_bicubic.getSecondDerivatives(x, y, valdxdx, valdydy)
+
+        self.c_BI_DATA.r = x
+        self.c_BI_DATA.z = y
+        self.c_bicubic.getSecondDerivativeValues(&self.c_BI_DATA)
+        valdxdy = self.c_BI_DATA.val
+        valdxdx = self.c_BI_DATA.valdx
+        valdydy = self.c_BI_DATA.valdy
 
         return valdxdx * valdydy - valdxdy * valdxdy
 
