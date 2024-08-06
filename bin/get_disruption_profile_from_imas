@@ -17,6 +17,146 @@ Additionally, time slices that have no defined profile (no power points on
 magnetic surfaces outside the boundary), are ignored.
 """
 
+class Polygon(object):
+    def __init__(self, poly_x: list[float], poly_y: list[float]):
+
+        POLYX, POLYY = poly_x, poly_y
+
+        N_POLYX = len(POLYX)
+        # Remove any duplicate points.
+        to_remove: list[int] = []
+        for i in range(N_POLYX):
+            next_i = (i+1) % N_POLYX
+            if np.allclose(POLYX[i], POLYX[next_i]) and np.allclose(POLYY[i], POLYY[next_i]):
+                to_remove.append(i)
+
+        # Remove elements in reverse
+        for el in to_remove[::-1]:
+            POLYX.pop(el)
+            POLYY.pop(el)
+
+        self.poly_x: list[float] = POLYX
+        self.poly_y: list[float] = POLYY
+        self.N = len(self.poly_x)
+
+    def checkIfOnEdge(self, px1: float, py1: float, px2: float, py2: float,
+                      tx: float, ty: float) -> bool:
+        """Checks if point (tx, ty) lies on the edge. Using cross product instead
+        of square root methods, which is much slower.
+
+        Arguments:
+            px1 (float) : X values of an edge vertice
+            py1 (float) : Y values of an edge vertice
+            px1 (float) : X values of an edge vertice
+            py1 (float) : Y values of an edge vertice
+            tx (float): X position of test point
+            ty (float): Y position of test point
+
+        Returns:
+            c (bool): True if it lies on the edge, else False
+        """
+        c = False
+
+        # It's easier to remove points that are insanely close to each other prior
+        # to calling this function
+        # In the case the p1 and p2 is the same, ignore it.
+        # if np.allclose(px1, px2) and np.allclose(py1, py2):
+        #     if np.allclose(tx, px1) and np.allclose(ty, py1):
+        #         return True
+        #     return False
+
+        dx1 = tx - px1
+        dy1 = ty - py1
+
+        dx2 = px2 - px1
+        dy2 = py2 - py1
+
+        if np.allclose(dx1 * dy2 - dx2 * dy1, 0):
+            c = True
+
+        return c
+
+    def checkIfIn(self, tx: float, ty: float, check_if_on_edge: bool = True) -> bool:
+        """Checks if point (tx, ty) lies within or on the edges of polygon,
+        consisting of vertices.
+
+        Arguments:
+            polyX (list): X values of polygon vertices
+            polyY (list): Y values of polygon vertices
+            tx (float): X position of test point
+            ty (float): Y position of test point
+
+        Returns:
+            c (bool): Boolean, True, if point lies inside or on the edges of
+                polygon else False.
+        """
+
+        N = self.N
+        c = False
+        j = N - 1
+        for i in range(N):
+            # First check if point is on the edge of these two points.
+            px1 = self.poly_x[i]
+            py1 = self.poly_y[i]
+            px2 = self.poly_x[j]
+            py2 = self.poly_y[j]
+            if check_if_on_edge and self.checkIfOnEdge(px1, py1, px2, py2, tx, ty):
+                return False
+
+            # Use the recipe for Ray-Casting method, taken from:
+            # https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html
+            if (py1 > ty) != (py2 > ty) and \
+               (tx < (px2 - px1) * (ty - py1) / (py2 - py1) + px1):
+               c = not c
+            j = i
+        return c
+
+def obtain_connection_length(equilibrium: l2g.equil.Equilibrium,
+        polygon: "Polygon", rz_points: list[list[float]]):
+    bicubic = PyBicubic(equilibrium.grid_r, equilibrium.grid_z, equilibrium.psi)
+    rkf45_obj = PyRKF45FLT()
+    rkf45_obj.setInterpolator(bicubic)
+    rkf45_obj.set_vacuum_fpol(equilibrium.fpol_vacuum)
+
+    out = np.zeros(len(rz_points))
+    for i in range(len(rz_points)):
+        print(i, len(rz_points), rz_points[i][0], rz_points[i][1])
+        length = 0.0
+
+        sr = rz_points[i][0]
+        sz = rz_points[i][1]
+        sth = 0.0
+
+        while True:
+            nr, nz, nth = rkf45_obj.run_step(sr, sz, sth, 0.01)
+            if not polygon.checkIfIn(nr, nz):
+                break
+
+            curr_l = sqrt(nr*nr + sr*sr - 2*nr*sr*np.cos(nth-sth) + (nz - sz)*(nz - sz))
+            length += curr_l
+            sr = nr
+            sz = nz
+            sth = nth
+
+        # Now do it also in the opposite direction
+        sr = rz_points[i][0]
+        sz = rz_points[i][1]
+        sth = 0.0
+        while True:
+            nr, nz, nth = rkf45_obj.run_step(sr, sz, sth, -0.01)
+            if not polygon.checkIfIn(nr, nz):
+                break
+
+            curr_l = sqrt(nr*nr + sr*sr - 2*nr*sr*np.cos(nth-sth) + (nz - sz)*(nz - sz))
+            length += curr_l
+            sr = nr
+            sz = nz
+            sth = nth
+        out[i] = length
+    return out
+
+###############################################################################
+
 import argparse
 
 parser = argparse.ArgumentParser(description=description)
@@ -31,7 +171,10 @@ parser.add_argument('-d', '--device', metavar="DEVICE", type=str,
                     default="ITER_DISRUPTIONS", help='Device')
 parser.add_argument('-o', '--output-directory', help="Output directory",
                     metavar="OUTPUT_DIRECTORY", default=".", )
-
+parser.add_argument('-ts', '--time-start', help="Start of the time interval",
+                    metavar="TIME_START", default=0, type=float)
+parser.add_argument('-te', '--time-end', help="End of the time interval",
+                    metavar="TIME_END", default=float("inf"), type=float)
 args = parser.parse_args()
 
 import os
@@ -42,12 +185,11 @@ RUN=args.run
 USER=args.user
 DEVICE=args.device
 OUTPUT_DIRECTORY=os.path.abspath(os.path.expanduser(args.output_directory))
-
-if not os.path.exists(OUTPUT_DIRECTORY):
-    print(f"Output directory {OUTPUT_DIRECTORY} does not exist. Creating it")
-    os.makedirs(OUTPUT_DIRECTORY)
+TIME_START = args.TIME_START
+TIME_END = args.TIME_END
 
 import imas
+import numpy as np
 
 entry = imas.DBEntry(shot=SHOT, run=RUN, user_name=USER, db_name=DEVICE,
                      backend_id=imas.imasdef.MDSPLUS_BACKEND)
@@ -56,98 +198,135 @@ code, _ = entry.open()
 if code != 0:
     sys.exit(code)
 
+# Get the times
 summary = entry.get("summary")
-wall = entry.get("wall")
+mask = np.logical_and(summary.time >= TIME_START, summary.time <= TIME_END)
+tsteps = summary.time[tsteps]
+
+
+d = {
+  "user": USER,
+  "shot": SHOT,
+  "run": RUN,
+  "device": DEVICE,
+  "version": '3',
+  "times": tsteps,
+}
+
+if not os.path.exists(OUTPUT_DIRECTORY):
+    print(f"Output directory {OUTPUT_DIRECTORY} does not exist. Creating it")
+    os.makedirs(OUTPUT_DIRECTORY)
+
+import l2g.equil
+from l2g.external.bicubic import PyBicubic
+from l2g.external.rkf45 import PyRKF45FLT
+from l2g.plot._marching_squares import Marching
+from math import sqrt, cos
+base_string = f"shot_{d['shot']}_run_{d['run']}"
+iterator = l2g.equil.EquilibriumIterator()
+iterator.loadIMASEquilibriums(d)
+
+
 
 DRSEPS = []
 HEAT_LOADS = []
 TIMES = []
 
-import l2g.equil
-import numpy as np
 
-for i in range(summary.time.size):
+for index, time, equilibrium in iterator:
+    print(f"Processing {index}.")
+    eq = l2g.equil.EQ(equilibrium)
+    eq.evaluate()
 
-    TIME = summary.time[i]
-    disruption = entry.get_slice("disruption", TIME, imas.imasdef.CLOSEST_SAMPLE)
-    equilibrium = entry.get_slice("equilibrium", TIME, imas.imasdef.CLOSEST_SAMPLE)
+    disruption = iterator._ids.get_slice("disruption", time, imas.imasdef.CLOSEST_SAMPLE)
 
+
+    fluxes = eq._psi_center_sign * disruption.profiles_1d[0].grid.psi[:] / (2*np.pi)
+    mask = fluxes >= eq.psiLCFS
+    fluxes = fluxes[mask]
+    # Get contours and see which starting point can be used for following
+    # the fieldlines
+
+    marching_obj = Marching()
+    marching_obj.setData(equilibrium.grid_r, equilibrium.grid_z, equilibrium.psi)
+    polygon = Polygon(equilibrium.wall_contour_r, equilibrium.wall_contour_z)
+    rz_points = []
+
+    Rb, Zc, Btotal, Bpm = eq.get_midplane_info(which="owl")
+    drsep = (fluxes - eq.psiLCFS) / (Rb * Bpm)
+
+    Z_CONDITION_GT = 0.0 # The Z point must be greater than this
+    Z_CONDITION_LT = 3.6 # The Z point must be lower than this
+    # plt.plot(equilibrium.wall_contour_r, equilibrium.wall_contour_z)
+    # plt.axis("equal")
+
+    # Get the starting points of the magnetic surface inside the polygon
+    for flux in fluxes:
+        paths, types = marching_obj.getContourPath(flux)
+
+
+        found = False
+        for path in paths:
+            # plt.plot(path[0], path[1])
+            for i in range(len(path[0])):
+                if path[1][i] <= Z_CONDITION_GT or path[1][i] >= Z_CONDITION_LT :
+                    continue
+                if polygon.checkIfIn(path[0][i], path[1][i], True):
+                    rz_points.append((path[0][i], path[1][i]))
+                    found = True
+                    break
+            if found:
+                break
+        rz_points[-1][0], rz_points[-1][1]
+    # Get fluxes from the disruption ids
+    parallel_conlen = obtain_connection_length(equilibrium, polygon, rz_points)
+
+    ppar = disruption.profiles_1d[0].power_density_conductive_losses
+    qpar = ppar[mask] * parallel_conlen * 0.5
+
+    # Ppar and Qpar are parallel components. So in order to put it to
+    # use for SFLT, apply inverse of pitch
+
+    qpar *= Bpm/Btotal
+
+
+    # Well now it doesn't matter, because WE WILL USE the actual power from
+    # the imas database... so time to normalize... again
+    rr = drsep + Rb
+    I = 4*np.pi*np.sum(0.5 *(qpar[1:] + qpar[:-1]) * 0.5 * (rr[1:] + rr[:-1]) * np.diff(drsep))
+    print(f"qpar Integral = {I}")
+    qpar /= I
+
+    # Now multiply it with the power from IMAS
     total_conductive_power = (disruption.global_quantities.power_ohm - \
         disruption.global_quantities.power_radiated_electrons_impurities)[0]
+    print(f"total_conductive_power={total_conductive_power}")
+    print(f"Area = {(np.pi * ((Rb + drsep[-1])**2 - (Rb)**2))}")
+    qpar *= total_conductive_power #/ (np.pi * ((Rb + drsep[-1])**2 - (Rb)**2))
 
-    if total_conductive_power < 10.0:
-        continue
+    I = 4*np.pi* np.sum(0.5 *(qpar[1:] + qpar[:-1]) * 0.5 * (rr[1:] + rr[:-1]) * np.diff(drsep))
+    print(f"I={I}")
 
+    data = np.zeros((2, qpar.shape[0]))
+    data[0, :] = drsep
+    data[1, :] = qpar
+    np.savetxt(f"{base_string}_{time}s_qpar.txt", data)
+    data[1, :] = parallel_conlen
+    np.savetxt(f"{base_string}_{time}s_conlen.txt", data)
+    data[1, :] = ppar[mask]
+    np.savetxt(f"{base_string}_{time}s_ppar.txt", data)
 
-    profile = disruption.profiles_1d[0].power_density_conductive_losses
+    TIMES.append(time)
+    DRSEPS.append(drsep)
+    HEAT_LOADS.append(qpar)
 
-    # Get the flux values of the profile
-    disruption_grid_psi = disruption.profiles_1d[0].grid.psi[:] / (2*np.pi)
-    disruption_profile = disruption.profiles_1d[0].power_density_conductive_losses
-
-    # Convert the disruption_grid_psi to drsep
-    # Create the profile, but first generate the drsep!
-    eq_data = l2g.equil.getEquilibriumFromIMAS(equilibrium.time_slice[0],
-                        equilibrium.vacuum_toroidal_field, wall, summary)
-
-    eq = l2g.equil.EQ(eq_data)
-    eq.evaluate()
-    if eq.psiLCFS is None:
-        print(f"Ignoring time {TIME} since equilibrium couldn't be evaluated.")
-        continue
-
-    Rb, Z, Btotal, Bpm = eq.get_midplane_info(which="owl")
-    disruption_grid_drsep = (eq._psi_center_sign * disruption_grid_psi - eq.psiLCFS) / (Rb * Bpm)
-
-    # Positive drsep filter
-    positive_value_drsep_mask = disruption_grid_drsep >= 0.0
-    filtered_drsep = disruption_grid_drsep[positive_value_drsep_mask]
-    filtered_profile = disruption_profile[positive_value_drsep_mask]
-
-    if filtered_drsep.size == 0:
-        continue
-    TIMES.append(TIME)
-
-    # Now we trim the zero value power densities at the tail, leaving only one
-    zero_power_density_index = np.where(filtered_profile == 0.0)[0]
-    if zero_power_density_index.size:
-        filtered_drsep = filtered_drsep[:zero_power_density_index[0]+1]
-        filtered_profile = filtered_profile[:zero_power_density_index[0]+1]
-
-
-    # Normalize the power density profile
-    steps = np.diff(filtered_drsep)
-    midpoints = (filtered_profile[:-1] + filtered_profile[1:]) * 0.5
-    norm_value = np.sum(midpoints * steps)
-    normalized_profile = filtered_profile / norm_value
-
-    # Scaling to get head load amplitude.
-    # Divide by area which is the band of the profile on the drsep.
-    area = np.pi * ((Rb + filtered_drsep[-1])**2 - Rb**2)
-    # 0.5 comes from the fact that heat loads goes up and down or from "both"
-    # midplanes
-    scale = 0.5 * total_conductive_power / area
-
-    scaled_profile = normalized_profile * scale
-
-    DRSEPS.append(filtered_drsep)
-    HEAT_LOADS.append(scaled_profile)
-
-    fname = os.path.join(OUTPUT_DIRECTORY, f"shot_{SHOT}_run_{RUN}_time_{TIME:.4f}.profile")
-    npy_arr = np.zeros((2, filtered_drsep.size))
-    npy_arr[0, :] = filtered_drsep
-    npy_arr[1, :] = scaled_profile
-    np.savetxt(fname, npy_arr)
-    print(f"Profile at {TIME} saved to {fname}.")
-
-# Create a graphics
 import matplotlib
-def get_rjet_cycler(n: int) -> "matplotlib.colors.LinearSegmentedColormap":
-    return plt.cycler("color", matplotlib.cm.jet_r(np.linspace(0, 1, n)))
+def get_jet_cycler(n: int) -> "matplotlib.colors.LinearSegmentedColormap":
+    return plt.cycler("color", matplotlib.cm.jet(np.linspace(0, 1, n)))
 
 import matplotlib.pyplot as plt
 f, ax = plt.subplots()
-ax.set_prop_cycle(get_rjet_cycler(len(HEAT_LOADS)))
+ax.set_prop_cycle(get_jet_cycler(len(HEAT_LOADS)))
 
 for i in range(len(HEAT_LOADS)):
     ax.plot(DRSEPS[i], HEAT_LOADS[i])
@@ -156,10 +335,12 @@ ax.set_ylabel(r"$q_{\parallel}$ $[\frac{W}{m^2}]$")
 ax.set_xlabel(r"$\Delta_{sep}$ - radial distance along the midplane [m]")
 ax.grid()
 ax.set_yscale("log")
+ax.set_xlim((0, 2.0))
+ax.set_ylim((1e5, 1e9))
 
 norm = matplotlib.colors.Normalize(vmin=TIMES[0], vmax=TIMES[-1])
-plt.colorbar(matplotlib.cm.ScalarMappable(norm=norm, cmap="jet_r"), ax=ax,
+plt.colorbar(matplotlib.cm.ScalarMappable(norm=norm, cmap="jet"), ax=ax,
              label="Time [s]")
 
-fname = os.path.join(OUTPUT_DIRECTORY, f"shot_{SHOT}_run_{RUN}_disruption_profile.png")
+fname = f"{base_string}_disruption_profile.png"
 f.savefig(fname)
