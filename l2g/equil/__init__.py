@@ -1,6 +1,10 @@
 from ._equilibrium import Equilibrium, correct_equilibrium_helicity
 from ._eqdskg import EQDSKIO
 from ._eq import EQ
+from ._owl_connection_graph import getOwlConlensGraph
+
+# import logging
+# log = logging.getLogger(__name__)
 
 def getEquilibriumFromEQFile(eqdsk_file: str, correct_helicity: bool = True) -> Equilibrium:
     """Gather the data required from an EQDSKIO object and populate the
