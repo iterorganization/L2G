@@ -65,8 +65,8 @@ if [ "${REDIRECT_OUTPUT_TO_LOG_FILE}" = "1" ]; then
     echo "Log file: ${LOG_NAME}"
 fi
 
-# Defaults to gen10_ib
-PARTITION_NAME=${PARTITION_NAME:-"gen10_ib"}
+# Defaults to gen10
+PARTITION_NAME=${PARTITION_NAME:-"gen10"}
 
 # Just to be sure, when generating graphics on compute nodes, use Agg for
 # matplotlib backend. Otherwise an error "could not connect to display"
@@ -78,5 +78,12 @@ export MPLBACKEND=Agg
 #                                                v                                           v
 CPUS_PER_TASK=${CPUS_PER_TASK:-$(sinfo -p ${PARTITION_NAME} -O "cpus" --noheader | sed 's/[^0-9]*//g')}
 
+# See if the partition is okay
+if [ -z "${CPUS_PER_TASK}" ]; then
+    echo "Couldn't automatically retrieve the number of CPUs. Check if correct partition is provided."
+    echo "Provided partition_name=${PARTITION_NAME}."
+    echo "You can provide the PARTITION_NAME with submitFLAT partition=<partition_name> ..."
+    exit 1
+fi
 # Now run the command
 ${SLURM_COMMAND} --partition=${PARTITION_NAME} --cpus-per-task=${CPUS_PER_TASK} --nodes=1 ${SCRIPTPATH}/FLAT.sbatch "${CONF_FILE}" "${flatopts[@]}"
