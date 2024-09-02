@@ -1,4 +1,3 @@
-import genericpath
 import numpy as np
 import math
 from scipy.interpolate import interp1d
