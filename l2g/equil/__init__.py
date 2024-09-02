@@ -280,3 +280,17 @@ def addWallDescriptionToEqdsk(eqObj, idsWall):
         eqObj.setLIMITR(len(description2d.limiter.unit[0].outline.r))
 
 from ._iter import EquilibriumIterator
+
+__all__ =[
+    "Equilibrium",
+    "EquilibriumIterator",
+    "EQDSKIO",
+    "EQ",
+    "correct_equilibrium_helicity",
+    "getEquilibriumFromIMAS",
+    "getEquilibriumFromEQDSKG",
+    "getEquilibriumFromIMASSlice",
+    "getEquilibriumFromEQFiletEQ",
+    "createEqdskFromSlice",
+    "addWallDescriptionToEqdsk"
+]
