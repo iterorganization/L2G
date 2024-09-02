@@ -39,26 +39,22 @@ class L2GResults:
     """
 
     __slots__ = [
-        "baryCent",
-        "normals",
-        "flux",
-        "BVec",
-        "BVecCyln",
-        "Bdot",
-        "angle",
-        "mask",
-        "direction",
-        "conlen",
-        "drsep",
-        "drsep2",
-        "geom_hit_ids",
-        "prim_hit_ids",
-        "vertices",
-        "triangles",
+        "normals",  # Provided by FieldLineTracer
+        "flux",     # Provided by FieldLineTracer
+        "BVec",     # Provided by FieldLineTracer
+        "BVecCyln", # Provided by FieldLineTracer
+        "Bdot",     # Provided by FieldLineTracer
+        "angle",    # Provided by FieldLineTracer
+        "mask",     # Provided by FieldLineTracer
+        "direction",# Provided by FieldLineTracer
+        "conlen",   # Provided by External C++
+        "drsep",    # Provided by FieldLineTracer
+        "drsep2",   # Provided by FieldLineTracer
+        "geom_hit_ids", # Provided by External C++
+        "prim_hit_ids", # Provided by External C++
         "empty"]
 
     arrays_to_dump = [
-        "baryCent",
         "normals",
         "flux",
         "BVec",
@@ -72,31 +68,48 @@ class L2GResults:
         "drsep2",
         "geom_hit_ids",
         "prim_hit_ids",
-        "vertices",
-        "triangles"
         ]
 
     def __init__(self):
         self.reset()
 
-    def reset(self):
-        self.baryCent:      Optional[np.ndarray] = None
-        self.normals:       Optional[np.ndarray] = None
-        self.flux:          Optional[np.ndarray] = None
-        self.BVec:          Optional[np.ndarray] = None
-        self.BVecCyln:      Optional[np.ndarray] = None
-        self.Bdot:          Optional[np.ndarray] = None
-        self.angle:         Optional[np.ndarray] = None
-        self.mask:          Optional[np.ndarray] = None
-        self.direction:     Optional[np.ndarray] = None
-        self.conlen:        Optional[np.ndarray] = None
-        self.drsep:         Optional[np.ndarray] = None
-        self.drsep2:        Optional[np.ndarray] = None
-        self.geom_hit_ids:  Optional[np.ndarray] = None
-        self.prim_hit_ids:  Optional[np.ndarray] = None
+    def reset(self, N: int=0):
+        if N == 0:
+            self.normals:       Optional[np.ndarray] = None
+            self.flux:          Optional[np.ndarray] = None
+            self.BVec:          Optional[np.ndarray] = None
+            self.BVecCyln:      Optional[np.ndarray] = None
+            self.Bdot:          Optional[np.ndarray] = None
+            self.angle:         Optional[np.ndarray] = None
+            self.mask:          Optional[np.ndarray] = None
+            self.direction:     Optional[np.ndarray] = None
+            self.conlen:        Optional[np.ndarray] = None
+            self.drsep:         Optional[np.ndarray] = None
+            self.drsep2:        Optional[np.ndarray] = None
+            self.geom_hit_ids:  Optional[np.ndarray] = None
+            self.prim_hit_ids:  Optional[np.ndarray] = None
 
-        self.vertices:      Optional[np.ndarray] = None
-        self.triangles:     Optional[np.ndarray] = None
+        else:
+            # First we check if we already have arrays of the given size
+
+            if self.flux is not None and self.flux.size == N:
+                # Do nothing. Maybe we should at least zero the arrays.
+                pass
+            else:
+                self.normals:       Optional[np.ndarray] = np.empty(3*N, dtype=np.float64)
+                self.flux:          Optional[np.ndarray] = np.empty(N, dtype=np.float64)
+                self.BVec:          Optional[np.ndarray] = np.empty(3*N, dtype=np.float64)
+                self.BVecCyln:      Optional[np.ndarray] = np.empty(2*N, dtype=np.float64)
+                self.Bdot:          Optional[np.ndarray] = np.empty(N, dtype=np.float64)
+                self.angle:         Optional[np.ndarray] = np.empty(N, dtype=np.float64)
+                self.mask:          Optional[np.ndarray] = np.empty(N, dtype=np.float64)
+                self.direction:     Optional[np.ndarray] = np.empty(N, dtype=np.int32)
+                self.conlen:        Optional[np.ndarray] = np.empty(N, dtype=np.float64)
+                self.drsep:         Optional[np.ndarray] = np.empty(N, dtype=np.float64)
+                self.drsep2:        Optional[np.ndarray] = np.empty(N, dtype=np.float64)
+                self.geom_hit_ids:  Optional[np.ndarray] = np.empty(N, dtype=np.int32)
+                self.prim_hit_ids:  Optional[np.ndarray] = np.empty(N, dtype=np.int32)
+
         self.empty = True
 
 
@@ -159,84 +172,6 @@ class L2GResults:
             scalarField.SetName(key)
             cellData.AddArray(scalarField)
         return data
-
-class L2GPointResults:
-    """This class holds FLT relevant data (on points).
-
-    Size of attributes:
-     * If 1D - the size corresponds to the number of target cells
-     * if 2D - the size corresponds to the number of target cells * 3 (vector)
-
-    Attributes:
-        points: 1D array of points, where we wish to run FLT.
-        flux: 1D Array of Poloidal magnetic flux in Webb/rad on baryCent
-        BVec: 2D array of magnetic field vector in Cartesian coordinate
-              system in T on baryCent
-        BVecCyln: 2D array of the magnetic field vector in Cylndrical
-                  coordinate system in T on baryCent. In this case we only have
-                  poloidal and toroidal component.
-        drsep: 1D array of radial distance along the midplane on baryCent in meters
-        q: 1D array of incident heat load values on baryCent in W
-        qpar: 1D array of parallel heat laod values on baryCent in W
-        conlenUp: 1D array Calculated connection length on points in upward
-                  direction. In meters.
-        conlenDown: 1D array Calculated connection length on points in
-                    downward direction. In meters.
-
-
-    """
-
-    __slots__ = [
-        "points",
-        "flux",
-        "BVec",
-        "direction",
-        "drsep",
-        "q",
-        "qpar",
-        "conlenUp",
-        "conlenDown",
-        "empty",
-        "geom_hit_ids_up",
-        "prim_hit_ids_up",
-        "geom_hit_ids_down",
-        "prim_hit_ids_down"
-    ]
-
-    arrays_to_dump = [
-        "points",
-        "flux",
-        "BVec",
-        "direction",
-        "drsep",
-        "q",
-        "qpar",
-        "conlenUp",
-        "conlenDown",
-        "geom_hit_ids_up",
-        "prim_hit_ids_up",
-        "geom_hit_ids_down",
-        "prim_hit_ids_down"
-    ]
-
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.points:        Optional[np.ndarray] = None
-        self.flux:          Optional[np.ndarray] = None
-        self.BVec:          Optional[np.ndarray] = None
-        self.direction:     Optional[np.ndarray] = None
-        self.drsep:         Optional[np.ndarray] = None
-        self.q:             Optional[np.ndarray] = None
-        self.qpar:          Optional[np.ndarray] = None
-        self.conlenUp:      Optional[np.ndarray] = None
-        self.conlenDown:    Optional[np.ndarray] = None
-        self.empty:                         bool = True
-        self.geom_hit_ids_up:  Optional[np.ndarray] = None
-        self.prim_hit_ids_up:  Optional[np.ndarray] = None
-        self.geom_hit_ids_down:  Optional[np.ndarray] = None
-        self.prim_hit_ids_down:  Optional[np.ndarray] = None
 
 class L2GFLs:
     """Class that holds calculated FLs on given target triangles.
