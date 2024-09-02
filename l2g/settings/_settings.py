@@ -41,7 +41,7 @@ class Options(BaseClassOptions):
 class Parameters(BaseClassOptions):
     __slots__=["plasma_r_displ", "plasma_z_displ", "wall_silh_r_displ",
                "wall_silh_z_displ", "time_end",
-               "time_step", "max_connection_length",
+               "time_step", "max_fieldline_length",
                "self_intersection_avoidance_length", "abs_error", "rel_error",
                "target_to_m", "shadow_to_m", "num_of_threads",
                "side", #"P_sol", "F_split", "q_parallel", "lambda_q_main",
@@ -71,7 +71,7 @@ class Parameters(BaseClassOptions):
         self.time_step = 0.01
         #: Maximum connection length when activating traces where we want to
         #: follow a FL until the desired length. In meters.
-        self.max_connection_length = 100.0
+        self.max_fieldline_length = 100.0
 
         #: Self intersection avoidance length is a length in which the solver
         #: follows a FL slowly for a brief distance and then actually starts the
