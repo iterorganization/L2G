@@ -271,3 +271,18 @@ def getMeasurements(file_path: str) -> np.ndarray:
         openFile(file_path)
     med = __med__[file_path]
     return med.getMeasureField(True).getArray().toNumPyArray()
+
+def doesItContainGroup(file_path: str, group_name: str)-> bool:
+    for mesh_name in mc.GetMeshNames(file_path):
+        if group_name in mc.GetMeshGroupsNames(file_path, mesh_name):
+            return True
+    return False
+
+def getGroupArr(file_path: str, group_name: str) -> np.ndarray:
+    global __file_med__
+
+    if file_path not in __file_med__:
+        openFile(file_path)
+    umedf = __file_med__[file_path]
+
+    return umedf.getGroupArr(0, group_name).toNumPyArray()

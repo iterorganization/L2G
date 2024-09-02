@@ -372,6 +372,16 @@ class Mesh():
                 log.error(msg)
             return field
 
+    def doesItContainGroup(self, group_name: str) -> bool:
+        if self.backend:
+            return self.backend.doesItContainGroup(self.file_path, group_name)
+        return False
+
+    def getGroupArray(self, group_name: str):
+        if self.backend:
+            return self.backend.getGroupArr(self.file_path, group_name)
+        return None
+
     def writeMeshTo(self, file_path: str) -> 'Mesh':
         """In this case we wish to copy the mesh of a file to a new location.
         Same file paths are *not* allowed, i.e., over-writing mesh in the same
