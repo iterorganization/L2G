@@ -132,6 +132,9 @@ class ELM_PLM(object):
             Aion (float): Average atomic mass. 2.5 for DT plasma.
         """
 
+        if r_max > self.drsep[-1]:
+            r_max = self.drsep[-1]
+
         MP = 1.673E-27 # Mass of a proton (kg)
         ME = 9.108E-31 # Mass of an electron (kg)
         QE = 1.602E-19 # Charge of an electron (Coulombs)
@@ -154,7 +157,8 @@ class ELM_PLM(object):
         v_ti0 = ((Ti0*QE)/(MP*Aion))**0.5 # Initial ion thermal velocity
         # Warm ion sound speed c_s = xi0 * v_ti9
         # Density loss time
-        tau_n0 = self.interp_conlen(0.0) / (MACH * xi0 * v_ti0)
+        L = self.interp_conlen(0.0)
+        tau_n0 = L / (MACH * xi0 * v_ti0)
 
         ## Initial average energy of the filamen in MJ
         Ee0 = (3/2) * n0 * 1e20 * Te0 * QE
@@ -236,7 +240,14 @@ class ELM_PLM(object):
         r = 0.0
 
         # It's important to check when the r get's almost close to r_max
-        while (not np.allclose(r, r_max)) and t < 5:
+        # 3 conditions now:
+        # 1.) At the wall on the midplane
+        # 2.) Arbitrary big time, though this will never happen, unless
+        #     ultra slow filaments moving out!
+        # 3.) The value of the connection length drops sufficiently low.
+        #     Problem is that then the change becomes drastically small.
+        #     I'm thinking that in this case the rkf45 is not suited anymore.
+        while (not np.allclose(r, r_max)) and t < 5 and L > 1e-4:
             # Do the RKF 45 calculation
             while 1:
                 # Progress the computation
@@ -316,6 +327,7 @@ class ELM_PLM(object):
             a_ee.append(y[1])
             a_ei.append(y[2])
             r = t * v_elm * tau_n0
+            L = self.interp_conlen(r)
 
         a_t = np.asarray(a_t)
         a_n = np.asarray(a_n)
@@ -452,7 +464,9 @@ class ELM_PLM(object):
         import matplotlib.pyplot as plt
         f, axs = plt.subplots(1, 5, figsize=(12, 6), tight_layout=True, dpi=100)
 
+
         r = self.r * 1000
+        xlim = (xlim[0], r[-1])
         XLABEL = "$r-r_{sep}$ [mm]"
         axs[0].set_title('a) $L_{conn}[m]$')
         axs[1].set_title('b) $W_{fil}/W_{0fil}$')

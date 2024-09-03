@@ -180,7 +180,7 @@ setup(
         "Programming Language :: C++",
     ],
     packages = ["l2g", "l2g.comp", "l2g.equil", "l2g.hlm", "l2g.plot",
-                "l2g.utils", "l2g.settings", "l2g.workflow", "l2g.mesh",
+                "l2g.utils", "l2g.settings", "l2g.mesh",
                 "l2g.external"],
     data_files = [('', getDataFiles())],
     python_requires=">=3.6",

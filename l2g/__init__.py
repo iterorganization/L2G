@@ -4,7 +4,7 @@ log = logging.getLogger(__name__)
 _file_handler = None
 _stream_handler = None
 
-fmt = '%(asctime)s %(levelname)-8s %(name)27s : %(message)s'
+fmt = '%(asctime)s %(levelname)-8s [%(filename)s:%(lineno)d] : %(message)s'
 fmt_date = '%Y-%m-%d %T'
 
 

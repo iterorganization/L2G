@@ -208,6 +208,7 @@ cdef class FieldLineTracer:
         Arguments:
             vertices (np.ndarray): An array of points. These could already be
                 the target points or are the vertices of the triangluar mesh.
+                In meters
             triangles (Optional[np.ndarray]): An optional numpy array of
                 triangles. If this is not none, then the target data is
                 considered a mesh. Otherwise the vertices are considered the
@@ -240,22 +241,22 @@ cdef class FieldLineTracer:
             self.normals = None
             # Target data
             # Copy the points to c_points
-            self.c_points.resize(self.target_vertices.shape[0])
 
             ## Convert Cartesian points to Cylindrical points.
             r = self.target_vertices.shape[0] / 3.0
             # For some reason the following line raises an error in runtime
             # n_tri = <Py_ssize_t>(self.target_vertices.shape[0] / 3.0)
             n_tri = <Py_ssize_t> r
+            self.c_points.resize(n_tri * 3)
             for i in range(n_tri):
                 # Cylindrical
                 i3 = 3*i
 
                 phi = atan2(m_vertices[i3+1], m_vertices[i3])
                 r = sqrt(m_vertices[i3]**2 + m_vertices[i3+1]**2)
-                self.c_points[i3] = dim_mul * r
-                self.c_points[i3+1] = dim_mul * m_vertices[i3+2]
-                self.c_points[i3+2] = phi
+                self.c_points[i3] = dim_mul * r # r
+                self.c_points[i3+1] = dim_mul * m_vertices[i3+2] # z
+                self.c_points[i3+2] = phi # phi
             # Only if there is a success with setting the point reset the
             # result object
             self.results.reset()
@@ -277,22 +278,20 @@ cdef class FieldLineTracer:
             vector[double] buff
 
             # Memory view on triangles and on vertices
-            int [:] m_triangles = triangles
             double [:] m_normals = self.normals
 
-        n_tri = <Py_ssize_t> (triangles.shape[0] / 3.0)
         self.c_points.resize(triangles.shape[0])
         buff.resize(3)
         triangle_points.resize(9)
 
         # TODO: try parallelizing this code! It is GIL friendly and should not
         # contain any overlapping things.
-        for i in range(n_tri):
+        for i in range(triangles.shape[0]/3):
             # Get the first point index
             i3 = 3 * i
-            pnt1 = m_triangles[i3]
-            pnt2 = m_triangles[i3+1]
-            pnt3 = m_triangles[i3+2]
+            pnt1 = 3*triangles[i3]
+            pnt2 = 3*triangles[i3+1]
+            pnt3 = 3*triangles[i3+2]
             triangle_points[0] = m_vertices[pnt1]
             triangle_points[1] = m_vertices[pnt1+1]
             triangle_points[2] = m_vertices[pnt1+2]
@@ -466,7 +465,7 @@ cdef class FieldLineTracer:
         # Now we continue. First memory views.
         cdef:
             # Normals are computed in the setTargetData!
-            double [:] normals = results.normals
+            double [:] normals = self.normals
             double [:] angle = results.angle
             double [:] Bdot = results.Bdot
             vector[double] buff2
@@ -698,7 +697,7 @@ cdef class FieldLineTracer:
         # Store it
         out[:, 2] = conlen_up_mean
 
-        psiLcfs = self.eq.psiLCFS
+        psiLcfs = self.eq.getBoundaryFluxValue()
         Rb, _, _, Bpm = self.eq.getOWL_midplane()
         flux = self.point_results.flux[:radial_points]
         # Calculate drsep
@@ -801,8 +800,9 @@ cdef class FieldLineTracer:
         # Get IWL or OWL parameters
         log.info(f"Calculating for side: {self.parameters.side}")
 
-        Rb, _, _, Bpm = self.eq.getMidplaneInfo(side=self.parameters.side)
-        drsep = (self.results.flux - self.eq.psiLCFS) / (Rb * Bpm)
+        Rb, _, _, Bpm = self.eq.getMidplaneInfo(which=self.parameters.side)
+        boundary = self.eq.getBoundaryFluxValue()
+        drsep = (self.results.flux - boundary) / (Rb * Bpm)
 
         # In case of some COCOS notations, the flux gradient direction can
         # go either away from the plasma or inside of the plasma. In other
@@ -822,7 +822,7 @@ cdef class FieldLineTracer:
 
             if secondaryXPoint is not None:
                 Rb, _, _, Bpm = self.eq.getMidplaneInfo(lcfs=secondaryXPoint)
-                drsep2 = (self.results.flux - self.eq.psiLCFS2) / (Rb * Bpm)
+                drsep2 = (self.results.flux - secondaryXPoint) / (Rb * Bpm)
                 drsep2 *= self.equilibrium.psi_sign
                 self.results.drsep2 = drsep2
             else:
@@ -949,7 +949,10 @@ cdef class FieldLineTracer:
         bfield_mag = np.linalg.norm(self.results.BVec.reshape((n_cells, 3)), axis=1)
         self.eq.evaluate()
 
-        Rb, _, Btotal, Bpm = self.eq.getMidplaneInfo(side=self.parameters.side)
+        Rb, _, Btotal, Bpm = self.eq.getMidplaneInfo(which=self.parameters.side)
+        import l2g.hlm.general
+        import l2g.hlm.steady_state
+        import l2g.hlm.ramp_down
 
         if self.hlm_params.hlm_type == "single":
             q_par = l2g.hlm.general.single_exponential_psol(drsep=drsep,

@@ -1,17 +1,1114 @@
-#!/usr/bin/python
+#!/usr/bin/env python
+import traceback
 
 description = """
 F.L.A.T. - Field Line Analysis Tool
 
-is a program meant for running L2G FLT cases which are describe in configuration
-files (YAML). The configuration file can have a multitude of YAML documents,
-each with their own role. Either a description of input data for the target
-shadowed geometry and with the shadowing geometry. Or a description of which
-equilibrium data or finally describing what HLM to use on the FLT data.
-
-This program reads that file and then the user can decide what to run, on what
-geometry, using which equilibrium and using which HLM.
+Is program meant for running Field-Line Tracing cases. The cases are described
+in the YAML files where geometries, equilibriums and plasma heat loads are
+described to be run.
 """
+
+def pprint(*args, **kwargs):
+    print(*args, **kwargs, flush=True)
+
+
+def check_yaml(path_to_yaml_file: str):
+    """Checks a YAML file if it has valid data for FLT running.
+
+    Returns:
+        ok (bool): True if the YAML file is ok, else False.
+    """
+    import os
+    import sys
+    import yaml
+
+    from yaml.loader import SafeLoader
+    YAML_TYPES = ["geometry", "equilibrium", "hlm"]
+
+    IS_OK = True
+
+    ####
+    # Subclassing SafeLoader in order to obtain line numbers as a form of entry
+    # __line__.
+    class SafeLineLoader(SafeLoader):
+        def construct_mapping(self, node, deep=False):
+            mapping = super(SafeLineLoader, self).construct_mapping(node, deep=deep)
+            # Add 1 so line numbering starts at 1
+            mapping['__line__'] = node.start_mark.line + 1
+            return mapping
+
+    class WrongValue(Exception):
+        pass
+
+    class EntryDoesntExistException(Exception):
+        pass
+
+    class WrongTypeException(Exception):
+        pass
+
+    class FileDoesntExistException(Exception):
+        pass
+
+    def check_if_var_exists(name: str, _type: type | tuple[type, ...], d: dict,
+                            optional: bool=False, isFile: bool=False) -> bool:
+        if name not in d:
+            if not optional:
+                raise EntryDoesntExistException(f"ERROR: Entry {name} does not exist")
+            return False
+
+        if isinstance(d[name], list):
+            if not all([isinstance(_, _type) for _ in d[name]]):
+                raise WrongTypeException(f"ERROR: Wrong type for {name}. Check it's entry: {d[name]}")
+        else:
+            if not isinstance(d[name], _type):
+                raise WrongTypeException(f"ERROR: Wrong type for {name}. Check it's entry: {d[name]}")
+
+        if isFile:
+            if not os.path.exists(d[name]):
+                raise FileDoesntExistException(f"ERROR: File for {name} entry does not exist: {d[name]}.")
+
+        return True
+
+    def check_list_of_paths(name: str, d: dict, optional: bool = False) -> bool:
+        if not check_if_var_exists(name, str, d, optional):
+            return False
+        if not name in d:
+            raise EntryDoesntExistException(f"ERROR: Entry {name} does not exist")
+
+        files = []
+        raise_exception = False
+
+        #First check if any paths are wildcards
+        for f in d[name]:
+            if "*" in f:
+                # pprint(f"INFO: Wildcards in {f} not checked.")
+                continue
+
+            if not os.path.exists(f):
+                raise_exception = True
+                files.append(f)
+
+        if raise_exception:
+            for i in range(min(10, len(files))):
+                pprint(f"ERROR: File '{files[i]}' does not exist. Inside entry '{name}'")
+            if len(files) > 10:
+                pprint("ERROR:...")
+            raise FileDoesntExistException()
+        return True
+    #####
+    if not os.access(path_to_yaml_file, os.R_OK):
+        pprint(f"ERROR: YAML file \"{path_to_yaml_file}\" is unreadable or does not exist!")
+        sys.exit(1)
+
+    data = object()
+    try:
+        with open(path_to_yaml_file, "r") as f:
+            data = yaml.load_all(f.read(), Loader=SafeLineLoader)
+    except Exception as e:
+        pprint(f"ERROR: Could not parse \"{path_to_yaml_file}\". Check the syntax!!!")
+        sys.exit(1)
+
+
+    # Bool for ejecting the name of the YAML file, but only once.
+    error_yaml_file_printed = False
+    isOptional=True
+    line_number = "<no line number>"
+    try:
+        for d in data:
+            line_number = d["__line__"]
+            if ".ignore" in d:
+                pprint(f"INFO: Document starting at {line_number} ignored due to present .ignore entry")
+                continue
+
+            # If no name or type
+            if "name" not in d or "type" not in d:
+                raise WrongValue(f"ERROR: Error in YAML file. Missing 'name' or 'type' entries! Check YAML document starting at line number {line_number}")
+
+            d_type = d["type"]
+            if d_type not in YAML_TYPES:
+                raise WrongValue(f"ERROR: YAML document starting at line {line_number} does not have a correct type: \"{d_type}\" It should be one of : {YAML_TYPES}")
+
+
+            # Create a test list of variables to check.
+            # Each test list set should contain, the:
+            # name, var_type, dictionary, optional[optional], isFile[optional]
+            test_list = []
+            test_flist = []
+
+            match d_type:
+                case "geometry":
+                    test_list = [
+                        ["target_mesh", str, d, False, True],
+                        ["align_lcfs", bool, d, True],
+                        ["include_target_in_shadow", bool, d, True],
+                        ["fl_ids", (list, int), d, True]
+                    ]
+                    t = check_if_var_exists("parameters", dict, d, True)
+                    d_params = d["parameters"]
+                    if t:
+                        test_list += [
+                            ["abs_error", float, d_params, True],
+                            ["rel_error", float, d_params, True],
+                            ["abs_error", float, d_params, True],
+                            ["max_fieldline_length", (float, int), d_params, True],
+                            ["num_of_threads", int, d_params, True],
+                            ["plasma_r_displ", float, d_params, True],
+                            ["plasma_z_displ", float, d_params, True],
+                            ["self_intersection_avoidance_length", float, d_params, True],
+                            ["shadow_dim_mul", float, d_params, True],
+                            ["side", str, d_params, True],
+                            ["target_dim_mul", float, d_params, True],
+                            ["time_end", float, d_params, True],
+                            ["time_step", float, d_params, True],
+                            ["wall_silh_r_disp", float, d_params, True],
+                            ["wall_silh_z_disp", float, d_params, True],
+                        ]
+                    t = check_if_var_exists("longwave_misalignment", dict, d,
+                        True)
+                    d_longwave_misalignment = d["longwave_misalignment"]
+                    if t:
+                        import numpy as np
+                        test_list += [
+                            ["vector", (list, np.ndarray), d_longwave_misalignment],
+                            ["length", (list, float), d_longwave_misalignment]
+                        ]
+
+                    test_flist = [
+                        ["shadow_meshes", d],
+                        ["afl_catcher_meshes", d, True]
+                    ]
+
+                case "equilibrium":
+                    check_if_var_exists("equilibrium_type", str, d)
+                    eq_type = d["equilibrium_type"]
+
+                    match eq_type:
+                        case "eqdsk_files":
+                            check_list_of_paths("eqdsk_files", d)
+                        case "imas":
+                            check_if_var_exists("imas", dict, d)
+
+                            test_list = [
+                                ["user", str, d["imas"]],
+                                ["shot", int, d["imas"]],
+                                ["run", int, d["imas"]],
+                                ["device", str, d["imas"]],
+                                ["version", str, d["imas"]],
+                                ["time_samples", int, d["imas"], True],
+                            ]
+                            # Now check for times
+                            times_in = check_if_var_exists("times", list, d["imas"], optional=True)
+                            if not times_in:
+                                # We check now for start time and end time
+                                check_if_var_exists("time_start", (int, float), d["imas"])
+                                check_if_var_exists("time_end", (int, float), d["imas"])
+
+                        case "_":
+                            pprint(f"ERROR: In equilibrium document at {line_number}")
+                            pprint(f"ERROR: Wrong 'equilibrium_type' entry: {eq_type}")
+
+                    test_list += [["correct_helicity", bool, d, isOptional]]
+                case "hlm":
+                    check_if_var_exists("hlm_type", str, d)
+
+                    hlm_type = d["hlm_type"]
+                    match hlm_type:
+                        case "custom":
+                            check_list_of_paths("profile_files", d)
+                            test_list = [
+                                ["extrapolate", bool, d, True],
+                                ["outside_value", float, d, True],
+                            ]
+                        case "elm":
+                            check_list_of_paths("shadow_meshes", d)
+                            test_list = [
+                                ["r_break", (float, list), d, isOptional],
+                                ["p_sol", (int, float, list), d, isOptional],
+                                ["lambda_q_near", (float, list), d, isOptional],
+                                ["lambda_q_main", (float, list), d, isOptional],
+                            ]
+                            t = check_if_var_exists("parameters", dict, d, isOptional)
+                            d_params = d["parameters"]
+                            if t:
+                                test_list += [
+                                    ["abs_error", float, d_params, isOptional],
+                                    ["rel_error", float, d_params, isOptional],
+                                    ["abs_error", float, d_params, isOptional],
+                                    ["max_fieldline_length", (float, int), d_params, isOptional],
+                                    ["num_of_threads", int, d_params, isOptional],
+                                    ["plasma_r_displ", float, d_params, isOptional],
+                                    ["plasma_z_displ", float, d_params, isOptional],
+                                    ["self_intersection_avoidance_length", float, d_params, isOptional],
+                                    ["shadow_dim_mul", float, d_params, isOptional],
+                                    ["side", str, d_params, isOptional],
+                                    ["target_dim_mul", float, d_params, isOptional],
+                                    ["time_end", float, d_params, isOptional],
+                                    ["time_step", float, d_params, isOptional],
+                                    ["wall_silh_r_disp", float, d_params, isOptional],
+                                    ["wall_silh_z_disp", float, d_params, isOptional],
+                                ]
+                        case "ramp-down" | "ramp_down" | "ramp down":
+                            pass
+                        case "single":
+                            test_list = [
+                                ["p_sol", (float, int, list), d],
+                                ["lambda_q", (float, int, list), d],
+                            ]
+                        case "double":
+                            test_list = [
+                                ["p_sol", (float, int, list), d],
+                                ["lambda_q_near", (float, int, list), d],
+                                ["lambda_q_main", (float, int, list), d],
+                            ]
+                        case _:
+                            pprint(f"ERROR: In hlm document at {line_number}")
+                            pprint(f"ERROR: Wrong 'hlm_type' entry: {hlm_type}")
+
+
+                case _:
+                    raise Exception(f"ERROR: Wrong document type: {d_type}!")
+
+            for xargs in test_list:
+                check_if_var_exists(*xargs)
+
+            for xargs in test_flist:
+                check_list_of_paths(*xargs)
+    except Exception as e:
+        traceback.print_exc()
+        if not error_yaml_file_printed:
+            error_yaml_file_printed = True
+            pprint(f"ERROR: In file {path_to_yaml_file}")
+        pprint(f"ERROR: Check YAML document at line {line_number}")
+        IS_OK = False
+    return IS_OK
+
+def load_yaml(path_to_yaml: str)->tuple[dict, ...]:
+    import yaml
+    import sys
+    geometries = {}
+    hlms = {}
+    equilibriums = {}
+
+    try:
+        with open(path_to_yaml, "r") as f:
+            yaml_text = f.read()
+        data = yaml.safe_load_all(yaml_text)
+    except Exception as e:
+        pprint(e)
+        pprint("ERROR: Something went wrong with reading the YAML file.")
+        sys.exit(1)
+
+    try:
+        for block in data:
+            block_type = block["type"]
+            block_name = block["name"]
+            match block_type:
+                case "geometry":
+                    if block_name in geometries:
+                        pprint(f"ERROR: There are more than one geometry blocks with the name '{block_name}'!")
+                        raise Exception()
+                    geometries[block_name] = block
+                case "hlm":
+                    if block_name in hlms:
+                        pprint(f"ERROR: There are more than one hlm blocks with the name '{block_name}'!")
+                        raise Exception()
+                    hlms[block_name] = block
+                case "equilibrium":
+                    if block_name in equilibriums:
+                        pprint(f"ERROR: There are more than one equilibrium blocks with the name '{block_name}'!")
+                        raise Exception()
+                    equilibriums[block_name] = block
+                case _:
+                    pprint(f"ERROR: Unknown block {block_type}")
+                    raise Exception()
+    except Exception as e:
+        sys.exit(1)
+
+    return geometries, equilibriums, hlms
+
+def getVal(d: dict, key: str, default: float | bool) -> float | bool:
+    if key in d:
+        return d[key]
+    return default
+
+def check_if_in_slurm_job(*flt_objs):
+    """This function checks if the process is run in a SLURM environment. A
+    simple check if environment variable SLURM_JOBID exists. If it exists, then
+    it is deduced that the process is run inside a compute node, therefore
+    ideally we increase the number of max OpenMP threads to whatever is the
+    maximum for the compute node. One thing less to worry about the user.
+
+
+    Arguments:
+        flt_objs (FieldLinesTracer): Set of FLT objects, for which we set the
+            maximum number of cpu threads.
+    """
+    import os
+    if "SLURM_JOBID" in os.environ:
+        pprint('INFO: Detected SLURM environment.')
+        job_id = os.environ['SLURM_JOBID']
+        pprint(f"INFO: SLURM JOB ID: {job_id}")
+        pprint("INFO: Setting the number of OpenMP threads equal to the number of "
+              + "allocated CPUs")
+        # In this case assign the number of threads equal to the number of
+        # CPUs per task.
+        # We only have 1 distributed task.
+
+        if "SLURM_CPUS_PER_TASK" in os.environ:
+            pprint('INFO: Trying to get maximum number of cpus assigned for this task.')
+            try:
+                cpus_per_task = int(os.environ["SLURM_CPUS_PER_TASK"])
+                for flt_obj in flt_objs:
+                    flt_obj.parameters.num_of_threads = cpus_per_task
+                pprint(f"INFO: case.parameters.num_of_threads={cpus_per_task}")
+            except:
+                pprint("INFO: Failed to obtain a number from SLURM_CPUS_PER_TASK")
+
+
+def get_hlm(d: dict, index: int) -> dict:
+
+    max_n = 1
+    for key in d:
+        if key in ["shadow_meshes", "parameters"]:
+            continue
+
+        if isinstance(d[key], list):
+            max_n = max(max_n, len(d[key]))
+
+    if max_n == 1:
+        return d
+
+    t = {}
+
+    for key in d:
+        if key in ["name", "hlm_type", "shadow_meshes", "parameters"]:
+            t[key] = d[key]
+        if isinstance(d[key], list):
+            # Do we have to expand it?
+            n_key = len(d[key])
+            if n_key < max_n:
+                t[key] = d[key] + [d[key][-1] for _ in range(max_n - n_key)]
+            else:
+                t[key] = d[key]
+        else:
+            t[key] = [d[key] for _ in range(max_n)]
+    out = {}
+    for key in d:
+        if key in ["name", "hlm_type", "shadow_meshes", "parameters"]:
+            out[key] = d[key]
+        else:
+            out[key] = d[key][index]
+    return out
+
+def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
+    """Runs the FLT study.
+
+    Arguments:
+        geod (dict): Dictionary containing geometry information
+        eqid (dict): Dictionary containing equilibrium information
+        hlmd (dict | None): Optional dictionary containing HLM information
+
+    Optional Keyword Arguments:
+        longwave_misalignment_flag (bool): If present and if True, apply
+            longwave misalignment, which is in essence a simple translation
+        longwave_vector (np.ndarray): 3 element vector for the
+            direction of the misalignment
+        longwave_length (float): The distance of the
+            misalignment along the direction of the vector
+        result_file_name (str): Result file name
+
+
+    """
+    import os
+    import numpy as np
+    import l2g.comp
+    import l2g.equil
+
+    pprint("INFO: Running FLT")
+
+    ### Main objects
+    flt_obj = l2g.comp.FieldLineTracer()
+    check_if_in_slurm_job(flt_obj)
+    equil_obj = l2g.equil.EquilibriumIterator()
+
+    ##
+    # Additional flags
+    if not (align_lcfs:=geod.get("align_lcfs")):
+        align_lcfs = False
+
+    if hlmd is None:
+        apply_heat_loads = False
+        hlmd = {} # To destroy the pyright complaints...
+    else:
+        apply_heat_loads = True
+
+
+    if (longwave_misalignment_flag:=kwargs.get("longwave_misalignment")):
+        pprint("INFO: Longwave misalginment = True")
+        longwave_vector = kwargs["longwave_vector"] * kwargs["longwave_length"]
+    else:
+        longwave_misalignment_flag = False
+        longwave_vector = np.zeros(3)
+
+    if not (output_directory:=kwargs.get("output_directory")):
+        output_directory = "results"
+
+    # Creating output_directory if necessary
+    if not os.path.isdir(output_directory):
+        os.makedirs(output_directory, exist_ok=True)
+
+    if not (case_name:=kwargs.get("case_name")):
+        case_name = f'{geod["name"]}_{eqid["name"]}'
+
+    ################################################################################
+    ################################################################################
+    ## Loading eqd
+    # Load the eqds
+
+    equil_obj.correctHelicity(getVal(eqid, "correct_helicity", True))
+    pprint(f"INFO: Correcting helicity? {equil_obj._correct_helicity}")
+
+    pprint("INFO: Loading equilibria...")
+    match eqid["equilibrium_type"]:
+        case "eqdsk_files":
+            equil_obj.loadEqdskEquilibriums(eqid["eqdsk_files"])
+        case "imas":
+            equil_obj.loadIMASEquilibriums(eqid["imas"])
+        case _:
+            pprint("ERROR: Wrong eq_type {_}.This shouldn't happen.")
+            sys.exit(2)
+
+    # Check if there is a custom wall limiter, used for
+    CUSTOM_WALL_LIMITER = False
+    if "custom_wall_limiter" in eqid:
+        CUSTOM_WALL_LIMITER=True
+        CUSTOM_WALL_LIMITER_R = eqid["custom_wall_limiter"]
+        CUSTOM_WALL_LIMITER_Z = eqid["custom_wall_limiter"]
+    else:
+        CUSTOM_WALL_LIMITER_R = []
+        CUSTOM_WALL_LIMITER_Z = []
+
+    # See if there is a plasma shift applied
+    plasma_r_displ = getVal(eqid, "plasma_r_displ", 0.0)
+    plasma_z_displ = getVal(eqid, "plasma_z_displ", 0.0)
+    equil_obj.applyPlasmaShift(plasma_r_displ, plasma_z_displ)
+    wall_silh_r_shift = getVal(eqid, "wall_silh_r_shift", 0.0)
+    wall_silh_z_shift = getVal(eqid, "wall_silh_z_shift", 0.0)
+    equil_obj.applyWallSilhouetteShift(wall_silh_r_shift, wall_silh_z_shift)
+
+
+    import l2g.mesh
+    ## Preparing geometry
+    if "parameters" in geod:
+        for parameter in geod["parameters"]:
+            if not hasattr(flt_obj.parameters, parameter):
+                if parameter == "max_connection_length":
+                    pprint(f"INFO: max_connection_length detected. Treating it as max_fieldline_length")
+                    setattr(flt_obj.parameters, "max_fieldline_length", geod["parameters"][parameter])
+                else:
+                    pprint(f"INFO: Illegal parameter: {parameter}. Ignored")
+            else:
+                setattr(flt_obj.parameters, parameter, geod["parameters"][parameter])
+    if "options" in geod:
+        for option in geod["options"]:
+            if not hasattr(flt_obj.options, option):
+                pprint(f"INFO: Illegal option: {option}. Ignored")
+            else:
+                setattr(flt_obj.options, option, geod["options"][option])
+
+    pprint(f"INFO: Dumping loaded parameters: {flt_obj.parameters.dump()}")
+    pprint(f"INFO: Dumping loaded options: {flt_obj.options.dump()}")
+
+    ## See if we need to run FLT!
+
+    result_file_name = f"{case_name}.med"
+    result_file_path = os.path.join(output_directory, result_file_name)
+
+    pprint(f"INFO: FLT results saved in {result_file_name}.")
+    pprint(f"INFO: Full path: {result_file_path}")
+
+    run_flt = True
+    if os.path.exists(result_file_path):
+        pprint("INFO: A MED file already exists. Checking if it has the same number of time slices as the input equilibrium.")
+        import medcoupling as mc
+        field_names = mc.GetAllFieldNames(result_file_path)
+        run_flt = False
+        if "conlen" not in field_names:
+            run_flt = True
+        else:
+            iterations = mc.GetAllFieldIterations(result_file_path, "conlen")
+            if len(iterations) != len(equil_obj):
+                run_flt = True
+            else:
+                # Let's see if the times are almost the same.
+                pprint("INFO: Same number of times. Now checking if they are same.")
+                for i in range(len(equil_obj._times)):
+                    if np.isclose(iterations[i][0], equil_obj._times[i]):
+                        continue
+                    run_flt = True
+                    break
+
+        pprint(f"INFO: Need to obtain FLT data?: {run_flt}")
+
+    pprint(f"INFO: Name set for the case: {case_name}")
+    pprint(f"INFO: Output directory set: {output_directory}")
+    pprint(f"INFO: Name of result FLT MED file: {result_file_path}")
+
+    if run_flt:
+        # First the target mesh
+        target_mesh = l2g.mesh.Mesh(geod["target_mesh"])
+        pprint(f"INFO: Reading target mesh data from: {geod['target_mesh']}")
+        target_mesh.readMeshData()
+        if longwave_misalignment_flag:
+            target_mesh.translateMesh(longwave_vector)
+        flt_obj.setTargetData(
+            target_mesh.vertices,
+            target_mesh.triangles)
+
+        ## Load the shadow mesh
+        # First get the list of files
+        shadow_mesh_files = []
+        for f in geod["shadow_meshes"]:
+            shadow_mesh_files += glob.glob(f)
+
+        if "exclude_meshes" in geod:
+            mesh_to_remove = []
+            for f in shadow_mesh_files:
+                if f in geod["exclude_meshes"]:
+                    mesh_to_remove.append(f)
+            for m in mesh_to_remove:
+                shadow_mesh_files.remove(m)
+
+        geom_ids = []
+        if "include_target_in_shadow" in geod and geod["include_target_in_shadow"]:
+            pprint("INFO: Loading target mesh to Embree.")
+            geom_id = flt_obj.embree_obj.commitMesh(target_mesh.vertices * flt_obj.parameters.target_to_m,
+                                                    target_mesh.triangles)
+
+            geom_ids.append((geom_id, geod["target_mesh"]))
+
+        pprint("INFO: Loading shadow meshes to Embree.")
+        for file in shadow_mesh_files:
+
+            m = l2g.mesh.Mesh(file)
+            m.readMeshData()
+            if longwave_misalignment_flag:
+                m.translateMesh(longwave_vector)
+
+            v, t = m.getMeshData()
+            geom_id = flt_obj.embree_obj.commitMesh(v * flt_obj.parameters.shadow_to_m,
+                                                t)
+            geom_ids.append((geom_id, file))
+
+        if "afl_catcher_meshes" in geod:
+            pprint("INFO: Loading artificial fieldlines filter meshes to Embree.")
+            for file in geod["afl_catcher_meshes"]:
+                m = l2g.mesh.Mesh(file)
+                m.readMeshData()
+                if longwave_misalignment_flag:
+                    m.translateMesh(longwave_vector)
+                v, t = m.getMeshData()
+                geom_id = flt_obj.embree_obj.commitMesh(v * flt_obj.parameters.shadow_to_m, t)
+                geom_ids.append((geom_id, file))
+                flt_obj.parameters.artificial_fl_catcher_geom_id.add(geom_id)
+
+        pprint("INFO: Copying target mesh to result location to be used as " +
+                 "storage.")
+        # shutil is used to create a verbatim copy. Just saving the mesh data
+        # fails to save groups.
+        import shutil
+        shutil.copyfile(geod["target_mesh"], result_file_path)
+        result_file = l2g.mesh.Mesh(result_file_path)
+
+    else:
+        # We do not need to obtain the FLT results but still require the FLT
+        # data
+        pprint("INFO: FLT data already exists so loading the result file " +
+                f"{result_file_path}!")
+        result_file = l2g.mesh.Mesh(result_file_path)
+        # In this case only HLM is applied (if assumed correctly) which means
+        # that case we use the l2g.mesh.load_flt_results_from_mesh function
+        # to load the results from the result_file.
+
+    # First let's see if there is actually nothing to do...
+    if not (run_flt or apply_heat_loads):
+        pprint("INFO: Actually... there is nothing to do?")
+        pprint(f"INFO: Do we need to get FLT data? {run_flt}")
+        pprint(f"INFO: Do we have an HLM to apply? {apply_heat_loads}")
+        pprint("INFO: Stopping...")
+        return
+
+    if run_flt:
+        pprint("INFO: Obtaining FLT data!")
+
+        N = len(equil_obj)
+        for index, associated_time, equilibrium in equil_obj:
+            pprint(f"INFO: Processing {index+1} of {N} equilibriums. Time={associated_time}")
+
+            result_file.setIndex(index)
+            result_file.setIndex(associated_time)
+
+            if run_flt:
+                if CUSTOM_WALL_LIMITER:
+                    equilibrium.wall_contour_r = np.array(CUSTOM_WALL_LIMITER_R)
+                    equilibrium.wall_contour_z = np.array(CUSTOM_WALL_LIMITER_Z)
+
+                # Propagate settings and data to the C++ library
+                flt_obj.setEquilibrium(equilibrium)
+
+                # Analyze the equilibrium
+                flt_obj.evaluateEq()
+
+                flt_obj.applyParameters()
+                flt_obj.loadEq()
+
+
+                # Process the data on the data
+                flt_obj.processMagneticData()
+
+
+                # Check if we have to aglign the LCFS
+                if flt_obj.eq.getType() == "lim" and align_lcfs:
+                    pprint("INFO: Aligning limiter plasma with target geometry!")
+                    flt_obj.alignGeometryWithLCFS()
+
+                pprint("INFO: Running FLT!")
+                flt_obj.runFLT()
+                pprint("INFO: FLT done!")
+                flt_obj.calculateDrsep()
+
+                # Save the data to resulting med file
+                result_file.setIndex(index)
+                result_file.setTime(associated_time)
+
+                if index == 0:
+                    # Save only once the baryCent and normals. That is stationary
+                    # data
+                    result_file.addField(array_name="normals",
+                                         array=flt_obj.normals,
+                                         info_on_components=['x', 'y', 'z'])
+
+                pprint(f"INFO: Writing results to {result_file_name}")
+                # The main FLT result field
+                result_file.addField(array_name="conlen",
+                                     array=flt_obj.results.conlen * 1e3)
+                result_file.addField(array_name="drsep",
+                                     array=flt_obj.results.drsep * 1e3)
+                result_file.addField(array_name="drsep2",
+                                     array=flt_obj.results.drsep2 * 1e3)
+
+                result_file.addField(array_name="flux", array=flt_obj.results.flux)
+
+                # Vector arrays
+                result_file.addField(array_name="BVec", array=flt_obj.results.BVec,
+                                     info_on_components=["x", "y", "z"])
+                result_file.addField(array_name="BVecCyln",
+                                     array=flt_obj.results.BVecCyln,
+                                     info_on_components=['Pol', 'Tor'])
+                result_file.addField(array_name="Bdot", array=flt_obj.results.Bdot)
+                array = np.rad2deg(flt_obj.results.angle)
+                array = np.where(array > 90.0, array - 90.0, 90.0 - array)
+                result_file.addField(array_name="angle", array=array)
+                result_file.addField(array_name="mask", array=flt_obj.results.mask)
+                result_file.addField(array_name="direction", array=flt_obj.results.direction)
+                result_file.addField(array_name="geom_hit_ids", array=flt_obj.results.geom_hit_ids)
+                result_file.addField(array_name="prim_hit_ids", array=flt_obj.results.prim_hit_ids)
+                result_file.writeFields()
+                pprint("INFO: Done writing")
+            else:
+                # Load the FLT data
+                pprint(f"INFO: Loading FLT data from {result_file_path}")
+                l2g.mesh.load_flt_results_from_mesh(flt_obj.results,
+                                                    result_file)
+                pprint("INFO: Done")
+
+            if apply_heat_loads:
+                flt_obj.hlm_params.load(get_hlm(hlmd, index))
+
+                hlm_type = flt_obj.hlm_params.hlm_type
+                pprint(f"INFO: Applying HLM type: {hlm_type}")
+                if hlm_type == "elm":
+                    # Get the OWL connection length profile
+                    pprint("INFO: Obtaining outer midplane connection graph")
+                    _drsep, _conlen_down, _conlen_up = l2g.equil.getOwlConlensGraph(flt_obj.eq)
+
+                    # Save the data
+
+                    # Obtain the ELM PLM parallel loss model.
+                    import l2g.hlm.elm_plm
+
+                    obj = l2g.hlm.elm_plm.ELM_PLM(_drsep, _conlen_down)
+
+                    # Calculate the loss profiles
+                    if not (d := hlmd.get("loss_parameters")):
+                        d = {}
+                    if d:
+                        pprint(f"INFO: PLM loss parameters: {d}")
+                    pprint("INFO: Obtaining PLM loss profiles")
+                    obj.calculate_loss_profiles(**d)
+                    # Final drsep
+                    flt_obj.hlm_params.points = obj.r
+                    flt_obj.hlm_params.additional_profiles = []
+                    flt_obj.hlm_params.additional_profiles.append(obj.Te)
+                    flt_obj.hlm_params.additional_profiles.append(obj.Ti)
+
+                    # Now calculate the heat load profile
+                    if not (d := hlmd.get("elm_parameters")):
+                        d = {}
+                    if d:
+                        pprint(f"INFO: ELM HLM parameters: {d}")
+                    pprint("INFO: Obtaining ELM heat load profiles")
+                    obj.calculate_heat_load_profile(**d)
+
+                    flt_obj.hlm_params.profile = obj.qpar
+
+                flt_obj.applyHLM()
+
+                pprint("INFO: Writing HLM arrays to file")
+                # Slashes "/" are not allowed in the name of a field. They have
+                # to be escaped!
+                result_file.addField(array=flt_obj.hlm_results.flux_expansion,
+                                     array_name="Total flux expansion")
+                result_file.addField(array=flt_obj.hlm_results.q_inc,
+                    array_name=r"q_perp")
+                result_file.addField(array=flt_obj.hlm_results.q_par,
+                    array_name=r"q_para")
+
+                if hlm_type == "elm":
+                    # Writing additional arrays
+                    # Take arrays from additional_arrays variable.
+                    result_file.addField(
+                        array=flt_obj.hlm_results.additional_arrays[0],
+                        array_name=r"q_para ELM",
+                        info_on_components=["W/m^2"])
+                    result_file.addField(
+                        array=flt_obj.hlm_results.additional_arrays[1],
+                        array_name=r"q_para inter-ELM")
+                    result_file.addField(
+                        array=flt_obj.hlm_results.additional_arrays[2],
+                        array_name=r"T_e [eV]")
+                    result_file.addField(
+                        array=flt_obj.hlm_results.additional_arrays[3],
+                        array_name=r"T_i [eV]")
+                    result_file.addField(
+                        array=flt_obj.hlm_results.additional_arrays[4],
+                        array_name=r"q_perp ELM")
+                    result_file.addField(
+                        array=flt_obj.hlm_results.additional_arrays[5],
+                        array_name=r"q_perp inter-ELM")
+                result_file.writeFields()
+                pprint("INFO:Writing done!")
+
+def apply_head_loads(geod: dict, eqid: dict, hlmd: dict, **kwargs):
+    pass
+
+def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
+    import os
+    import matplotlib.pyplot as plt
+    import matplotlib.colors as colors
+    import l2g.equil
+    import numpy as np
+
+    equil_obj = l2g.equil.EquilibriumIterator()
+    equil_obj.correctHelicity(getVal(eqid, "correct_helicity", True))
+
+    match eqid["equilibrium_type"]:
+        case "eqdsk_files":
+            equil_obj.loadEqdskEquilibriums(eqid["eqdsk_files"])
+        case "imas":
+            equil_obj.loadIMASEquilibriums(eqid["imas"])
+        case _:
+            pprint("ERROR: Wrong eq_type.")
+            sys.exit(2)
+    # Additional arrays if they are needed
+    time_array = []
+    # Used for ramp-down graphics
+    psol_array = []
+    ip_array = []
+    lambdaq_array = []
+    # Create a simple X-axis drsep array for plotting Q_parallels.
+    drsep = np.linspace(0, 0.3, 100)
+    label = ""
+
+
+    def truncate_colormap(cmap, minval=0.0, maxval=1.0, n=100):
+        new_cmap = colors.LinearSegmentedColormap.from_list(
+            f'trunc({cmap.name},{minval:.2f},{maxval:.2f})',
+            cmap(np.linspace(minval, maxval, n)))
+        return new_cmap
+
+    base_cmap_core = plt.get_cmap('jet_r')
+    base_cmap_drsep = plt.get_cmap('jet_r')
+    base_cmap_vacc = plt.get_cmap('jet_r')
+
+    import l2g.plot
+    import l2g.external.equilibrium_analysis
+    import numpy as np
+
+    if not (base_name:=kwargs.get("file_base_name")):
+        base_name = f"{eqid['name']}"
+
+    if (out_dir:=kwargs.get("output_directory")):
+        if not os.path.isdir(out_dir):
+            os.makedirs(out_dir, exist_ok=False)
+        base_name = os.path.join(out_dir, base_name)
+
+    for index, associated_time, equilibrium in equil_obj:
+
+        eq = l2g.external.equilibrium_analysis.EQA(equilibrium)
+        eq.evaluate()
+
+        eq_type = eq.getType()
+
+        time_array.append(associated_time)
+
+        name = f"{base_name}_{associated_time}"
+
+        ## Plot the fluxes
+
+        fig = plt.figure(figsize=plt.figaspect(3/2))
+        ax = fig.add_subplot(111)
+
+        ax.axis("equal")
+        ax.set_xlabel("R[m]")
+        ax.set_ylabel("Z[m]")
+
+        psi_axis = eq.equilibrium.psi_axis * eq.psi_grad_sign
+        psi_boundary = eq.getBoundaryFluxValue()
+        if eq_type == "div":
+            psi_2nd_boundary = eq.getSecondaryXFluxValue()
+        else:
+            # For the vaccum
+            psi_2nd_boundary = psi_boundary
+        grid_r = equilibrium.grid_r
+        grid_z = equilibrium.grid_z
+        psi = equilibrium.psi
+
+        psi_outside = eq.getPsi(grid_r[-1], equilibrium.mag_axis_z)[0]
+        # Create intervals
+        ## CORE
+        cmap_core = truncate_colormap(base_cmap_core, minval=0, maxval=0.3, n=25)
+        if psi_axis > psi_boundary:
+            band = np.linspace(psi_boundary, psi_axis, 25)
+        else:
+            band = np.linspace(psi_axis, psi_boundary, 25)
+
+        ax.contour(grid_r, grid_z, psi, levels=band, cmap=cmap_core)
+        ax.contourf(grid_r, grid_z, psi, levels=band, cmap=cmap_core, alpha=0.2)
+
+        # ## VACUUM
+        cmap_vacc = truncate_colormap(base_cmap_vacc, minval=0.8, maxval=1.0, n=10)
+        if psi_2nd_boundary > psi_outside:
+            band = np.linspace(psi_outside, psi_2nd_boundary, 10)
+        else:
+            band = np.linspace(psi_2nd_boundary, psi_outside, 10)
+        ax.contour(grid_r, grid_z, psi, levels=band, cmap=cmap_vacc, alpha=0.3)
+        ax.contourf(grid_r, grid_z, psi, levels=band, cmap=cmap_vacc,
+                    alpha=0.2)
+        if eq_type == "div":
+            # DRSEP
+            if psi_boundary > psi_2nd_boundary:
+                band = np.linspace(psi_2nd_boundary, psi_boundary, 10)
+            else:
+                band = np.linspace(psi_boundary, psi_2nd_boundary, 10)
+
+            cmap_drsep = truncate_colormap(base_cmap_drsep, minval=0.5, maxval=0.8, n=10)
+            ax.contour(grid_r, grid_z, psi, levels=band, cmap=cmap_drsep,
+                       alpha=0.5)
+            ax.contourf(grid_r, grid_z, psi, levels=band, cmap=cmap_drsep,
+                        alpha=0.2)
+
+        import l2g.plot._marching_squares
+
+        obj = l2g.plot._marching_squares.Marching()
+        obj.setData(equilibrium.grid_r, equilibrium.grid_z,
+                    equilibrium.psi * eq.psi_grad_sign)
+
+        Rb, Zc, Btotal, Bpm = eq.getMidplaneInfo()
+
+        if eq_type == "div":
+            contourPaths = obj.getContourPath(psi_boundary)
+
+            l2g.plot._marching_squares.plot_paths(ax, contourPaths, label=r"$1^{st}$",
+                color='g', linewidth=1.5)
+            contourPaths = obj.getContourPath(psi_2nd_boundary)
+            l2g.plot._marching_squares.plot_paths(ax, contourPaths, label=r"$2^{nd}$",
+                color='b', linewidth=1.5)
+
+            # Get the drsep=4cm separatrix
+            flux4cm, _, _ = eq.getPsi(Rb + 0.04, Zc)
+            contourPaths = obj.getContourPath(flux4cm)
+            l2g.plot._marching_squares.plot_paths(ax, contourPaths, label=r"$\Delta_{sep}=4cm$",
+                color='tab:orange', linewidth=1.5)
+
+            ax.legend(title="Separatrix")
+
+
+        else:
+            paths, types = obj.getContourPath(psi_boundary)
+            for i, path in enumerate(paths):
+                if i == 0:
+                    ax.plot(path[0], path[1], label="LCFS", color='g', linewidth=1.5)
+                else:
+                    ax.plot(path[0], path[1], 'g', linewidth=1.5)
+            ax.legend(title="Contour")
+
+        # Plot the wall
+        ax.plot(equilibrium.wall_contour_r, equilibrium.wall_contour_z, 'r-',
+                linewidth=2.5)
+        ax.set_xlim(equilibrium.grid_r[0], equilibrium.grid_r[-1])
+        ax.set_ylim(equilibrium.grid_z[0], equilibrium.grid_z[-1])
+        ax.set_title(f"{name}")
+        fig.savefig(f"{name}_psi.pdf")
+        fig.savefig(f"{name}_psi.png")
+        plt.close(fig)
+        del fig
+
+        if hlmd is None:
+            pass
+        else:
+            # Plot the HLMs
+            from l2g.settings import HLM
+            hlm_params = HLM()
+            t = get_hlm(hlmd, index)
+            hlm_params.load(t)
+            drsep = np.linspace(0, 0.3, 100)
+            import l2g.hlm.general
+            import l2g.hlm.steady_state
+            import l2g.hlm.elm_plm
+
+            figure = plt.figure()
+            ax = figure.add_subplot()
+            ax.set_xlabel(r"$\Delta_{sep}$ - radial distance along the midplane [mm]")
+            ax.set_ylabel(r"$q_{\parallel}$ [$\frac{W}{m^2}$]")
+            title = f"{hlmd['name']}"
+            match hlm_params.hlm_type:
+                case "single":
+                    title += " Single exponential"
+                    qpar = l2g.hlm.general.single_exponential_psol(
+                        drsep, Bt=Btotal, Bpm=Bpm, Rb=Rb,
+                        lambda_q=hlm_params.lambda_q, P_sol=hlm_params.p_sol)
+                case "double":
+                    title += " Double exponential"
+                    qpar = l2g.hlm.general.double_exponential_psol(
+                        drsep, Bt=Btotal, Bpm=Bpm, Rb=Rb,
+                        Rq=hlm_params.ratio,
+                        lambda_q_main=hlm_params.lambda_q_main,
+                        lambda_q_near=hlm_params.lambda_q_near,
+                        P_sol=hlm_params.p_sol)
+                case "custom":
+                    title += " Custom profile"
+                    qpar = l2g.hlm.general.custom(drsep=drsep,
+                        points=hlm_params.points,
+                        profile=hlm_params.profile,
+                        extrapolate=hlm_params.extrapolate,
+                        outside_value=hlm_params.outside_value)
+                case "elm":
+                    title += " ELM PLM + inter-ELM"
+                    # Get the OWL connection length profile
+                    _drsep, _conlen_down, _conlen_up = l2g.equil.getOwlConlensGraph(eq)
+
+                    _f, _ax = plt.subplots()
+                    _ax.set_xlabel("Radial distance along the midplane [m]")
+                    _ax.set_ylabel("Connection length [m]")
+                    _ax.plot(_drsep, _conlen_down, label="Down")
+                    _ax.plot(_drsep, _conlen_up, label="Up")
+                    _ax.plot(_drsep, _conlen_down + _conlen_up, label="Sum")
+                    _ax.grid(which="major", alpha=0.7)
+                    _ax.grid(which="minor", alpha=0.4, linestyle="--")
+                    _ax.legend()
+                    _f.savefig(f"{name}_owl_conlen.pdf")
+
+                    _f.clf()
+                    plt.close(_f)
+                    del _f
+                    del _ax
+
+                    zero_ind = np.where(np.isclose(_conlen_down, 0.0))[0]
+                    if len(zero_ind):
+                        _drsep = _drsep[:zero_ind[0]]
+                        _conlen_down = _conlen_down[:zero_ind[0]]
+                        _conlen_up = _conlen_up[:zero_ind[0]]
+
+                    # Calculate the loss profiles
+                    obj = l2g.hlm.elm_plm.ELM_PLM(_drsep, _conlen_down)
+                    if not (d := hlmd.get("loss_hlm_params")):
+                        d = {}
+                    d["r_max"] = _drsep[-1] - _drsep[0]
+                    obj.calculate_loss_profiles(**d)
+                    # Now calculate the heat load profile
+                    if not (d := hlmd.get("elm_hlm_params")):
+                        d = {}
+                    obj.calculate_heat_load_profile(**d)
+
+                    # Save to file
+                    obj.create_graphs(save_to_file=True, file_path=f"{name}_elm_plm.pdf")
+
+                    qpar = obj.qpar
+                    drsep = obj.r
+                    # Add the inter-ELM
+                    inter_elm = l2g.hlm.steady_state.inter_ELM(drsep, Rb, Btotal,
+                        Bpm, hlm_params.p_sol, hlm_params.r_break,
+                        hlm_params.lambda_q_near, hlm_params.lambda_q_main)
+
+                    ax.plot(drsep * 1e3, qpar, "k--", label="ELM-PLM", markersize=0.5)
+                    ax.plot(drsep * 1e3, inter_elm, "k.", label="inter-ELM", markersize=0.8)
+                    ax.legend()
+
+                    qpar += inter_elm
+
+                case "l_mod":
+                    title += " L-mod (inter-ELM)"
+                    # Add the inter-ELM
+                    qpar = l2g.hlm.steady_state.inter_ELM(drsep, Rb, Btotal,
+                        Bpm, hlm_params.p_sol, hlm_params.r_break,
+                        hlm_params.lambda_q_near, hlm_params.lambda_q_near)
+                case "ramp-down":
+                    title += " Ramp-Down"
+                    import l2g.hlm.ramp_down
+
+                    lq = l2g.hlm.ramp_down.decay_length_L_mode_diverted(
+                        a=equilibrium.a, Ip=equilibrium.Ip,
+                        Area=equilibrium.Area, R=equilibrium.mag_axis_r)
+                    qpar = l2g.hlm.generatl.single_exponential_psol(
+                        drsep, Btotal, Bpm, Rb, lq * 1e-3, equilibrium.p_sol)
+                case _:
+                    pprint(f"ERROR Wrong HLM-type: {hlm_params.hlm_type}")
+                    sys.exit(1)
+
+            ax.set_title(title)
+            #          mm         W/m^2
+            ax.plot(drsep * 1e3, qpar)
+
+            ax.grid(which='major', alpha=0.7)
+            ax.grid(which='minor', alpha=0.4, linestyle='--')
+            ax.set_ylim((1e5, 1e9))
+            ax.set_xlim((0.0, drsep[-1]*1e3))
+            ax.set_yscale("log")
+            figure.savefig(f"{name}_qpar.png")
+            figure.savefig(f"{name}_qpar.pdf")
+            plt.close(figure)
+            del figure
+
+
+
+###############################################################################
+###############################################################################
+
+intro = """
+                            FFFFFFF L        A     TTTTTTTTTTTT
+                           F       L        A A         T
+Running Gregor Simič's    FFFFf   L        A   A        T
+                         F       L        AAAAAAA       T
+                        F       L        A       A      T
+                       F       LLLLLLL  A         A     T
+"""
+
+print(intro)
+
+import sys
+
 import time
 start = time.time()
 
@@ -19,289 +1116,156 @@ import argparse
 
 parser = argparse.ArgumentParser(description=description)
 
-parser.add_argument("yaml_file", nargs="?", help="Path to YAML file.")
+# parser.add_argument("yaml_file", nargs="?", help="Path to YAML file.")
 
 # Add argument subgroups.
 command_description = """Tell the binary what to do. Available commands:
- - run: Run a FLT case with the provided options (Default)
- - print: Prints the list of components in the YAML document
+ - run: Run a FLT case with (Default)
+ - print: Prints the list of contents in a YAML document
+ - plot: Create plots of the equilibrium and HLM (optional)
 """
 subparsers = parser.add_subparsers(dest='command', help=command_description)
+subparsers.required = True
 run_subparser = subparsers.add_parser('run', help="Run FLT case")
+run_subparser.add_argument('yaml_file', help='Path to YAML file')
 run_subparser.add_argument('geometry', help='Name of input data of geometries to be used in the FLT case')
 run_subparser.add_argument('equilibrium', help='Name of the equilibrium data to be used in the FLT case')
-run_subparser.add_argument('hlm', nargs="?", help='Name of the HLM to apply on the FLT data. Optional')
-run_subparser.add_argument('--out-dir', help="Specify output directory. Default CWD.", type=str)
+run_subparser.add_argument('hlm', nargs='?', help='Name of the HLM to apply on the FLT data. Optional')
+run_subparser.add_argument("--out-file", help="Specify output MED file name. Default None", type=str, default="")
+run_subparser.add_argument('--out-dir', help='Specify output directory. Default CWD.', type=str)
 run_subparser.add_argument('--rotational-misalignment',
-    help="Activate rotational misalignment. By that it checks if it has the " +
-         "necessary information in the geometry to run a FLT case with " +
-         "rotational misalignment activated.", action='store_true', default=False)
+    help='Activate rotational misalignment. By that it checks if it has the ' +
+         'necessary information in the geometry to run a FLT case with ' +
+         'rotational misalignment activated.', action='store_true', default=False)
 run_subparser.add_argument('--longwave-misalignment',
-    help="Activate longwave misalignment. By that it checks if the case file" +
-         " has the necessary information (vectors and length) to run a FLT" +
-         " case with the longwave misalignment.", action='store_true',
+    help='Activate longwave misalignment. By that it checks if the case file' +
+         ' has the necessary information (vectors and length) to run a FLT' +
+         ' case with the longwave misalignment.', action='store_true',
          default=False)
 
-# The no graphics is in reverse as this is actually flag to creating the
-# images.
-run_subparser.add_argument('--no-graphics', help='Do not create pictures.', action="store_false",
-                            default=True)
-parser.add_argument('--debug', help="Activate debug prints",
+parser.add_argument('--debug', help='Activate debug prints',
                     action='store_true', default=False)
-print_subparser = subparsers.add_parser('print', help="Print case descriptions")
+check_subparser = subparsers.add_parser('check', help='Check case descriptions')
+check_subparser.add_argument('yaml_file', help='Path to YAML file')
+check_subparser.add_argument('--print-content', help='Print the contents of the YAML file',
+    default=False, action='store_true')
 
-edit_subparser = subparsers.add_parser('rotate', help="Edit YAML descriptions")
+graphics_subparser = subparsers.add_parser("plot", help="Plot fluxes and HLMs")
+graphics_subparser.add_argument('yaml_file', help="Path to YAML file")
+graphics_subparser.add_argument('equilibrium', help="Name of equilibrium inside YAML")
+graphics_subparser.add_argument('hlm', nargs="?", help="Name of HLM inside YAML. Optional")
+graphics_subparser.add_argument('--out-dir', help='Specify output directory. Default CWD.', type=str)
+graphics_subparser.add_argument('--out-name', help="Output file base name.", type=str)
+
+print_subparser = subparsers.add_parser('print', help="Print the names of the blocks in YAML file")
+print_subparser.add_argument('yaml_file', help="Path to YAML file")
+
+# edit_subparser = subparsers.add_parser('edit', help='Edit YAML descriptions')
 
 args = parser.parse_args()
-
-import os
-import sys
-
+command = args.command
 if args.yaml_file is None:
-    print(f"Specify path to a YAML file! Exiting.")
+    pprint('ERROR: Specify path to a YAML file!')
     sys.exit(1)
-
-if not os.access(args.yaml_file, os.F_OK):
-    print(f"File {args.yaml_file} does not exist! Exiting.")
-    sys.exit(1)
-if not os.access(args.yaml_file, os.R_OK):
-    print(f"File {args.yaml_file} is not readable! Exiting.")
-    sys.exit(1)
-
-
-# See if command is specified
-
-# Load the YAML file
-import l2g.workflow
-
-print(f"Path to yaml configuration file: {os.path.abspath(args.yaml_file)}")
-with open(args.yaml_file, 'r') as f:
-    yaml_text = f.read()
-
 
 import l2g
-l2g.addStreamHandler()
-l2g.enableLogging()
-if args.debug:
-    l2g.enableDebugging()
-list_of_targets, list_of_equilibriums, list_of_hlms = l2g.workflow.load_yaml_configuration(yaml_text)
 
-# Quickly done commands:
-if args.command == "print":
-    print("Geometries:")
-    for _ in list_of_targets:
-        print(f'    {_.data["name"]}')
-    print("Equilibriums:")
-    for _ in list_of_equilibriums:
-        print(f'    {_.data["name"]}')
-    print("HLMs:")
-    for _ in list_of_hlms:
-        print(f'    {_.data["name"]}')
+if args.debug:
+    l2g.addStreamHandler()
+    l2g.enableLogging()
+    l2g.enableDebugging()
+
+if command == "check":
+    try:
+        isOk = check_yaml(args.yaml_file)
+    except Exception as e:
+        isOk = False
+    if isOk:
+        pprint("Check ok!")
+    else:
+        pprint("Check kO!")
     sys.exit(0)
 
-if args.command == "run":
-    output_directory = ""
+# Parse the YAML file.
+geometries, equilibriums, hlms = load_yaml(args.yaml_file)
 
-    # See the environment variable, for instance for L2G_OUTPUT_DIRECTORY
-    if "L2G_OUTPUT_DIRECTORY" in os.environ:
-        output_directory = os.environ["L2G_OUTPUT_DIRECTORY"]
+if command == "print":
+    pprint("Geometries:")
+    for block_name in geometries:
+        pprint(f'\t{block_name}')
+    pprint("Equilibriums:")
+    for block_name in equilibriums:
+        pprint(f'\t{block_name}')
+    pprint("HLMs")
+    for block_name in hlms:
+        pprint(f'\t{block_name}')
+    sys.exit(0)
 
+equilibrium = args.equilibrium
+hlm = args.hlm
+output_directory = args.out_dir
+
+EQUILI_D = equilibriums[equilibrium]
+
+if not (HLM_D:=hlms.get(hlm)):
+    HLM_D = None
+
+if command == "plot":
+    kwargs = {}
+    if args.out_name:
+        kwargs["file_base_name"] = args.out_name
     if args.out_dir:
-        output_directory = args.out_dir
+        kwargs["output_directory"] = args.out_dir
+    create_graphics(EQUILI_D, HLM_D, **kwargs)
+    sys.exit()
 
-    if output_directory == "":
-        # Finally set it default to CWD, if it is still empty
-        output_directory = os.getcwd()
+import glob
+import l2g.comp
+import l2g.equil
 
-    output_directory = os.path.abspath(output_directory)
-    if not os.path.exists(output_directory):
-        os.makedirs(output_directory)
-    else:
-        if not os.path.isdir(output_directory):
-            print(f"Path for output directory: {output_directory} is not a directory!")
-            sys.exit(1)
-    print(f"Output directory set to: {output_directory}")
-    print("Preparing to run FLT for the following configuration:")
-    print(f"Target geometry: {args.geometry}")
-    print(f"Equilibrium: {args.equilibrium}")
-    print(f"HLM: {args.hlm}")
 
-    # Confirm that the named blocks are indeed in the YAML configuration.
-    geo_obj = None
-    equ_obj = None
-    hlm_obj = None
+geometry = args.geometry
+TARGET_D = geometries[geometry]
 
-    for _ in list_of_targets:
-        if _.data["name"] == args.geometry:
-            geo_obj = _
+if command == "run":
 
-    for _ in list_of_equilibriums:
-        if _.data["name"] == args.equilibrium:
-            equ_obj = _
+    kwargs_of_cases: list[dict] = []
 
-    if args.hlm is not None:
-        for _ in list_of_hlms:
-            if _.data["name"] == args.hlm:
-                hlm_obj = _
+    base_kwargs = {}
+    base_kwargs["output_directory"] = output_directory
+    if args.out_file:
+        # Check if it's med file.
 
-    if geo_obj is None:
-        print(f"Geometry {args.geometry} is not in the YAML file. Exiting!")
-        sys.exit(1)
+        file = args.out_file
+        if not file.lower().endswith(".med"):
+            file += ".med"
 
-    if equ_obj is None:
-        print(f"Equilibrium {args.equilibrium} is not in the YAML file. Exiting!")
-        sys.exit(1)
+        base_kwargs["case_name"] = file
 
-    if args.hlm is not None and hlm_obj is None:
-        print(f"HLM {args.hlm} is not in the YAML file. Exiting!")
-        sys.exit(1)
-
-    case = l2g.workflow.create_case(geo_obj, equ_obj, hlm_obj)
-    case.create_graphics = args.no_graphics
-
-    print("Configuring case for run.")
-    case.prepare()
-
-    print("Checking if output file contains already the FLT data.")
-    case.see_if_results_exists(output_directory=output_directory)
-
-    print("Creating output result file if necessary")
-    case.create_result_file_if_necessary()
-
-    print("Running case")
-    case.main()
-
-    # Check if we do a rotational misalignment
-    if args.rotational_misalignment:
-        print("Running with rotational misalignment. Checking if geometry has")
-        print("information about the axes")
-        rot_mis_dict = geo_obj.data["rotational_misalignment"]
-        if not "vectors" in rot_mis_dict:
-            print(f"No vectors entry in rotational_misalignment!")
-            sys.exit(1)
-        rotational_vectors = rot_mis_dict["vectors"]
-        if not "angles" in rot_mis_dict:
-            print(f"No angles entry in rotational_misalignment!")
-            sys.exit(1)
-        rotational_angles = rot_mis_dict["angles"]
-        # Now that we have everything, we need to prepare the 7 cases.
-        # First case is the normal case that you have, while the other 6 cases
-        # are the rotational cases around it's axes.
-
-        print("Now running for different rotations")
-
-        # In total there should be 2 * Number of axes of rotations performed.
-        N = len(rotational_vectors) // 2
-
-        # Since we already generated the images, do not generate new images
-        case.create_graphics = False
-        orig_mesh = case.mesh_obj
-        output_file_base_name = case.case_name
-        import numpy as np
-        for index in range(N):
-            for angle in rotational_angles:
-                for j in range(2):
-                    # Iterate for each rotation. Twice.
-                    p1 = np.array(rotational_vectors[index * 2])
-                    p2 = np.array(rotational_vectors[index * 2 + 1])
-                    angle = (2 * j - 1) * angle
-                    print(f"Rotating for {angle} degrees")
-                    # Change the name
-                    output_file_name = f"{output_file_base_name}_rot{2*index+j}_{angle:.2f}_degree.med"
-                    case.mesh_obj = orig_mesh.rotateMesh(p1, p2, angle)
-                    # First we need to delete the old target mesh in the Embree
-                    # object.
-
-                    target_geom_id = -1
-                    for pair in case.embree_shadow_geom_ids:
-                        if pair[1] == geo_obj.data["target_mesh"]:
-                            target_geom_id = pair[0]
-                            case.embree_shadow_geom_ids.remove(pair)
-                            break
-                    if target_geom_id != -1:
-                        print("Removing target mesh from embree (self-shadowing)")
-                        print("In order to load the rotated mesh")
-                        print(f"Geom ID removed {target_geom_id}")
-                        case.flt_obj.embree_obj.deleteMesh(target_geom_id)
-                    print("Now loading the rotated mesh into shadow")
-                    points, cells = case.mesh_obj.getMeshData()
-                    case.flt_obj.setTargetData(points, cells)
-                    new_geom_id = case.flt_obj.embree_obj.commitMesh(
-                        case.flt_obj.target_vertices * case.flt_obj.parameters.target_to_m,
-                        case.flt_obj.target_triangles)
-                    print(f"Geom_id of target mesh in self-shadowing is {new_geom_id}")
-                    case.embree_shadow_geom_ids.append((new_geom_id, geo_obj.data["target_mesh"]))
-
-                    # case.reset_flt_obj()
-                    # case.load_target_mesh()
-                    # case.load_shadow_meshes()
-                    # case.set_flt_objs()
-
-                    case.see_if_results_exists(output_directory=output_directory,
-                        file_name=output_file_name)
-                    # Change the case name, so that the HLM data and everythin else
-                    # get's computed only once, but change the result file path.
-                    case.result_file_path = os.path.join(output_directory, output_file_name)
-                    case.case_name = output_file_base_name
-                    case.create_result_file_if_necessary()
-                    print("Running case")
-                    case.main()
-                    print("Done")
 
     if args.longwave_misalignment:
-        # In this case we have to load the whole case again, with the meshes,
-        # since we are moving *all* meshes along a vector.
-        if "longwave_misalignment" not in geo_obj.data:
-            print("No longwave_misalignment entry in yaml file! Stopping")
-            sys.exit(1)
+        # See if in the TARGET_D there is longwave_misalignment block
+        if "longwave_misalignment" in TARGET_D:
+            lw_vectors = TARGET_D["longwave_misalignment"]["vectors"]
+            lw_lengths = TARGET_D["longwave_misalignment"]["lengths"]
+            if len(lw_vectors) != len(lw_lengths):
+                pprint("ERROR: In longwave_misalignment dictionary mismatch size of vectors and lengths!")
+                sys.exit(1)
 
-        lw_mis_dict = geo_obj.data["longwave_misalignment"]
-        # Now get the vectors
-        if "vectors" not in lw_mis_dict:
-            print("No vectors entry in longwave_misalignment! Stopping")
-            sys.exit(1)
-        longwave_vectors = lw_mis_dict["vectors"]
+            for i in range(len(lw_vectors)):
+                case_name = f'{TARGET_D["name"]}_{EQUILI_D["name"]}_lw_{i}_length_{lw_lengths[i]}'
+                kwargs = base_kwargs.copy()
+                kwargs["longwave_vector"] = lw_vectors[i]
+                kwargs["longwave_length"] = lw_lengths[i]
+                kwargs["longwave_misalignment"] = True
+                kwargs_of_cases.append(kwargs)
+                # run_case(TARGET_D, EQUILI_D, HLM_D, **kwargs)
+    else:
+        kwargs_of_cases.append(base_kwargs.copy())
 
-        if "lengths" not in lw_mis_dict:
-            print("No lengths entry in longwave_misalignment! Stopping")
-            sys.exit(1)
-        longwave_lengths = lw_mis_dict["lengths"]
 
-        # Now we loop by vector and then by lengths
-        import numpy as np
-        output_file_base_name = case.case_name
-        for i, lw_vector in enumerate(longwave_vectors):
-            for lw_length in longwave_lengths:
-                print("Running case for longwave misalignment with directional vector:")
-                print(lw_vector)
-                print(f"With the length: {lw_length} mm.")
+    for set_of_kwargs in kwargs_of_cases:
+        run_case(TARGET_D, EQUILI_D, HLM_D, **set_of_kwargs)
 
-                output_med_name = f"{output_file_base_name}_lw_{i}_{lw_length}_mm.med"
-                # Create a new case!
-                hlm_obj.data["longwave_misaligment_applied"] = True
-                hlm_obj.data["longwave_l"] = lw_length * 1e-3
-                case = l2g.workflow.create_case(geo_obj, equ_obj, hlm_obj)
-                case.create_graphics = False
-
-                case.longwave_misalignment = True
-                # Add the vector.
-                case.longwave_vector = list(np.array(lw_vector) * lw_length)
-
-                print("Configuring case for run for longwave misalignment.")
-                case.prepare()
-
-                print("Checking if output file contains already the FLT data.")
-                case.see_if_results_exists(output_directory=output_directory,
-                    file_name=output_med_name)
-                # Change the case name, so that the HLM data and everythin else
-                # get's computed only once, but change the result file path.
-                case.result_file_path = os.path.join(output_directory, output_med_name)
-                case.case_name = output_file_base_name
-                case.create_result_file_if_necessary()
-
-                print("Running case")
-                case.main()
-
-        pass
-    print(f"Elapsed total time: {time.time() - start:.2f} seconds.")
-    sys.exit(0)
+print(f"Done running flat. Elapsed time {time.time() - start}")
+sys.exit(0)
