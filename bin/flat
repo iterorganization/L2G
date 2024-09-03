@@ -1108,6 +1108,15 @@ Running Gregor Simič's    FFFFf   L        A   A        T
 print(intro)
 
 import sys
+# Check if first argument is a yaml.file. Then try to provide compatibility
+# shuffle.
+if len(sys.argv) > 2 and sys.argv[1].lower().endswith("yaml"):
+    # Let's see if we shuffle the arguments if we can maintain backwards
+    # compatibility with previous yaml file.
+    sys_args = sys.argv.copy()
+    sys_args[1], sys_args[2] = sys_args[2], sys_args[1]
+else:
+    sys_args = sys.argv
 
 import time
 start = time.time()
@@ -1162,7 +1171,7 @@ print_subparser.add_argument('yaml_file', help="Path to YAML file")
 
 # edit_subparser = subparsers.add_parser('edit', help='Edit YAML descriptions')
 
-args = parser.parse_args()
+args = parser.parse_args(sys_args[1:])
 command = args.command
 if args.yaml_file is None:
     pprint('ERROR: Specify path to a YAML file!')
