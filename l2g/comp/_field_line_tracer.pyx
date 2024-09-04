@@ -763,7 +763,7 @@ cdef class FieldLineTracer:
         # Using the stored LCFS contour in the diagnostic class we find the
         # shortest path and use it as radial and vertical displacement.
 
-        point = np.array([elr_min, elz_min])
+        point = [elr_min, elz_min]
 
         # Calculate the distance**2 from the closest element to the closest
         # point on the LCFS contour.
