@@ -544,7 +544,7 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
                 # Let's see if the times are almost the same.
                 pprint("INFO: Same number of times. Now checking if they are same.")
                 for i in range(len(equil_obj._times)):
-                    if np.isclose(iterations[i][0], equil_obj._times[i]):
+                    if np.isclose(iterations[i][2], equil_obj._times[i]):
                         continue
                     run_flt = True
                     break
@@ -662,11 +662,11 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
 
                 flt_obj.applyParameters()
                 flt_obj.loadEq()
+                pprint(f"INFO: Eq type: {flt_obj.eq.getType()}. Boundary {flt_obj.eq.getBoundaryFluxValue()}")
 
 
                 # Process the data on the data
                 flt_obj.processMagneticData()
-
 
                 # Check if we have to aglign the LCFS
                 if flt_obj.eq.getType() == "lim" and align_lcfs:

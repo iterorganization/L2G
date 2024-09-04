@@ -34,6 +34,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         *.yaml) # L2G case file
             CONF_FILE=$1
+            flatopts+=("$key")
             shift
             ;;
         *) # Pass them to flat
@@ -86,4 +87,4 @@ if [ -z "${CPUS_PER_TASK}" ]; then
     exit 1
 fi
 # Now run the command
-${SLURM_COMMAND} --partition=${PARTITION_NAME} --cpus-per-task=${CPUS_PER_TASK} --nodes=1 ${SCRIPTPATH}/FLAT.sbatch "${CONF_FILE}" "${flatopts[@]}"
+${SLURM_COMMAND} --partition=${PARTITION_NAME} --cpus-per-task=${CPUS_PER_TASK} --nodes=1 ${SCRIPTPATH}/FLAT.sbatch "${flatopts[@]}"

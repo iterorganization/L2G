@@ -114,6 +114,7 @@ cdef class FieldLineTracer:
     # cdef public object point_results
     # cdef public object mesh_results
     cdef public object results
+    cdef public object recalculate_magnetic_data
     cdef public object fl_results
     cdef public object owl_conlen_data
     cdef public object target_vertices
@@ -138,6 +139,7 @@ cdef class FieldLineTracer:
         # self.point_results: l2g.comp.L2GPointResults = l2g.comp.L2GPointResults() # Holds FLT result on points
         # self.mesh_results:  l2g.comp.L2GResults =      l2g.comp.L2GResults() # Holds FLT result on mesh
         self.results: l2g.comp.L2GResults = l2g.comp.L2GResults()
+        self.recalculate_magnetic_data: bool = True
         self.fl_results:    l2g.comp.L2GFLs =          l2g.comp.L2GFLs() # Holds fieldlines
 
         self.owl_conlen_data: np.ndarray = None
@@ -325,6 +327,7 @@ cdef class FieldLineTracer:
         self.eq.setEquilibrium(equilibrium)
         self.parameters.plasma_r_displ = 0.0
         self.parameters.plasma_z_displ = 0.0
+        self.recalculate_magnetic_data = True
 
     def applyParameters(self) -> None:
         """Propagates the parameters to the external FLT C++ code. Run this
@@ -406,11 +409,12 @@ cdef class FieldLineTracer:
             Py_ssize_t n_points = self.c_points.size() // 3
 
         n_points = self.c_points.size() // 3
-        if not results.empty:
-            log.info("Data was already processed.")
+        if not self.recalculate_magnetic_data:
+            log.info("Data was already calculated.")
             return
+        self.recalculate_magnetic_data = False
 
-        # Allocate the arrays
+        # # Allocate the arrays
         log.info("Allocating arrays")
         results.reset(n_points)
         log.info("Done")
@@ -423,10 +427,10 @@ cdef class FieldLineTracer:
             double [:] flux = results.flux
             vector[double] buff1
             int vacuumFPolSign
-            Py_ssize_t i, i3
+            int i, i3
 
-        self.c_direction.clear()
-        self.c_direction.resize(n_points)
+        if self.c_direction.size() != n_points:
+            self.c_direction.resize(n_points)
         vacuumFPolSign = valSign(self.c_FLT.getVacuumFPOL())
         buff1.resize(3)
         log.info("Processing points")
@@ -470,7 +474,7 @@ cdef class FieldLineTracer:
             double [:] Bdot = results.Bdot
             vector[double] buff2
         buff2.resize(3)
-
+        log.info("Obtaining direction for triangles.")
         for i in range(n_points):
             i3 = 3*i
 
@@ -757,7 +761,7 @@ cdef class FieldLineTracer:
         elr_min = self.c_points[3 * el_min]
         elz_min = self.c_points[3 * el_min + 1]
         # psi_min = self.results.flux[el_min]
-        log.info(f"Closest element {el_min}: R={elr_min}")
+        log.info(f"Closest element {el_min}: R={elr_min} Z={elz_min}")
         log.info(f"Closest distance from boundary: {dr_min}")
 
         # Using the stored LCFS contour in the diagnostic class we find the
@@ -769,7 +773,10 @@ cdef class FieldLineTracer:
         # point on the LCFS contour.
 
         displ = self.eq.alignLcfsToPoint(point)
-
+        if displ is None:
+            log.info(f"Calculated displ is None. Stopping.")
+            return
+        log.info(f"Calculated displ = {displ}")
 
         prev_r_displ = self.parameters.plasma_r_displ
         prev_z_displ = self.parameters.plasma_z_displ
@@ -787,6 +794,8 @@ cdef class FieldLineTracer:
         # never aligning the mesh.
         self.eq.setDisplacement(prev_r_displ, prev_z_displ)
         self.loadEq()
+        # Force recalculation of data!
+        self.recalculate_magnetic_data = True
         self.processMagneticData()
 
     def calculateDrsep(self) -> None:

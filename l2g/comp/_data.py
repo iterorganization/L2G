@@ -52,7 +52,9 @@ class L2GResults:
         "drsep2",   # Provided by FieldLineTracer
         "geom_hit_ids", # Provided by External C++
         "prim_hit_ids", # Provided by External C++
-        "empty"]
+        "empty",
+        "recalculate" # Used by processMagneticData in FieldlineTracer.
+        ]
 
     arrays_to_dump = [
         "normals",
@@ -111,6 +113,7 @@ class L2GResults:
                 self.prim_hit_ids:  Optional[np.ndarray] = np.empty(N, dtype=np.int32)
 
         self.empty = True
+        self.recalculate = True
 
 
     def generate_vtk_object(self):
