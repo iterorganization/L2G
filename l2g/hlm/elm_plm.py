@@ -97,6 +97,41 @@ def tau_ie() -> float:
     return c
 
 class ELM_PLM(object):
+    """This is the implementation of the ELM Parallel Loss Model to obtain
+    heat loads of ELM-s during a flat-top diverted plasma.
+
+
+    Usage
+
+    .. code-block: python
+
+       drsep = ... # Array of X-points for the Outer Wall connection length
+       conlen = ... # Array of the connection lengths for the outer-midplane
+                    # outer divertor target.
+
+
+       obj = ELM_PLM(drsep, conlen)
+
+       # First calculate the parallel loss profiles
+       obj.calculate_loss_profiles()
+       # Then obtain the heat load profiles
+       obj.calculate_heat_load_profile()
+
+       # Check the functions signatures to see the input arguments.
+
+
+       # Then we can use the created heat load profiles as
+       obj.r # Points on outer midplane where the qpar is defined
+       obj.qpar # Values of heat load profiles as W/m^2
+
+       # Then if you want to plot
+       import matplotlib.pyplot as plt
+       f, axs = obj.create_graphs()
+       plt.show()
+       f, axs = obj.create_elm_plm_graphs()
+       plt.show()
+
+    """
     def __init__(self, drsep, conlen):
         self.drsep = drsep
         self.conlen = conlen
