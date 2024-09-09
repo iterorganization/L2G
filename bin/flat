@@ -365,40 +365,13 @@ def check_if_in_slurm_job(*flt_objs):
             except:
                 pprint("INFO: Failed to obtain a number from SLURM_CPUS_PER_TASK")
 
-
 def get_hlm(d: dict, index: int) -> dict:
-
-    max_n = 1
-    for key in d:
-        if key in ["shadow_meshes", "parameters"]:
-            continue
-
-        if isinstance(d[key], list):
-            max_n = max(max_n, len(d[key]))
-
-    if max_n == 1:
-        return d
-
-    t = {}
-
-    for key in d:
-        if key in ["name", "hlm_type", "shadow_meshes", "parameters"]:
-            t[key] = d[key]
-        if isinstance(d[key], list):
-            # Do we have to expand it?
-            n_key = len(d[key])
-            if n_key < max_n:
-                t[key] = d[key] + [d[key][-1] for _ in range(max_n - n_key)]
-            else:
-                t[key] = d[key]
-        else:
-            t[key] = [d[key] for _ in range(max_n)]
     out = {}
     for key in d:
-        if key in ["name", "hlm_type", "shadow_meshes", "parameters"]:
-            out[key] = d[key]
+        if isinstance(d[key], list):
+            out[key] = d[key][min(index, len(d[key]))]
         else:
-            out[key] = d[key][index]
+            out[key] = d[key]
     return out
 
 def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
@@ -517,6 +490,14 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
             else:
                 setattr(flt_obj.options, option, geod["options"][option])
 
+    # See if there are fl_ids to get
+    if "fl_ids" in geod:
+        fl_ids = geod["fl_ids"]
+        get_fls = True
+    else:
+        get_fls = False
+        fl_ids = []
+
     pprint(f"INFO: Dumping loaded parameters: {flt_obj.parameters.dump()}")
     pprint(f"INFO: Dumping loaded options: {flt_obj.options.dump()}")
 
@@ -555,7 +536,7 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
     pprint(f"INFO: Output directory set: {output_directory}")
     pprint(f"INFO: Name of result FLT MED file: {result_file_path}")
 
-    if run_flt:
+    if run_flt or get_fls:
         # First the target mesh
         target_mesh = l2g.mesh.Mesh(geod["target_mesh"])
         pprint(f"INFO: Reading target mesh data from: {geod['target_mesh']}")
@@ -590,7 +571,7 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
 
         pprint("INFO: Loading shadow meshes to Embree.")
         for file in shadow_mesh_files:
-
+            pprint(f"INFO: Loading {file}")
             m = l2g.mesh.Mesh(file)
             m.readMeshData()
             if longwave_misalignment_flag:
@@ -632,176 +613,204 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
         # to load the results from the result_file.
 
     # First let's see if there is actually nothing to do...
-    if not (run_flt or apply_heat_loads):
+    if not (run_flt or apply_heat_loads or get_fls):
         pprint("INFO: Actually... there is nothing to do?")
         pprint(f"INFO: Do we need to get FLT data? {run_flt}")
         pprint(f"INFO: Do we have an HLM to apply? {apply_heat_loads}")
+        pprint(f"INFO: Do we have to get FLs? {get_fls}")
         pprint("INFO: Stopping...")
         return
 
-    if run_flt:
-        pprint("INFO: Obtaining FLT data!")
+    N = len(equil_obj)
+    for index, associated_time, equilibrium in equil_obj:
+        pprint(f"INFO: Processing {index+1} of {N} equilibriums. Time={associated_time}")
 
-        N = len(equil_obj)
-        for index, associated_time, equilibrium in equil_obj:
-            pprint(f"INFO: Processing {index+1} of {N} equilibriums. Time={associated_time}")
+        result_file.setIndex(index)
+        result_file.setIndex(associated_time)
 
+        if run_flt or get_fls:
+            pprint("INFO: Loading equilibrium data")
+            if CUSTOM_WALL_LIMITER:
+                equilibrium.wall_contour_r = np.array(CUSTOM_WALL_LIMITER_R)
+                equilibrium.wall_contour_z = np.array(CUSTOM_WALL_LIMITER_Z)
+
+            # Propagate settings and data to the C++ library
+            flt_obj.setEquilibrium(equilibrium)
+
+            # Analyze the equilibrium
+            flt_obj.evaluateEq()
+
+            flt_obj.applyParameters()
+            flt_obj.loadEq()
+            pprint(f"INFO: Eq type: {flt_obj.eq.getType()}. Boundary {flt_obj.eq.getBoundaryFluxValue()}")
+            # Process the data on the data
+            flt_obj.processMagneticData()
+
+            # Check if we have to aglign the LCFS
+            if flt_obj.eq.getType() == "lim" and align_lcfs:
+                pprint("INFO: Aligning limiter plasma with target geometry!")
+                flt_obj.alignGeometryWithLCFS()
+
+
+        if run_flt:
+            pprint("INFO: Running FLT!")
+            flt_obj.runFLT()
+            pprint("INFO: FLT done!")
+            flt_obj.calculateDrsep()
+
+            # Save the data to resulting med file
             result_file.setIndex(index)
-            result_file.setIndex(associated_time)
+            result_file.setTime(associated_time)
 
-            if run_flt:
-                if CUSTOM_WALL_LIMITER:
-                    equilibrium.wall_contour_r = np.array(CUSTOM_WALL_LIMITER_R)
-                    equilibrium.wall_contour_z = np.array(CUSTOM_WALL_LIMITER_Z)
+            if index == 0:
+                # Save only once the baryCent and normals. That is stationary
+                # data
+                result_file.addField(array_name="normals",
+                                     array=flt_obj.normals,
+                                     info_on_components=['x', 'y', 'z'])
 
-                # Propagate settings and data to the C++ library
-                flt_obj.setEquilibrium(equilibrium)
+            pprint(f"INFO: Writing results to {result_file_name}")
+            # The main FLT result field
+            result_file.addField(array_name="conlen",
+                                 array=flt_obj.results.conlen * 1e3)
+            result_file.addField(array_name="drsep",
+                                 array=flt_obj.results.drsep * 1e3)
+            result_file.addField(array_name="drsep2",
+                                 array=flt_obj.results.drsep2 * 1e3)
 
-                # Analyze the equilibrium
-                flt_obj.evaluateEq()
+            result_file.addField(array_name="flux", array=flt_obj.results.flux)
 
-                flt_obj.applyParameters()
-                flt_obj.loadEq()
-                pprint(f"INFO: Eq type: {flt_obj.eq.getType()}. Boundary {flt_obj.eq.getBoundaryFluxValue()}")
+            # Vector arrays
+            result_file.addField(array_name="BVec", array=flt_obj.results.BVec,
+                                 info_on_components=["x", "y", "z"])
+            result_file.addField(array_name="BVecCyln",
+                                 array=flt_obj.results.BVecCyln,
+                                 info_on_components=['Pol', 'Tor'])
+            result_file.addField(array_name="Bdot", array=flt_obj.results.Bdot)
+            array = np.rad2deg(flt_obj.results.angle)
+            array = np.where(array > 90.0, array - 90.0, 90.0 - array)
+            result_file.addField(array_name="angle", array=array)
+            result_file.addField(array_name="mask", array=flt_obj.results.mask)
+            result_file.addField(array_name="direction", array=flt_obj.results.direction)
+            result_file.addField(array_name="geom_hit_ids", array=flt_obj.results.geom_hit_ids)
+            result_file.addField(array_name="prim_hit_ids", array=flt_obj.results.prim_hit_ids)
+            result_file.writeFields()
+            pprint("INFO: Done writing")
+        else:
+            # Load the FLT data
+            pprint(f"INFO: Loading FLT data from {result_file_path}")
+            l2g.mesh.load_flt_results_from_mesh(flt_obj.results,
+                                                result_file)
+            pprint("INFO: Done")
 
-
-                # Process the data on the data
-                flt_obj.processMagneticData()
-
-                # Check if we have to aglign the LCFS
-                if flt_obj.eq.getType() == "lim" and align_lcfs:
-                    pprint("INFO: Aligning limiter plasma with target geometry!")
-                    flt_obj.alignGeometryWithLCFS()
-
-                pprint("INFO: Running FLT!")
-                flt_obj.runFLT()
-                pprint("INFO: FLT done!")
-                flt_obj.calculateDrsep()
-
-                # Save the data to resulting med file
-                result_file.setIndex(index)
-                result_file.setTime(associated_time)
-
-                if index == 0:
-                    # Save only once the baryCent and normals. That is stationary
-                    # data
-                    result_file.addField(array_name="normals",
-                                         array=flt_obj.normals,
-                                         info_on_components=['x', 'y', 'z'])
-
-                pprint(f"INFO: Writing results to {result_file_name}")
-                # The main FLT result field
-                result_file.addField(array_name="conlen",
-                                     array=flt_obj.results.conlen * 1e3)
-                result_file.addField(array_name="drsep",
-                                     array=flt_obj.results.drsep * 1e3)
-                result_file.addField(array_name="drsep2",
-                                     array=flt_obj.results.drsep2 * 1e3)
-
-                result_file.addField(array_name="flux", array=flt_obj.results.flux)
-
-                # Vector arrays
-                result_file.addField(array_name="BVec", array=flt_obj.results.BVec,
-                                     info_on_components=["x", "y", "z"])
-                result_file.addField(array_name="BVecCyln",
-                                     array=flt_obj.results.BVecCyln,
-                                     info_on_components=['Pol', 'Tor'])
-                result_file.addField(array_name="Bdot", array=flt_obj.results.Bdot)
-                array = np.rad2deg(flt_obj.results.angle)
-                array = np.where(array > 90.0, array - 90.0, 90.0 - array)
-                result_file.addField(array_name="angle", array=array)
-                result_file.addField(array_name="mask", array=flt_obj.results.mask)
-                result_file.addField(array_name="direction", array=flt_obj.results.direction)
-                result_file.addField(array_name="geom_hit_ids", array=flt_obj.results.geom_hit_ids)
-                result_file.addField(array_name="prim_hit_ids", array=flt_obj.results.prim_hit_ids)
-                result_file.writeFields()
-                pprint("INFO: Done writing")
+        if get_fls:
+            # Check if it is only a list of integers
+            pprint("INFO: Obtaining field lines")
+            if all(isinstance(_, int) for _ in fl_ids):
+                flt_obj.fl_ids = fl_ids
+                flt_obj.getFL()
+                # Now save the data
+                file_path = os.path.join(output_directory,
+                                         f"{case_name}_{index}.vtk")
+                pprint(f"INFO: Saving fl to {file_path}")
+                l2g.mesh.save_results_to_vtk(flt_obj.fl_results, file_path)
             else:
-                # Load the FLT data
-                pprint(f"INFO: Loading FLT data from {result_file_path}")
-                l2g.mesh.load_flt_results_from_mesh(flt_obj.results,
-                                                    result_file)
-                pprint("INFO: Done")
+                for group_index, group in enumerate(fl_ids):
+                    flt_obj.fl_ids = group
+                    flt_obj.getFL()
+                    file_path = os.path.join(output_directory,
+                        f"{case_name}_{group_index}_{index}.vtk")
+                    pprint(f"INFO: Saving fl to {file_path}")
+                    l2g.mesh.save_results_to_vtk(flt_obj.fl_results, file_path)
+            pprint("INFO: Done")
+        if apply_heat_loads:
+            flt_obj.hlm_params.load(get_hlm(hlmd, index))
+            hlm_type = flt_obj.hlm_params.hlm_type
+            pprint(f"INFO: Applying HLM type: {hlm_type}")
 
-            if apply_heat_loads:
-                flt_obj.hlm_params.load(get_hlm(hlmd, index))
+            if hlm_type == "elm":
+                # Get the OWL connection length profile
+                pprint("INFO: Obtaining outer midplane connection graph")
+                _drsep, _conlen_down, _conlen_up = l2g.equil.getOwlConlensGraph(flt_obj.eq)
 
-                hlm_type = flt_obj.hlm_params.hlm_type
-                pprint(f"INFO: Applying HLM type: {hlm_type}")
-                if hlm_type == "elm":
-                    # Get the OWL connection length profile
-                    pprint("INFO: Obtaining outer midplane connection graph")
-                    _drsep, _conlen_down, _conlen_up = l2g.equil.getOwlConlensGraph(flt_obj.eq)
+                # Save the data
 
-                    # Save the data
+                # Obtain the ELM PLM parallel loss model.
+                import l2g.hlm.elm_plm
 
-                    # Obtain the ELM PLM parallel loss model.
-                    import l2g.hlm.elm_plm
+                obj = l2g.hlm.elm_plm.ELM_PLM(_drsep, _conlen_down)
 
-                    obj = l2g.hlm.elm_plm.ELM_PLM(_drsep, _conlen_down)
+                # Calculate the loss profiles
+                if not (d := hlmd.get("loss_parameters")):
+                    d = {}
+                if d:
+                    pprint(f"INFO: PLM loss parameters: {d}")
+                pprint("INFO: Obtaining PLM loss profiles")
+                obj.calculate_loss_profiles(**d)
+                # Final drsep
+                flt_obj.hlm_params.points = obj.r
+                flt_obj.hlm_params.additional_profiles = []
+                flt_obj.hlm_params.additional_profiles.append(obj.Te)
+                flt_obj.hlm_params.additional_profiles.append(obj.Ti)
 
-                    # Calculate the loss profiles
-                    if not (d := hlmd.get("loss_parameters")):
-                        d = {}
-                    if d:
-                        pprint(f"INFO: PLM loss parameters: {d}")
-                    pprint("INFO: Obtaining PLM loss profiles")
-                    obj.calculate_loss_profiles(**d)
-                    # Final drsep
-                    flt_obj.hlm_params.points = obj.r
-                    flt_obj.hlm_params.additional_profiles = []
-                    flt_obj.hlm_params.additional_profiles.append(obj.Te)
-                    flt_obj.hlm_params.additional_profiles.append(obj.Ti)
+                # Now calculate the heat load profile
+                if not (d := hlmd.get("elm_parameters")):
+                    d = {}
+                if d:
+                    pprint(f"INFO: ELM HLM parameters: {d}")
+                pprint("INFO: Obtaining ELM heat load profiles")
+                obj.calculate_heat_load_profile(**d)
 
-                    # Now calculate the heat load profile
-                    if not (d := hlmd.get("elm_parameters")):
-                        d = {}
-                    if d:
-                        pprint(f"INFO: ELM HLM parameters: {d}")
-                    pprint("INFO: Obtaining ELM heat load profiles")
-                    obj.calculate_heat_load_profile(**d)
+                flt_obj.hlm_params.profile = obj.qpar
+            if hlm_type == "custom":
+                # Load the data
+                _file = hlmd["profile_files"][index]
+                print(f"INFO: Loading custom profile: {_file}")
+                _data = np.loadtxt(_file)
+                if _data.shape[0] == 2:
+                    flt_obj.hlm_params.points = _data[0]
+                    flt_obj.hlm_params.profile = _data[1]
+                else:
+                    flt_obj.hlm_params.points = _data[:, 0]
+                    flt_obj.hlm_params.profile = _data[:, 1]
 
-                    flt_obj.hlm_params.profile = obj.qpar
+            flt_obj.applyHLM()
 
-                flt_obj.applyHLM()
+            pprint("INFO: Writing HLM arrays to file")
+            # Slashes "/" are not allowed in the name of a field. They have
+            # to be escaped!
+            result_file.addField(array=flt_obj.hlm_results.flux_expansion,
+                                 array_name="Total flux expansion")
+            result_file.addField(array=flt_obj.hlm_results.q_inc,
+                array_name=r"q_perp")
+            result_file.addField(array=flt_obj.hlm_results.q_par,
+                array_name=r"q_para")
 
-                pprint("INFO: Writing HLM arrays to file")
-                # Slashes "/" are not allowed in the name of a field. They have
-                # to be escaped!
-                result_file.addField(array=flt_obj.hlm_results.flux_expansion,
-                                     array_name="Total flux expansion")
-                result_file.addField(array=flt_obj.hlm_results.q_inc,
-                    array_name=r"q_perp")
-                result_file.addField(array=flt_obj.hlm_results.q_par,
-                    array_name=r"q_para")
+            if hlm_type == "elm":
+                # Writing additional arrays
+                # Take arrays from additional_arrays variable.
+                result_file.addField(
+                    array=flt_obj.hlm_results.additional_arrays[0],
+                    array_name=r"q_para ELM",
+                    info_on_components=["W/m^2"])
+                result_file.addField(
+                    array=flt_obj.hlm_results.additional_arrays[1],
+                    array_name=r"q_para inter-ELM")
+                result_file.addField(
+                    array=flt_obj.hlm_results.additional_arrays[2],
+                    array_name=r"T_e [eV]")
+                result_file.addField(
+                    array=flt_obj.hlm_results.additional_arrays[3],
+                    array_name=r"T_i [eV]")
+                result_file.addField(
+                    array=flt_obj.hlm_results.additional_arrays[4],
+                    array_name=r"q_perp ELM")
+                result_file.addField(
+                    array=flt_obj.hlm_results.additional_arrays[5],
+                    array_name=r"q_perp inter-ELM")
+            result_file.writeFields()
+            pprint("INFO:Writing done!")
 
-                if hlm_type == "elm":
-                    # Writing additional arrays
-                    # Take arrays from additional_arrays variable.
-                    result_file.addField(
-                        array=flt_obj.hlm_results.additional_arrays[0],
-                        array_name=r"q_para ELM",
-                        info_on_components=["W/m^2"])
-                    result_file.addField(
-                        array=flt_obj.hlm_results.additional_arrays[1],
-                        array_name=r"q_para inter-ELM")
-                    result_file.addField(
-                        array=flt_obj.hlm_results.additional_arrays[2],
-                        array_name=r"T_e [eV]")
-                    result_file.addField(
-                        array=flt_obj.hlm_results.additional_arrays[3],
-                        array_name=r"T_i [eV]")
-                    result_file.addField(
-                        array=flt_obj.hlm_results.additional_arrays[4],
-                        array_name=r"q_perp ELM")
-                    result_file.addField(
-                        array=flt_obj.hlm_results.additional_arrays[5],
-                        array_name=r"q_perp inter-ELM")
-                result_file.writeFields()
-                pprint("INFO:Writing done!")
-
-def apply_head_loads(geod: dict, eqid: dict, hlmd: dict, **kwargs):
-    pass
 
 def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
     import os
