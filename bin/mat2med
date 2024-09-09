@@ -1,4 +1,4 @@
-#!/home/ITER/simicg/smiter-9.10.0/INSTALL/Python/bin/python3
+#!/usr/bin/python3
 # Converts fields of a MED file to MATLAB format.
 
 from scipy.io import loadmat
