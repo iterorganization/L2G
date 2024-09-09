@@ -85,10 +85,9 @@ cdef class EQA:
         BI_DATA c_BI_DATA
         RKF45 *c_rkf45 # For tracing a magnetic surface
         PyBfgs2d c_bfgs
-        bool evaluated
         # object equilibrium
         str plasma_type
-        list o_point, low_x_point, upp_x_point, contact_point, lcfs_points
+        list o_point, low_x_point, upp_x_point, contact_point
         double[:] wall_contour_r, wall_contour_z
         float psi_x, psi_upp_x, psi_lcfs, mag_axis_r, mag_axis_z, r_displ
         float z_displ
@@ -97,6 +96,8 @@ cdef class EQA:
     cdef public:
         object equilibrium
         float psi_grad_sign
+        bool evaluated
+        list lcfs_points
 
 
     def __cinit__(self):
@@ -107,17 +108,13 @@ cdef class EQA:
         self.c_rkf45 = new RKF45()
         self.c_rkf45.set_omp_thread(0)
         self.c_bfgs = PyBfgs2d()
-        log.debug("cinit done")
 
     def __init__(self, equilibrium: Equilibrium = None):
-        log.debug("init")
         self.resetValues()
 
-        log.debug("here")
         if not equilibrium is None:
             self.setEquilibrium(equilibrium)
         self.lcfs_points = []
-        log.debug("init done")
 
     def resetValues(self):
         self.evaluated = False
@@ -461,7 +458,9 @@ cdef class EQA:
             self.o_point = point
             log.debug(f"O point: {self.o_point}")
         else:
-            log.debug("Could not find O point!")
+            log.debug("Could not find O point! Using directly the position from equilibrium data")
+            self.o_point = [self.equilibrium.mag_axis_r,
+                            self.equilibrium.mag_axis_z]
 
         contact_r = 0.0
         contact_z = 0.0

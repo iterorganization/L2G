@@ -123,10 +123,13 @@ class EquilibriumIterator(object):
             time_end = d["time_end"]
 
         times = None
+        import numpy as np
         if "times" in d:
             times = d["times"]
-            if not isinstance(d["times"], list):
-                times = [times]
+            if isinstance(times, np.ndarray):
+                pass
+            elif not isinstance(d["times"], list):
+                times = list(times)
 
         time_samples = None
         if "time_samples" in d:
@@ -151,7 +154,6 @@ class EquilibriumIterator(object):
         # interpolation = imas.imasdef.CLOSEST_SAMPLE
         import imas
         interpolation = imas.imasdef.CLOSEST_INTERP
-        import numpy as np
 
         # New API
         self._ids = imas.DBEntry(backend_id=imas.imasdef.MDSPLUS_BACKEND,
