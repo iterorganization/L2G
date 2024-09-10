@@ -206,21 +206,14 @@ if code != 0:
 
 # Get the times
 summary = entry.get("summary")
+wall = entry.get("wall")
+
 mask = np.logical_and(summary.time >= TIME_START, summary.time <= TIME_END)
 tsteps = summary.time[mask]
 if args.number_of_samples != -1:
     idx = np.round(np.linspace(0, len(tsteps)-1, args.number_of_samples)).astype(int)
     tsteps = tsteps[idx]
 import l2g
-
-d = {
-  "user": USER,
-  "shot": SHOT,
-  "run": RUN,
-  "device": DEVICE,
-  "version": '3',
-  "times": tsteps,
-}
 
 if not os.path.exists(OUTPUT_DIRECTORY):
     print(f"Output directory {OUTPUT_DIRECTORY} does not exist. Creating it")
@@ -231,13 +224,12 @@ from l2g.external.bicubic import PyBicubic
 from l2g.external.rkf45 import PyRKF45FLT
 from l2g.plot._marching_squares import Marching
 from math import sqrt, cos
-base_string = f"shot_{d['shot']}_run_{d['run']}"
-iterator = l2g.equil.EquilibriumIterator()
-iterator.loadIMASEquilibriums(d)
+base_string = f"shot_{SHOT}_run_{RUN}"
 
 DRSEPS = []
 HEAT_LOADS = []
 TIMES = []
+CONLENS = []
 # import l2g
 # l2g.addStreamHandler()
 # l2g.enableDebugging()
@@ -245,8 +237,19 @@ TIMES = []
 import matplotlib.pyplot as plt
 import l2g.external.equilibrium_analysis
 eq = l2g.external.equilibrium_analysis.EQA()
-for index, time, equilibrium in iterator:
+for index, time in enumerate(tsteps):
     print(f"Processing {index}. Time {time}.")
+    equilibrium_ids = entry.get_slice("equilibrium", time, imas.imasdef.CLOSEST_SAMPLE)
+
+    # Obrain the equilibrium. First get it without the helicity correction, so
+    # that we get the sign of the flux gradient.
+    equilibrium = l2g.equil.getEquilibriumFromIMAS(equilibrium_ids.time_slice[0],
+        equilibrium_ids.vacuum_toroidal_field, wall, summary, False)
+    flux_flip_sign = equilibrium.psi_sign
+
+    equilibrium = l2g.equil.getEquilibriumFromIMAS(equilibrium_ids.time_slice[0],
+        equilibrium_ids.vacuum_toroidal_field, wall, summary, True)
+
     eq.setEquilibrium(equilibrium)
     eq.evaluate()
 
@@ -254,7 +257,7 @@ for index, time, equilibrium in iterator:
         print("Failed to evaluate equilibrium! Skipping!")
 
 
-    disruption = iterator._ids.get_slice("disruption", time, imas.imasdef.CLOSEST_SAMPLE)
+    disruption = entry.get_slice("disruption", time, imas.imasdef.CLOSEST_SAMPLE)
 
     total_conductive_power = (disruption.global_quantities.power_ohm - \
         disruption.global_quantities.power_radiated_electrons_impurities)[0]
@@ -263,7 +266,7 @@ for index, time, equilibrium in iterator:
         print("Skipping because total_conductive_power is less than 10W.")
         continue
 
-    fluxes = eq.psi_grad_sign * disruption.profiles_1d[0].grid.psi[:] / (2*np.pi)
+    fluxes = flux_flip_sign * disruption.profiles_1d[0].grid.psi[:] / (2*np.pi)
     psi_boundary = eq.getBoundaryFluxValue()
     mask = fluxes >= psi_boundary
     fluxes = fluxes[mask]
@@ -282,6 +285,7 @@ for index, time, equilibrium in iterator:
         print("Something is wrong with this equilibrium slice. Skipping!")
         continue
     drsep = (fluxes - psi_boundary) / (Rb * Bpm)
+    ppar = disruption.profiles_1d[0].power_density_conductive_losses
 
     # Reverse the array?
     reverse_array = False
@@ -290,13 +294,11 @@ for index, time, equilibrium in iterator:
 
         fluxes = fluxes[::-1]
         drsep = drsep[::-1]
+        ppar = ppar[::-1]
 
     if len(drsep) < 2:
         print("Skipping due to number of functions less than 2.")
         continue
-
-    plt.plot(equilibrium.wall_contour_r, equilibrium.wall_contour_z)
-    plt.axis("equal")
 
     # Get the starting points of the magnetic surface inside the polygon
     rz_points = []
@@ -323,10 +325,6 @@ for index, time, equilibrium in iterator:
     # Get fluxes from the disruption ids
     parallel_conlen = obtain_connection_length(equilibrium, polygon, rz_points)
 
-    ppar = disruption.profiles_1d[0].power_density_conductive_losses
-    if reverse_array:
-        ppar = ppar[::-1]
-
     qpar = ppar[mask] * parallel_conlen * 0.5
 
     # Ppar and Qpar are parallel components. So in order to put it to
@@ -339,7 +337,7 @@ for index, time, equilibrium in iterator:
     # the imas database... so time to normalize... again
     rr = drsep + Rb
     I = 4*np.pi*np.sum(0.5 *(qpar[1:] + qpar[:-1]) * 0.5 * (rr[1:] + rr[:-1]) * np.diff(drsep))
-    print(f"power_dewnsity_conductive_losses Integral = {I}")
+    print(f"power_density_conductive_losses Integral = {I}")
     qpar /= I
 
     # Now multiply it with the power from IMAS
@@ -349,18 +347,27 @@ for index, time, equilibrium in iterator:
     I = 4*np.pi* np.sum(0.5 *(qpar[1:] + qpar[:-1]) * 0.5 * (rr[1:] + rr[:-1]) * np.diff(drsep))
     print(f"I={I}")
 
+    # Cleaning values
+    idx = np.where(qpar==0.0)[0]
+    if idx.size:
+        qpar = qpar[:idx[0]+1]
+        parallel_conlen = parallel_conlen[:idx[0]+1]
+        ppar = ppar[:idx[0]+1]
+        drsep = drsep[:idx[0]+1]
+
     data = np.zeros((2, qpar.shape[0]))
     data[0, :] = drsep
     data[1, :] = qpar
     np.savetxt(f"{base_string}_{time}s_qpar.txt", data)
     data[1, :] = parallel_conlen
     np.savetxt(f"{base_string}_{time}s_conlen.txt", data)
-    data[1, :] = ppar[mask]
+    data[1, :] = ppar
     np.savetxt(f"{base_string}_{time}s_ppar.txt", data)
 
     TIMES.append(time)
     DRSEPS.append(drsep)
     HEAT_LOADS.append(qpar)
+    CONLENS.append(parallel_conlen)
 
 import matplotlib
 def get_jet_cycler(n: int) -> "matplotlib.colors.LinearSegmentedColormap":
