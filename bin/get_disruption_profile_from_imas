@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 description = """Script for obtaining the disruption profiles from the
 Disruption IDS in the IMAS IMAS_DISRUPTIONS database.
@@ -116,6 +116,7 @@ class Polygon(object):
             j = i
         return c
 
+
 def obtain_connection_length(equilibrium: l2g.equil.Equilibrium,
         polygon: "Polygon", rz_points: list[list[float]]):
     bicubic = PyBicubic(equilibrium.grid_r, equilibrium.grid_z, equilibrium.psi)
@@ -123,39 +124,27 @@ def obtain_connection_length(equilibrium: l2g.equil.Equilibrium,
     rkf45_obj.setInterpolator(bicubic)
     rkf45_obj.set_vacuum_fpol(equilibrium.fpol_vacuum)
 
+    def get_fl_length(r: float, z: float, th: float, step: float) -> float:
+        length = 0.0
+        while True:
+            nr, nz, nth = rkf45_obj.run_step(r, z, th, step)
+            if not polygon.checkIfIn(nr, nz, False): # Do not check if on edge
+                break
+
+            curr_l = sqrt(nr*nr + r*r - 2*nr*r*np.cos(nth-th) + (nz - z)*(nz - z))
+            length += curr_l
+            r = nr
+            z = nz
+            th = nth
+        return length
+
     out = np.zeros(len(rz_points))
     for i in range(len(rz_points)):
         length = 0.0
-
-        sr = rz_points[i][0]
-        sz = rz_points[i][1]
-        sth = 0.0
-
-        while True:
-            nr, nz, nth = rkf45_obj.run_step(sr, sz, sth, 0.01)
-            if not polygon.checkIfIn(nr, nz, False): # Do not check if on edge
-                break
-
-            curr_l = sqrt(nr*nr + sr*sr - 2*nr*sr*np.cos(nth-sth) + (nz - sz)*(nz - sz))
-            length += curr_l
-            sr = nr
-            sz = nz
-            sth = nth
-
-        # Now do it also in the opposite direction
-        sr = rz_points[i][0]
-        sz = rz_points[i][1]
-        sth = 0.0
-        while True:
-            nr, nz, nth = rkf45_obj.run_step(sr, sz, sth, -0.01)
-            if not polygon.checkIfIn(nr, nz, False): # Do not check if on edge
-                break
-
-            curr_l = sqrt(nr*nr + sr*sr - 2*nr*sr*np.cos(nth-sth) + (nz - sz)*(nz - sz))
-            length += curr_l
-            sr = nr
-            sz = nz
-            sth = nth
+        for p in rz_points[i]:
+            # Get FL length
+            length += get_fl_length(p[0], p[1], 0.0, 0.01)
+            length += get_fl_length(p[0], p[1], 0.0, -0.01)
         out[i] = length
     return out
 
@@ -305,26 +294,48 @@ for index, time in enumerate(tsteps):
     for flux in fluxes:
         paths, types = marching_obj.getContourPath(flux)
         found = False
+
+
         possible_points = []
         for path in paths:
+            # A Contour can be split into segments by the wall.
+            inside = False
+            first_inside = False
+            _c = 0
+            segment_points = []
             for i in range(len(path[0])):
                 if polygon.checkIfIn(path[0][i], path[1][i], False):
-                    possible_points.append((path[0][i], path[1][i]))
-                    found = True
-                    break
+                    if i == 0:
+                        first_inside = True
+                    if not inside:
+                        segment_points.append((path[0][i], path[1][i]))
+                        inside = True
+                        _c += 1
+                else:
+                    # If not inside and we were inside.
+                    if inside:
+                        # We just went out
+                        inside = False
+            # If we end with inside and we began with inside, remove the last
+            # segment point as we will otherwise have duplication of segments
+            if first_inside and inside and _c>1:
+                segment_points = segment_points[:-1]
+            if segment_points:
+                possible_points.append(segment_points)
         # A flux contour can actually have more contours, usually situated on
         # the opposite side of the machine. Therefore we take the point of a
         # contour that is closest to the mag axis.
         _distances_to_axis = []
-        for p in possible_points:
-            dist_r = equilibrium.mag_axis_r - p[0]
-            dist_z = equilibrium.mag_axis_r - p[1]
-            _distances_to_axis.append(dist_z**2 + dist_r**2)
+        for setp in possible_points:
+            _tmp = []
+            for p in setp:
+                dist_r = equilibrium.mag_axis_r - p[0]
+                dist_z = equilibrium.mag_axis_r - p[1]
+                _tmp.append(dist_z**2 + dist_r**2)
+            _distances_to_axis.append(min(_tmp))
         rz_points.append(possible_points[np.argmin(_distances_to_axis)])
-
     # Get fluxes from the disruption ids
     parallel_conlen = obtain_connection_length(equilibrium, polygon, rz_points)
-
     qpar = ppar[mask] * parallel_conlen * 0.5
 
     # Ppar and Qpar are parallel components. So in order to put it to
@@ -358,11 +369,11 @@ for index, time in enumerate(tsteps):
     data = np.zeros((2, qpar.shape[0]))
     data[0, :] = drsep
     data[1, :] = qpar
-    np.savetxt(f"{base_string}_{time}s_qpar.txt", data)
+    np.savetxt(f"{base_string}_{time:.5f}s_qpar.txt", data)
     data[1, :] = parallel_conlen
-    np.savetxt(f"{base_string}_{time}s_conlen.txt", data)
+    np.savetxt(f"{base_string}_{time:.5f}s_conlen.txt", data)
     data[1, :] = ppar
-    np.savetxt(f"{base_string}_{time}s_ppar.txt", data)
+    np.savetxt(f"{base_string}_{time:.5f}s_ppar.txt", data)
 
     TIMES.append(time)
     DRSEPS.append(drsep)
@@ -392,4 +403,27 @@ plt.colorbar(matplotlib.cm.ScalarMappable(norm=norm, cmap="jet"), ax=ax,
              label="Time [s]")
 
 fname = f"{base_string}_disruption_profile.png"
+f.savefig(fname)
+
+import matplotlib
+def get_jet_cycler(n: int) -> "matplotlib.colors.LinearSegmentedColormap":
+    return plt.cycler("color", matplotlib.cm.jet(np.linspace(0, 1, n)))
+
+import matplotlib.pyplot as plt
+f, ax = plt.subplots()
+ax.set_prop_cycle(get_jet_cycler(len(HEAT_LOADS)))
+
+for i in range(len(HEAT_LOADS)):
+    ax.plot(DRSEPS[i], CONLENS[i])
+
+ax.set_ylabel(r"Connection length [m]")
+ax.set_xlabel(r"$\Delta_{sep}$ - radial distance along the midplane [m]")
+ax.grid()
+ax.set_xlim((0, 2.0))
+
+norm = matplotlib.colors.Normalize(vmin=TIMES[0], vmax=TIMES[-1])
+plt.colorbar(matplotlib.cm.ScalarMappable(norm=norm, cmap="jet"), ax=ax,
+             label="Time [s]")
+
+fname = f"{base_string}_conlens.png"
 f.savefig(fname)
