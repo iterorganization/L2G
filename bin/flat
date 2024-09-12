@@ -1101,7 +1101,6 @@ def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
             del figure
 
 
-
 ###############################################################################
 ###############################################################################
 
@@ -1115,6 +1114,7 @@ Running Gregor Simič's    FFFFf   L        A   A        T
 """
 
 print(intro)
+
 
 import sys
 # Check if first argument is a yaml.file. Then try to provide compatibility
@@ -1178,112 +1178,118 @@ graphics_subparser.add_argument('--out-name', help="Output file base name.", typ
 print_subparser = subparsers.add_parser('print', help="Print the names of the blocks in YAML file")
 print_subparser.add_argument('yaml_file', help="Path to YAML file")
 
-# edit_subparser = subparsers.add_parser('edit', help='Edit YAML descriptions')
 
-args = parser.parse_args(sys_args[1:])
-command = args.command
-if args.yaml_file is None:
-    pprint('ERROR: Specify path to a YAML file!')
-    sys.exit(1)
+if __name__ == "__main__":
+    # Put this code here in case it is imported. For instance, sphinx-argparse
+    # doesn't run the file, it actually reads and executes it in the same python
+    # interpreter. This causes issues because of the sys.exits below. Therefore
+    # to be documentable by Sphinx put this code here.
 
-import l2g
+    # edit_subparser = subparsers.add_parser('edit', help='Edit YAML descriptions')
+    args = parser.parse_args(sys_args[1:])
+    command = args.command
+    if args.yaml_file is None:
+        pprint('ERROR: Specify path to a YAML file!')
+        sys.exit(1)
 
-if args.debug:
-    l2g.addStreamHandler()
-    l2g.enableLogging()
-    l2g.enableDebugging()
+    import l2g
 
-if command == "check":
-    try:
-        isOk = check_yaml(args.yaml_file)
-    except Exception as e:
-        isOk = False
-    if isOk:
-        pprint("Check ok!")
-    else:
-        pprint("Check kO!")
+    if args.debug:
+        l2g.addStreamHandler()
+        l2g.enableLogging()
+        l2g.enableDebugging()
+
+    if command == "check":
+        try:
+            isOk = check_yaml(args.yaml_file)
+        except Exception as e:
+            isOk = False
+        if isOk:
+            pprint("Check ok!")
+        else:
+            pprint("Check kO!")
+        sys.exit(0)
+
+    # Parse the YAML file.
+    geometries, equilibriums, hlms = load_yaml(args.yaml_file)
+
+    if command == "print":
+        pprint("Geometries:")
+        for block_name in geometries:
+            pprint(f'\t{block_name}')
+        pprint("Equilibriums:")
+        for block_name in equilibriums:
+            pprint(f'\t{block_name}')
+        pprint("HLMs")
+        for block_name in hlms:
+            pprint(f'\t{block_name}')
+        sys.exit(0)
+
+    equilibrium = args.equilibrium
+    hlm = args.hlm
+    output_directory = args.out_dir
+
+    EQUILI_D = equilibriums[equilibrium]
+
+    if not (HLM_D:=hlms.get(hlm)):
+        HLM_D = None
+
+    if command == "plot":
+        kwargs = {}
+        if args.out_name:
+            kwargs["file_base_name"] = args.out_name
+        if args.out_dir:
+            kwargs["output_directory"] = args.out_dir
+        create_graphics(EQUILI_D, HLM_D, **kwargs)
+        sys.exit()
+
+    import glob
+    import l2g.comp
+    import l2g.equil
+
+
+    geometry = args.geometry
+    TARGET_D = geometries[geometry]
+
+    if command == "run":
+
+        kwargs_of_cases: list[dict] = []
+
+        base_kwargs = {}
+        base_kwargs["output_directory"] = output_directory
+        if args.out_file:
+            # Check if it's med file.
+
+            file = args.out_file
+            if not file.lower().endswith(".med"):
+                file += ".med"
+
+            base_kwargs["case_name"] = file
+
+
+        if args.longwave_misalignment:
+            # See if in the TARGET_D there is longwave_misalignment block
+            if "longwave_misalignment" in TARGET_D:
+                lw_vectors = TARGET_D["longwave_misalignment"]["vectors"]
+                lw_lengths = TARGET_D["longwave_misalignment"]["lengths"]
+                if len(lw_vectors) != len(lw_lengths):
+                    pprint("ERROR: In longwave_misalignment dictionary mismatch size of vectors and lengths!")
+                    sys.exit(1)
+
+                for i in range(len(lw_vectors)):
+                    case_name = f'{TARGET_D["name"]}_{EQUILI_D["name"]}_lw_{i}_length_{lw_lengths[i]}'
+                    kwargs = base_kwargs.copy()
+                    kwargs["longwave_vector"] = lw_vectors[i]
+                    kwargs["longwave_length"] = lw_lengths[i]
+                    kwargs["longwave_misalignment"] = True
+                    kwargs_of_cases.append(kwargs)
+                    # run_case(TARGET_D, EQUILI_D, HLM_D, **kwargs)
+        else:
+            kwargs_of_cases.append(base_kwargs.copy())
+
+
+        for set_of_kwargs in kwargs_of_cases:
+            run_case(TARGET_D, EQUILI_D, HLM_D, **set_of_kwargs)
+
+    print(f"Done running flat. Elapsed time {time.time() - start}")
     sys.exit(0)
-
-# Parse the YAML file.
-geometries, equilibriums, hlms = load_yaml(args.yaml_file)
-
-if command == "print":
-    pprint("Geometries:")
-    for block_name in geometries:
-        pprint(f'\t{block_name}')
-    pprint("Equilibriums:")
-    for block_name in equilibriums:
-        pprint(f'\t{block_name}')
-    pprint("HLMs")
-    for block_name in hlms:
-        pprint(f'\t{block_name}')
-    sys.exit(0)
-
-equilibrium = args.equilibrium
-hlm = args.hlm
-output_directory = args.out_dir
-
-EQUILI_D = equilibriums[equilibrium]
-
-if not (HLM_D:=hlms.get(hlm)):
-    HLM_D = None
-
-if command == "plot":
-    kwargs = {}
-    if args.out_name:
-        kwargs["file_base_name"] = args.out_name
-    if args.out_dir:
-        kwargs["output_directory"] = args.out_dir
-    create_graphics(EQUILI_D, HLM_D, **kwargs)
-    sys.exit()
-
-import glob
-import l2g.comp
-import l2g.equil
-
-
-geometry = args.geometry
-TARGET_D = geometries[geometry]
-
-if command == "run":
-
-    kwargs_of_cases: list[dict] = []
-
-    base_kwargs = {}
-    base_kwargs["output_directory"] = output_directory
-    if args.out_file:
-        # Check if it's med file.
-
-        file = args.out_file
-        if not file.lower().endswith(".med"):
-            file += ".med"
-
-        base_kwargs["case_name"] = file
-
-
-    if args.longwave_misalignment:
-        # See if in the TARGET_D there is longwave_misalignment block
-        if "longwave_misalignment" in TARGET_D:
-            lw_vectors = TARGET_D["longwave_misalignment"]["vectors"]
-            lw_lengths = TARGET_D["longwave_misalignment"]["lengths"]
-            if len(lw_vectors) != len(lw_lengths):
-                pprint("ERROR: In longwave_misalignment dictionary mismatch size of vectors and lengths!")
-                sys.exit(1)
-
-            for i in range(len(lw_vectors)):
-                case_name = f'{TARGET_D["name"]}_{EQUILI_D["name"]}_lw_{i}_length_{lw_lengths[i]}'
-                kwargs = base_kwargs.copy()
-                kwargs["longwave_vector"] = lw_vectors[i]
-                kwargs["longwave_length"] = lw_lengths[i]
-                kwargs["longwave_misalignment"] = True
-                kwargs_of_cases.append(kwargs)
-                # run_case(TARGET_D, EQUILI_D, HLM_D, **kwargs)
-    else:
-        kwargs_of_cases.append(base_kwargs.copy())
-
-
-    for set_of_kwargs in kwargs_of_cases:
-        run_case(TARGET_D, EQUILI_D, HLM_D, **set_of_kwargs)
-
-print(f"Done running flat. Elapsed time {time.time() - start}")
-sys.exit(0)
