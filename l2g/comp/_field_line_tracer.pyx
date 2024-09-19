@@ -496,7 +496,7 @@ cdef class FieldLineTracer:
             # opposite way of the magnetic vector or fieldline, we need to
             # follow the fieldline in the opposite direction.
             if Bdot[i] < 0:
-                direction[0] = -direction[i]
+                direction[i] = -direction[i]
                 self.c_direction[i] = -self.c_direction[i]
         results.empty = False
         log.info("Data processed")
