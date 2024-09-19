@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-import traceback
 
 description = """
 F.L.A.T. - Field Line Analysis Tool
@@ -123,11 +122,11 @@ def check_yaml(path_to_yaml_file: str):
 
             # If no name or type
             if "name" not in d or "type" not in d:
-                raise WrongValue(f"ERROR: Error in YAML file. Missing 'name' or 'type' entries! Check YAML document starting at line number {line_number}")
+                raise WrongValue(f"ERROR: Error in YAML file. Missing 'name' or 'type' entries!")
 
             d_type = d["type"]
             if d_type not in YAML_TYPES:
-                raise WrongValue(f"ERROR: YAML document starting at line {line_number} does not have a correct type: \"{d_type}\" It should be one of : {YAML_TYPES}")
+                raise WrongValue(f"ERROR: Incorrect type: \"{d_type}\" It should be one of : {YAML_TYPES}")
 
 
             # Create a test list of variables to check.
@@ -166,12 +165,12 @@ def check_yaml(path_to_yaml_file: str):
                         ]
                     t = check_if_var_exists("longwave_misalignment", dict, d,
                         True)
-                    d_longwave_misalignment = d["longwave_misalignment"]
                     if t:
+                        d_longwave_misalignment = d["longwave_misalignment"]
                         import numpy as np
                         test_list += [
                             ["vector", (list, np.ndarray), d_longwave_misalignment],
-                            ["length", (list, float), d_longwave_misalignment]
+                            ["length", (list, int, float), d_longwave_misalignment]
                         ]
 
                     test_flist = [
@@ -198,7 +197,7 @@ def check_yaml(path_to_yaml_file: str):
                                 ["time_samples", int, d["imas"], True],
                             ]
                             # Now check for times
-                            times_in = check_if_var_exists("times", list, d["imas"], optional=True)
+                            times_in = check_if_var_exists("times", (list, int, float), d["imas"], optional=True)
                             if not times_in:
                                 # We check now for start time and end time
                                 check_if_var_exists("time_start", (int, float), d["imas"])
@@ -221,33 +220,12 @@ def check_yaml(path_to_yaml_file: str):
                                 ["outside_value", float, d, True],
                             ]
                         case "elm":
-                            check_list_of_paths("shadow_meshes", d)
                             test_list = [
                                 ["r_break", (float, list), d, isOptional],
                                 ["p_sol", (int, float, list), d, isOptional],
                                 ["lambda_q_near", (float, list), d, isOptional],
                                 ["lambda_q_main", (float, list), d, isOptional],
                             ]
-                            t = check_if_var_exists("parameters", dict, d, isOptional)
-                            d_params = d["parameters"]
-                            if t:
-                                test_list += [
-                                    ["abs_error", float, d_params, isOptional],
-                                    ["rel_error", float, d_params, isOptional],
-                                    ["abs_error", float, d_params, isOptional],
-                                    ["max_fieldline_length", (float, int), d_params, isOptional],
-                                    ["num_of_threads", int, d_params, isOptional],
-                                    ["plasma_r_displ", float, d_params, isOptional],
-                                    ["plasma_z_displ", float, d_params, isOptional],
-                                    ["self_intersection_avoidance_length", float, d_params, isOptional],
-                                    ["shadow_dim_mul", float, d_params, isOptional],
-                                    ["side", str, d_params, isOptional],
-                                    ["target_dim_mul", float, d_params, isOptional],
-                                    ["time_end", float, d_params, isOptional],
-                                    ["time_step", float, d_params, isOptional],
-                                    ["wall_silh_r_disp", float, d_params, isOptional],
-                                    ["wall_silh_z_disp", float, d_params, isOptional],
-                                ]
                         case "ramp-down" | "ramp_down" | "ramp down":
                             pass
                         case "single":
@@ -275,7 +253,7 @@ def check_yaml(path_to_yaml_file: str):
             for xargs in test_flist:
                 check_list_of_paths(*xargs)
     except Exception as e:
-        traceback.print_exc()
+        print(e)
         if not error_yaml_file_printed:
             error_yaml_file_printed = True
             pprint(f"ERROR: In file {path_to_yaml_file}")
@@ -594,13 +572,18 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
                 geom_ids.append((geom_id, file))
                 flt_obj.parameters.artificial_fl_catcher_geom_id.add(geom_id)
 
-        pprint("INFO: Copying target mesh to result location to be used as " +
-                 "storage.")
-        # shutil is used to create a verbatim copy. Just saving the mesh data
-        # fails to save groups.
-        import shutil
-        shutil.copyfile(geod["target_mesh"], result_file_path)
-        result_file = l2g.mesh.Mesh(result_file_path)
+        if run_flt:
+            pprint("INFO: Copying target mesh to result location to be used as " +
+                     "storage.")
+            # shutil is used to create a verbatim copy. Just saving the mesh data
+            # fails to save groups.
+            import shutil
+            shutil.copyfile(geod["target_mesh"], result_file_path)
+            result_file = l2g.mesh.Mesh(result_file_path)
+        else:
+            pprint("INFO: FLT data already exists so loading the result file " +
+                    f"{result_file_path}!")
+            result_file = l2g.mesh.Mesh(result_file_path)
 
     else:
         # We do not need to obtain the FLT results but still require the FLT
@@ -626,9 +609,9 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
         pprint(f"INFO: Processing {index+1} of {N} equilibriums. Time={associated_time}")
 
         result_file.setIndex(index)
-        result_file.setIndex(associated_time)
+        result_file.setTime(associated_time)
 
-        if run_flt or get_fls:
+        if run_flt or get_fls or apply_heat_loads:
             pprint("INFO: Loading equilibrium data")
             if CUSTOM_WALL_LIMITER:
                 equilibrium.wall_contour_r = np.array(CUSTOM_WALL_LIMITER_R)
@@ -657,10 +640,6 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
             flt_obj.runFLT()
             pprint("INFO: FLT done!")
             flt_obj.calculateDrsep()
-
-            # Save the data to resulting med file
-            result_file.setIndex(index)
-            result_file.setTime(associated_time)
 
             if index == 0:
                 # Save only once the baryCent and normals. That is stationary
