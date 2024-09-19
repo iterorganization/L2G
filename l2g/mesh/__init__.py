@@ -592,6 +592,7 @@ def load_flt_results_from_mesh(mesh_results: L2GResults, mesh_object: Mesh):
     mesh_results.Bdot = mesh_object.getField("Bdot")
     # Necessary to flatten!
     # mesh_results.baryCent = mesh_object.getField("baryCent").flatten()
+    mesh_results.empty = False
 
 def dump_flt_results_to_mesh(mesh_results: L2GResults, mesh_object: Mesh):
     """Dumps flt_mesh results to mesh object.
