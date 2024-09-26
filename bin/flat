@@ -8,9 +8,29 @@ in the YAML files where geometries, equilibriums and plasma heat loads are
 described to be run.
 """
 
-def pprint(*args, **kwargs):
-    print(*args, **kwargs, flush=True)
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
 
+
+def pprint(string, *args, **kwargs):
+    print(string, *args, **kwargs, flush=True)
+
+def epprint(string, *args, **kwargs):
+    print(f"{bcolors.FAIL}{string}{bcolors.ENDC}", *args, **kwargs)
+
+def ipprint(string, *args, **kwargs):
+    print(f"{bcolors.OKBLUE}{string}{bcolors.ENDC}", *args, **kwargs)
+
+def opprint(string, *args, **kwargs):
+    print(f"{bcolors.OKGREEN}{string}{bcolors.ENDC}", *args, **kwargs)
 
 def check_yaml(path_to_yaml_file: str):
     """Checks a YAML file if it has valid data for FLT running.
@@ -53,19 +73,19 @@ def check_yaml(path_to_yaml_file: str):
                             optional: bool=False, isFile: bool=False) -> bool:
         if name not in d:
             if not optional:
-                raise EntryDoesntExistException(f"ERROR: Entry {name} does not exist")
+                raise EntryDoesntExistException(f"{bcolors.FAIL}ERROR: Entry {name} does not exist{bcolors.ENDC}")
             return False
 
         if isinstance(d[name], list):
             if not all([isinstance(_, _type) for _ in d[name]]):
-                raise WrongTypeException(f"ERROR: Wrong type for {name}. Check it's entry: {d[name]}")
+                raise WrongTypeException(f"{bcolors.FAIL}ERROR: Wrong type for {name}. Check it's entry: {d[name]}{bcolors.ENDC}")
         else:
             if not isinstance(d[name], _type):
-                raise WrongTypeException(f"ERROR: Wrong type for {name}. Check it's entry: {d[name]}")
+                raise WrongTypeException(f"{bcolors.FAIL}ERROR: Wrong type for {name}. Check it's entry: {d[name]}{bcolors.ENDC}")
 
         if isFile:
             if not os.path.exists(d[name]):
-                raise FileDoesntExistException(f"ERROR: File for {name} entry does not exist: {d[name]}.")
+                raise FileDoesntExistException(f"{bcolors.FAIL}ERROR: File for {name} entry does not exist: {d[name]}.{bcolors.ENDC}")
 
         return True
 
@@ -73,7 +93,7 @@ def check_yaml(path_to_yaml_file: str):
         if not check_if_var_exists(name, str, d, optional):
             return False
         if not name in d:
-            raise EntryDoesntExistException(f"ERROR: Entry {name} does not exist")
+            raise EntryDoesntExistException(f"{bcolors.FAIL}ERROR: Entry {name} does not exist{bcolors.ENDC}")
 
         files = []
         raise_exception = False
@@ -90,14 +110,14 @@ def check_yaml(path_to_yaml_file: str):
 
         if raise_exception:
             for i in range(min(10, len(files))):
-                pprint(f"ERROR: File '{files[i]}' does not exist. Inside entry '{name}'")
+                epprint(f"ERROR: File '{files[i]}' does not exist. Inside entry '{name}'")
             if len(files) > 10:
-                pprint("ERROR:...")
+                epprint("ERROR:...")
             raise FileDoesntExistException()
         return True
     #####
     if not os.access(path_to_yaml_file, os.R_OK):
-        pprint(f"ERROR: YAML file \"{path_to_yaml_file}\" is unreadable or does not exist!")
+        epprint(f"ERROR: YAML file \"{path_to_yaml_file}\" is unreadable or does not exist!")
         sys.exit(1)
 
     data = object()
@@ -105,7 +125,7 @@ def check_yaml(path_to_yaml_file: str):
         with open(path_to_yaml_file, "r") as f:
             data = yaml.load_all(f.read(), Loader=SafeLineLoader)
     except Exception as e:
-        pprint(f"ERROR: Could not parse \"{path_to_yaml_file}\". Check the syntax!!!")
+        epprint(f"ERROR: Could not parse \"{path_to_yaml_file}\". Check the syntax!!!")
         sys.exit(1)
 
 
@@ -141,8 +161,21 @@ def check_yaml(path_to_yaml_file: str):
                         ["target_mesh", str, d, False, True],
                         ["align_lcfs", bool, d, True],
                         ["include_target_in_shadow", bool, d, True],
-                        ["fl_ids", (list, int), d, True]
                     ]
+
+                    # Check if fl_ids exists
+                    if "fl_ids" in d:
+                        # See that the keys are all string
+                        fl_ids = d["fl_ids"]
+                        if not isinstance(fl_ids, dict):
+                            raise WrongTypeException("ERROR: Entry fl_ids is of wrong type!")
+
+                        for key in fl_ids:
+                            if not isinstance(fl_ids[key], list):
+                                raise WrongTypeException(f"ERROR: An entry of fl_ids {key} does not have a list!")
+                            if not all(isinstance(_, int) for _ in fl_ids[key]):
+                                raise WrongTypeException(f"ERROR: Non int entry in fl_ids {key} entry")
+
                     t = check_if_var_exists("parameters", dict, d, True)
                     d_params = d["parameters"]
                     if t:
@@ -204,8 +237,8 @@ def check_yaml(path_to_yaml_file: str):
                                 check_if_var_exists("time_end", (int, float), d["imas"])
 
                         case "_":
-                            pprint(f"ERROR: In equilibrium document at {line_number}")
-                            pprint(f"ERROR: Wrong 'equilibrium_type' entry: {eq_type}")
+                            epprint(f"ERROR: In equilibrium document at {line_number}")
+                            epprint(f"ERROR: Wrong 'equilibrium_type' entry: {eq_type}")
 
                     test_list += [["correct_helicity", bool, d, isOptional]]
                 case "hlm":
@@ -240,8 +273,8 @@ def check_yaml(path_to_yaml_file: str):
                                 ["lambda_q_main", (float, int, list), d],
                             ]
                         case _:
-                            pprint(f"ERROR: In hlm document at {line_number}")
-                            pprint(f"ERROR: Wrong 'hlm_type' entry: {hlm_type}")
+                            epprint(f"ERROR: In hlm document at {line_number}")
+                            epprint(f"ERROR: Wrong 'hlm_type' entry: {hlm_type}")
 
 
                 case _:
@@ -256,8 +289,8 @@ def check_yaml(path_to_yaml_file: str):
         print(e)
         if not error_yaml_file_printed:
             error_yaml_file_printed = True
-            pprint(f"ERROR: In file {path_to_yaml_file}")
-        pprint(f"ERROR: Check YAML document at line {line_number}")
+            epprint(f"ERROR: In file {path_to_yaml_file}")
+        epprint(f"ERROR: Check YAML document at line {line_number}")
         IS_OK = False
     return IS_OK
 
@@ -274,7 +307,7 @@ def load_yaml(path_to_yaml: str)->tuple[dict, ...]:
         data = yaml.safe_load_all(yaml_text)
     except Exception as e:
         pprint(e)
-        pprint("ERROR: Something went wrong with reading the YAML file.")
+        epprint("ERROR: Something went wrong with reading the YAML file.")
         sys.exit(1)
 
     try:
@@ -284,21 +317,21 @@ def load_yaml(path_to_yaml: str)->tuple[dict, ...]:
             match block_type:
                 case "geometry":
                     if block_name in geometries:
-                        pprint(f"ERROR: There are more than one geometry blocks with the name '{block_name}'!")
+                        epprint(f"ERROR: There are more than one geometry blocks with the name '{block_name}'!")
                         raise Exception()
                     geometries[block_name] = block
                 case "hlm":
                     if block_name in hlms:
-                        pprint(f"ERROR: There are more than one hlm blocks with the name '{block_name}'!")
+                        epprint(f"ERROR: There are more than one hlm blocks with the name '{block_name}'!")
                         raise Exception()
                     hlms[block_name] = block
                 case "equilibrium":
                     if block_name in equilibriums:
-                        pprint(f"ERROR: There are more than one equilibrium blocks with the name '{block_name}'!")
+                        epprint(f"ERROR: There are more than one equilibrium blocks with the name '{block_name}'!")
                         raise Exception()
                     equilibriums[block_name] = block
                 case _:
-                    pprint(f"ERROR: Unknown block {block_type}")
+                    epprint(f"ERROR: Unknown block {block_type}")
                     raise Exception()
     except Exception as e:
         sys.exit(1)
@@ -324,7 +357,7 @@ def check_if_in_slurm_job(*flt_objs):
     """
     import os
     if "SLURM_JOBID" in os.environ:
-        pprint('INFO: Detected SLURM environment.')
+        pprint("INFO: Detected SLURM environment.")
         job_id = os.environ['SLURM_JOBID']
         pprint(f"INFO: SLURM JOB ID: {job_id}")
         pprint("INFO: Setting the number of OpenMP threads equal to the number of "
@@ -334,7 +367,7 @@ def check_if_in_slurm_job(*flt_objs):
         # We only have 1 distributed task.
 
         if "SLURM_CPUS_PER_TASK" in os.environ:
-            pprint('INFO: Trying to get maximum number of cpus assigned for this task.')
+            pprint("INFO: Trying to get maximum number of cpus assigned for this task.")
             try:
                 cpus_per_task = int(os.environ["SLURM_CPUS_PER_TASK"])
                 for flt_obj in flt_objs:
@@ -420,16 +453,16 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
     equil_obj.correctHelicity(getVal(eqid, "correct_helicity", True))
     pprint(f"INFO: Correcting helicity? {equil_obj._correct_helicity}")
 
-    pprint("INFO: Loading equilibria...")
+    pprint("INFO: Loading equilibriums...")
     match eqid["equilibrium_type"]:
         case "eqdsk_files":
             equil_obj.loadEqdskEquilibriums(eqid["eqdsk_files"])
         case "imas":
             equil_obj.loadIMASEquilibriums(eqid["imas"])
         case _:
-            pprint("ERROR: Wrong eq_type {_}.This shouldn't happen.")
+            epprint("ERROR: Wrong eq_type {_}.This shouldn't happen.")
             sys.exit(2)
-
+    pprint("INFO: Done")
     # Check if there is a custom wall limiter, used for
     CUSTOM_WALL_LIMITER = False
     if "custom_wall_limiter" in eqid:
@@ -563,6 +596,7 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
         if "afl_catcher_meshes" in geod:
             pprint("INFO: Loading artificial fieldlines filter meshes to Embree.")
             for file in geod["afl_catcher_meshes"]:
+                pprint(f"INFO: Loading {file}")
                 m = l2g.mesh.Mesh(file)
                 m.readMeshData()
                 if longwave_misalignment_flag:
@@ -636,9 +670,9 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
 
 
         if run_flt:
-            pprint("INFO: Running FLT!")
+            ipprint("INFO: Running FLT!")
             flt_obj.runFLT()
-            pprint("INFO: FLT done!")
+            opprint("INFO: FLT done!")
             flt_obj.calculateDrsep()
 
             if index == 0:
@@ -648,7 +682,7 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
                                      array=flt_obj.normals,
                                      info_on_components=['x', 'y', 'z'])
 
-            pprint(f"INFO: Writing results to {result_file_name}")
+            ipprint(f"INFO: Writing results to {result_file_name}")
             # The main FLT result field
             result_file.addField(array_name="conlen",
                                  array=flt_obj.results.conlen * 1e3)
@@ -674,7 +708,7 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
             result_file.addField(array_name="geom_hit_ids", array=flt_obj.results.geom_hit_ids)
             result_file.addField(array_name="prim_hit_ids", array=flt_obj.results.prim_hit_ids)
             result_file.writeFields()
-            pprint("INFO: Done writing")
+            opprint("INFO: Done writing")
         else:
             # Load the FLT data
             pprint(f"INFO: Loading FLT data from {result_file_path}")
@@ -684,28 +718,37 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
 
         if get_fls:
             # Check if it is only a list of integers
-            pprint("INFO: Obtaining field lines")
-            if all(isinstance(_, int) for _ in fl_ids):
-                flt_obj.fl_ids = fl_ids
+            ipprint("INFO: Obtaining field lines")
+            # Old
+
+            for fl_group in fl_ids:
+                flt_obj.fl_ids = fl_ids[fl_group]
                 flt_obj.getFL()
-                # Now save the data
-                file_path = os.path.join(output_directory,
-                                         f"{case_name}_{index}.vtk")
+                file_path = os.path.join(output_directory, f"{case_name}_{fl_group}_{index}.vtk")
                 pprint(f"INFO: Saving fl to {file_path}")
                 l2g.mesh.save_results_to_vtk(flt_obj.fl_results, file_path)
-            else:
-                for group_index, group in enumerate(fl_ids):
-                    flt_obj.fl_ids = group
-                    flt_obj.getFL()
-                    file_path = os.path.join(output_directory,
-                        f"{case_name}_{group_index}_{index}.vtk")
-                    pprint(f"INFO: Saving fl to {file_path}")
-                    l2g.mesh.save_results_to_vtk(flt_obj.fl_results, file_path)
-            pprint("INFO: Done")
+
+            # if all(isinstance(_, int) for _ in fl_ids):
+            #     flt_obj.fl_ids = fl_ids
+            #     flt_obj.getFL()
+            #     # Now save the data
+            #     file_path = os.path.join(output_directory,
+            #                              f"{case_name}_{index}.vtk")
+            #     pprint(f"INFO: Saving fl to {file_path}")
+            #     l2g.mesh.save_results_to_vtk(flt_obj.fl_results, file_path)
+            # else:
+            #     for group_index, group in enumerate(fl_ids):
+            #         flt_obj.fl_ids = group
+            #         flt_obj.getFL()
+            #         file_path = os.path.join(output_directory,
+            #             f"{case_name}_{group_index}_{index}.vtk")
+            #         pprint(f"INFO: Saving fl to {file_path}")
+            #         l2g.mesh.save_results_to_vtk(flt_obj.fl_results, file_path)
+            opprint("INFO: Done")
         if apply_heat_loads:
             flt_obj.hlm_params.load(get_hlm(hlmd, index))
             hlm_type = flt_obj.hlm_params.hlm_type
-            pprint(f"INFO: Applying HLM type: {hlm_type}")
+            ipprint(f"INFO: Applying HLM type: {hlm_type}")
 
             if hlm_type == "elm":
                 # Get the OWL connection length profile
@@ -755,7 +798,7 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
 
             flt_obj.applyHLM()
 
-            pprint("INFO: Writing HLM arrays to file")
+            ipprint("INFO: Writing HLM arrays to file")
             # Slashes "/" are not allowed in the name of a field. They have
             # to be escaped!
             result_file.addField(array=flt_obj.hlm_results.flux_expansion,
@@ -788,7 +831,7 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
                     array=flt_obj.hlm_results.additional_arrays[5],
                     array_name=r"q_perp inter-ELM")
             result_file.writeFields()
-            pprint("INFO:Writing done!")
+            opprint("INFO:Writing done!")
 
 
 def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
@@ -807,7 +850,7 @@ def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
         case "imas":
             equil_obj.loadIMASEquilibriums(eqid["imas"])
         case _:
-            pprint("ERROR: Wrong eq_type.")
+            epprint("ERROR: Wrong eq_type.")
             sys.exit(2)
     # Additional arrays if they are needed
     time_array = []
@@ -1252,7 +1295,7 @@ if __name__ == "__main__":
                 lw_vectors = TARGET_D["longwave_misalignment"]["vectors"]
                 lw_lengths = TARGET_D["longwave_misalignment"]["lengths"]
                 if len(lw_vectors) != len(lw_lengths):
-                    pprint("ERROR: In longwave_misalignment dictionary mismatch size of vectors and lengths!")
+                    epprint("ERROR: In longwave_misalignment dictionary mismatch size of vectors and lengths!")
                     sys.exit(1)
 
                 for i in range(len(lw_vectors)):
@@ -1270,5 +1313,5 @@ if __name__ == "__main__":
         for set_of_kwargs in kwargs_of_cases:
             run_case(TARGET_D, EQUILI_D, HLM_D, **set_of_kwargs)
 
-    print(f"Done running flat. Elapsed time {time.time() - start}")
+    opprint(f"Done running flat. Elapsed time {time.time() - start}")
     sys.exit(0)
