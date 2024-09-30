@@ -1,7 +1,5 @@
 import numpy as np
 
-from typing import Optional
-
 import logging
 log = logging.getLogger(__name__)
 
@@ -77,11 +75,11 @@ class Equilibrium(object):
         self.grid_r: np.ndarray = np.array([])
         self.grid_z: np.ndarray = np.array([])
         self.psi: np.ndarray = np.array([])
-        self.psi_sign: Optional[int] = None # Sign of flux gradient from center to boundary.
-        self.psi_boundary: Optional[float] = None
-        self.psi_axis: Optional[float] = None
+        self.psi_sign: int | None = None # Sign of flux gradient from center to boundary.
+        self.psi_boundary: float | None = None
+        self.psi_axis: float | None = None
 
-        self.Ip: Optional[float] = -1.0
+        self.Ip: float | None = -1.0
 
         self.fpol: list = []
         self.fpol_flux: list = []

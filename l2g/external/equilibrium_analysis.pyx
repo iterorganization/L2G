@@ -9,8 +9,6 @@ from libc.math cimport sqrt
 
 import cython
 
-from l2g.equil import Equilibrium
-
 from l2g.external.bicubic cimport BICUBIC_INTERP, BI_DATA
 from l2g.external.rkf45 cimport RKF45
 from l2g.external.bfgs_2d cimport PyBfgs2d
@@ -109,7 +107,7 @@ cdef class EQA:
         self.c_rkf45.set_omp_thread(0)
         self.c_bfgs = PyBfgs2d()
 
-    def __init__(self, equilibrium: Equilibrium = None):
+    def __init__(self, equilibrium: 'Equilibrium' = None):
         self.resetValues()
 
         if not equilibrium is None:
@@ -144,7 +142,7 @@ cdef class EQA:
         # Direction of the gradient of psi
         self.psi_grad_sign = 0.0
 
-    def setEquilibrium(self, obj: Equilibrium):
+    def setEquilibrium(self, obj: 'Equilibrium'):
         """Sets the equilibrium objects and propagates the
         flux data to the interpolation and solver objects.
         """

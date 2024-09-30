@@ -7,9 +7,6 @@ import numpy as np
 
 import logging
 log = logging.getLogger(__name__)
-from typing import Tuple
-
-from l2g.equil import Equilibrium
 
 class SplineInterpolator(object):
     """Wrapper around the RectBivariate spline interpolate algorithm.
@@ -167,7 +164,7 @@ class EQ:
         # Rm - radial position of the midplane point
         # B_total - magnetic magnitude at that point.
         # Bpm - poloidal component of the magnetic field.
-        self._eq: Equilibrium = None
+        self._eq: 'Equilibrium' = None
 
         self.r_displ = 0.0
         self.z_displ = 0.0
@@ -184,7 +181,7 @@ class EQ:
         self._lcfs_points_1 = None
         self._lcfs_points_2 = None
 
-    def setEquilibrium(self, obj: Equilibrium, load: bool = True,
+    def setEquilibrium(self, obj: 'Equilibrium', load: bool = True,
                        reset: bool = True) -> None:
         """Set equilibrium data to the diagnostic class.
 
@@ -450,12 +447,12 @@ class EQ:
 
         return Rb, Z, Btotal, Bpm
 
-    def getOWL_midplane(self, lcfs=None) -> Tuple[float, float, float, float]:
+    def getOWL_midplane(self, lcfs=None) -> tuple[float, float, float, float]:
         """See :py:meth:`get_midplane_info`
         """
         return self.get_midplane_info(lcfs=lcfs, which='owl')
 
-    def getIWL_midplane(self, lcfs=None) -> Tuple[float, float, float, float]:
+    def getIWL_midplane(self, lcfs=None) -> tuple[float, float, float, float]:
         """See :py:meth:`get_midplane_info`
         """
         return self.get_midplane_info(lcfs=lcfs, which='iwl')

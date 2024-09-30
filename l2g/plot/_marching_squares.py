@@ -1,4 +1,3 @@
-from typing import Dict, Tuple, List, Optional
 import numpy as np
 from scipy.optimize import bisect
 from l2g.external.bicubic import PyBicubic
@@ -180,9 +179,9 @@ class Marching(object):
             return self.c_interpolator(x, y)[0] - val
 
 
-        segment_map: Dict[Tuple, Segment] = {}
-        saddle_segments: Dict[Tuple, List] = {}
-        saddle_indexes: List[Tuple] = []
+        segment_map: dict[tuple, Segment] = {}
+        saddle_segments: dict[tuple, list] = {}
+        saddle_indexes: list[tuple] = []
 
         x = self.c_x
         y = self.c_y

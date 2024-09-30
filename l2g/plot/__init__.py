@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-from l2g.equil import Equilibrium, EQ
-
 from l2g.plot._plot_psi import plot_psi
 
 def plotPolyLine(ax, contour, label='', color='k'):
@@ -21,7 +19,7 @@ def plotPolyLine(ax, contour, label='', color='k'):
             lines += ax.plot(pX, pY, color=color)
     return lines
 
-def plotContour(equil: Equilibrium, ax, psi_boundary=None, levels_core=None, levels_vacc=None):
+def plotContour(equil: 'Equilibrium', ax, psi_boundary=None, levels_core=None, levels_vacc=None):
     from scipy.interpolate import interp2d
 
     I_Psi = interp2d(equil.grid_r, equil.grid_z, equil.psi, kind='cubic')
@@ -29,10 +27,10 @@ def plotContour(equil: Equilibrium, ax, psi_boundary=None, levels_core=None, lev
     ax.contour(equil.grid_r, equil.grid_z,
                I_Psi(equil.grid_r, equil.grid_z, 0, 0), 35, cmap="jet")
 
-def plotLimiter(equil: Equilibrium, ax):
+def plotLimiter(equil: 'Equilibrium', ax):
     ax.plot(equil.wall_contour_r, equil.wall_contour_z, 'r-')
 
-def plotQuiever(equil: Equilibrium, ax, res_width=20, res_height=40):
+def plotQuiever(equil: 'Equilibrium', ax, res_width=20, res_height=40):
     """Quiever plot.
 
     res_width is the number of arrows by width
@@ -61,7 +59,7 @@ def plotQuiever(equil: Equilibrium, ax, res_width=20, res_height=40):
     ax.quiver(R, Z, BR, BZ, pivot='tip')
 
 
-def plotEqdskLcfs(eq: EQ, ax, color1='g', color2='b', label=''):
+def plotEqdskLcfs(eq: 'EQ', ax, color1='g', color2='b', label=''):
     # eq.evaluate()
 
     lcfs1 = eq.getContourPaths(flux=eq.psiLCFS)
@@ -70,10 +68,10 @@ def plotEqdskLcfs(eq: EQ, ax, color1='g', color2='b', label=''):
         lcfs2 = eq.getContourPaths(flux=eq.psiLCFS2)
         plotPolyLine(ax, lcfs2, '', color=color2)
 
-def plotOPoint(equil: Equilibrium, ax, pattern='ro'):
+def plotOPoint(equil: 'Equilibrium', ax, pattern='ro'):
     ax.plot(equil.mag_axis_r, equil.mag_axis_z, pattern)
 
-def plotMidplane(equil: Equilibrium, ax, pattern='r-'):
+def plotMidplane(equil: 'Equilibrium', ax, pattern='r-'):
     zmaxis = equil.mag_axis_z
     rleft = equil.grid_r[0]
     rend = equil.grid_r[-1]
@@ -90,7 +88,7 @@ def createLcfsMovie(equilibriums, labels, legend_name='Legend',
 
     # if not labels:
     #     labels = [_.getName() for _ in eqdsk]
-
+    from l2g.equil import EQ
     import matplotlib.pyplot as plt
     from matplotlib.animation import FuncAnimation, PillowWriter
     from functools import partial

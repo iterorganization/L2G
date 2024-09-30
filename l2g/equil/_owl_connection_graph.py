@@ -1,9 +1,5 @@
-import l2g.equil
-from l2g.external.bicubic import PyBicubic
-from l2g.external.rkf45 import PyRKF45FLT
-from l2g.external.equilibrium_analysis import EQA
-from math import sqrt, cos
 import numpy as np
+from math import isclose
 
 class Polygon(object):
     """Polygon class for simple 2D Ray-Casting usage.
@@ -18,7 +14,7 @@ class Polygon(object):
         to_remove: list[int] = []
         for i in range(N_POLYX):
             next_i = (i+1) % N_POLYX
-            if np.allclose(POLYX[i], POLYX[next_i]) and np.allclose(POLYY[i], POLYY[next_i]):
+            if isclose(POLYX[i], POLYX[next_i]) and isclose(POLYY[i], POLYY[next_i]):
                 to_remove.append(i)
 
         # Remove elements in reverse
@@ -51,8 +47,8 @@ class Polygon(object):
         # It's easier to remove points that are insanely close to each other prior
         # to calling this function
         # In the case the p1 and p2 is the same, ignore it.
-        # if np.allclose(px1, px2) and np.allclose(py1, py2):
-        #     if np.allclose(tx, px1) and np.allclose(ty, py1):
+        # if isclose(px1, px2) and isclose(py1, py2):
+        #     if isclose(tx, px1) and isclose(ty, py1):
         #         return True
         #     return False
 
@@ -62,7 +58,7 @@ class Polygon(object):
         dx2 = px2 - px1
         dy2 = py2 - py1
 
-        if np.allclose(dx1 * dy2 - dx2 * dy1, 0):
+        if isclose(dx1 * dy2 - dx2 * dy1, 0):
             c = True
 
         return c
@@ -146,10 +142,7 @@ class Polygon(object):
                 break
         return out
 
-
-
-
-def getOwlConlensGraph(eq: EQA):
+def getOwlConlensGraph(eq: 'EQA'):
     """Use this function that obtains the OWL connection length of the input
 
     Arguments:
@@ -164,6 +157,10 @@ def getOwlConlensGraph(eq: EQA):
         conlen_up (np.ndarray): 1D array of connection length connecting
             outer midplane and inner divertor target
     """
+    from l2g.external.bicubic import PyBicubic
+    from l2g.external.rkf45 import PyRKF45FLT
+    from math import sqrt, cos
+
     equilibrium = eq.equilibrium
 
     # Evaluate if still not evaluated
@@ -196,7 +193,7 @@ def getOwlConlensGraph(eq: EQA):
             if not polygon.checkIfIn(nr, nz, False):
                 break
 
-            curr_l = sqrt(nr*nr + sr*sr - 2*nr*sr*np.cos(nth-sth) + (nz - sz)*(nz - sz))
+            curr_l = sqrt(nr*nr + sr*sr - 2*nr*sr*cos(nth-sth) + (nz - sz)*(nz - sz))
             length += curr_l
             sr = nr
             sz = nz
@@ -214,7 +211,7 @@ def getOwlConlensGraph(eq: EQA):
             if not polygon.checkIfIn(nr, nz, False):
                 break
 
-            curr_l = sqrt(nr*nr + sr*sr - 2*nr*sr*np.cos(nth-sth) + (nz - sz)*(nz - sz))
+            curr_l = sqrt(nr*nr + sr*sr - 2*nr*sr*cos(nth-sth) + (nz - sz)*(nz - sz))
             length += curr_l
             sr = nr
             sz = nz
@@ -224,6 +221,8 @@ def getOwlConlensGraph(eq: EQA):
 
 if __name__ == "__main__":
     import l2g
+    import l2g.equil
+    from l2g.external.equilibrium_analysis import EQA
     import argparse
     import os
     import sys

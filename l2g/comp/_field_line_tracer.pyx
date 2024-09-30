@@ -5,12 +5,10 @@ import numpy as np
 cimport numpy as np
 import cython
 
-import l2g.equil
-import l2g.comp
+## Cython imports
 from l2g.external.flt cimport FLT
 from l2g.external.embree cimport PyEmbreeAccell
 
-from typing import Union, List, Optional
 
 # Std stuff
 from libcpp cimport bool
@@ -19,7 +17,6 @@ from libcpp.vector cimport vector
 from libc.math cimport sqrt, atan2, acos
 
 import os
-
 import logging
 from time import perf_counter
 log = logging.getLogger(__name__)
@@ -131,6 +128,7 @@ cdef class FieldLineTracer:
         self.options:    l2g.settings.Options             = l2g.settings.Options()
         import l2g.external.embree
         self.embree_obj: l2g.external.embree.PyEmbreeAccell = l2g.external.embree.PyEmbreeAccell()
+        import l2g.equil
         self.equilibrium:l2g.equil.Equilibrium        = l2g.equil.Equilibrium()
         import l2g.external.equilibrium_analysis
         self.eq: l2g.external.equilibrium_analysis.EQA = l2g.external.equilibrium_analysis.EQA()
@@ -138,6 +136,7 @@ cdef class FieldLineTracer:
         #  Results objects
         # self.point_results: l2g.comp.L2GPointResults = l2g.comp.L2GPointResults() # Holds FLT result on points
         # self.mesh_results:  l2g.comp.L2GResults =      l2g.comp.L2GResults() # Holds FLT result on mesh
+        import l2g.comp
         self.results: l2g.comp.L2GResults = l2g.comp.L2GResults()
         self.recalculate_magnetic_data: bool = True
         self.fl_results:    l2g.comp.L2GFLs =          l2g.comp.L2GFLs() # Holds fieldlines
@@ -162,7 +161,7 @@ cdef class FieldLineTracer:
         self.embree_obj = embree_obj
         self.c_FLT.setEmbreeObj(embree_obj.c_eacc)
 
-    def commitMeshesToEmbree(self, mesh_files: Union[List[str], str], dim_mul=1e-3) -> list:
+    def commitMeshesToEmbree(self, mesh_files: list[str] | str, dim_mul=1e-3) -> list:
         """Commits mesh from files to embree.
 
         Returns:
@@ -173,6 +172,7 @@ cdef class FieldLineTracer:
             dim_mul (float): Dimension multiplier to convert mesh dimension to
                 meters. Default 1e-3.
         """
+        import l2g.mesh
         log.info("Commiting meshes to Embree object...")
         if isinstance(mesh_files, str):
             mesh_files = [mesh_files]
@@ -181,7 +181,8 @@ cdef class FieldLineTracer:
 
         for file in mesh_files:
             log.info(f"Commiting {file} to Embree object.")
-            v, t = l2g.utils.meshio.readMesh(file)
+            mesh = l2g.mesh.Mesh(file)
+            v, t = mesh.getMeshData()
             out_ids.append(self.embree_obj.commitMesh(v * dim_mul, t))
             # Dimension is in meters
 
@@ -190,7 +191,8 @@ cdef class FieldLineTracer:
     @cython.boundscheck(False)
     @cython.wraparound(False)
     @cython.cdivision(True)
-    def setTargetData(self, vertices:np.ndarray, triangles: Optional[np.ndarray] = None) -> None:
+    def setTargetData(self, vertices:np.ndarray,
+                      triangles: np.ndarray | None = None) -> None:
         """Sets the target data.
 
         If vertices is provided and triangles is None, then the the vertices
@@ -211,7 +213,7 @@ cdef class FieldLineTracer:
             vertices (np.ndarray): An array of points. These could already be
                 the target points or are the vertices of the triangluar mesh.
                 In meters
-            triangles (Optional[np.ndarray]): An optional numpy array of
+            triangles (np.ndarray | None): An optional numpy array of
                 triangles. If this is not none, then the target data is
                 considered a mesh. Otherwise the vertices are considered the
                 target data.
@@ -319,7 +321,7 @@ cdef class FieldLineTracer:
         # result object
         self.results.reset()
 
-    def setEquilibrium(self, equilibrium: l2g.equil.Equilibrium) -> None:
+    def setEquilibrium(self, equilibrium: 'l2g.equil.Equilibrium') -> None:
         """Set the equilibrium data, which is propagated to the eq analyze
         class and the external FLT C++ code.
         """

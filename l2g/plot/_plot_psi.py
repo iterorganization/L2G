@@ -1,7 +1,6 @@
 """This file contains the function to plot the magnetic flux map of an
 equilibrium.
 """
-import l2g.equil
 import os
 
 import matplotlib.pyplot as plt
@@ -9,7 +8,7 @@ import matplotlib.colors as colors
 import matplotlib.figure
 import numpy as np
 
-def plot_psi_to_mpl_ax(ax, eq: l2g.equil.EQ):
+def plot_psi_to_mpl_ax(ax, eq: 'l2g.equil.EQ'):
     """Plot the poloidal magnetic flux of an equilibrium to a matplotlib axes.
 
     Arguments:
@@ -123,7 +122,7 @@ def plot_psi_to_mpl_ax(ax, eq: l2g.equil.EQ):
     ax.legend()
 
 
-def plot_psi(eq: l2g.equil.EQ, output_path: str = "",
+def plot_psi(eq: 'l2g.equil.EQ', output_path: str = "",
              plot_midplane: bool = False,
              save_files: bool = True) -> matplotlib.figure.Figure:
     """Plot the poloidal magnetic flux of an equilibrium.
@@ -133,7 +132,7 @@ def plot_psi(eq: l2g.equil.EQ, output_path: str = "",
     _psi and generate a pdf and png file.
 
     Arguments:
-        eq (l2g.equil.EQ): Equilibrium with diagnostic
+        eq (l2g.equil.EQ'): Equilibrium with diagnostic
         output_path (str): Output path.
     """
 

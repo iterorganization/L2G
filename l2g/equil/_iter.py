@@ -1,5 +1,3 @@
-from l2g.equil import (getEquilibriumFromIMAS, getEquilibriumFromEQDSKG,
-                       EQDSKIO, Equilibrium)
 import glob
 import os
 
@@ -7,8 +5,6 @@ import logging
 log = logging.getLogger(__name__)
 
 import math
-
-from typing import List
 
 def truncate(number: float, digits: int) -> float:
     """Truncate number decimal places to the number of digits.
@@ -38,8 +34,8 @@ class EquilibriumIterator(object):
     def __init__(self) -> None:
         self.type = None
 
-        #: List for storing :pyclass:`l2g.equil.Equilibrium` objects.
-        self._equilibriums: List[Equilibrium] = []
+        #: List for storing :py:class:`l2g.equil.Equilibrium` objects.
+        self._equilibriums: list['Equilibrium'] = []
 
         #: List of associated times.
         self._times = []
@@ -68,6 +64,8 @@ class EquilibriumIterator(object):
         Arguments:
             l (list): List of EQDSK G files. Can contain * for globbing
         """
+        from l2g.equil import getEquilibriumFromEQDSKG, EQDSKIO
+
         if isinstance(l, str):
             l = [l]
 
@@ -89,6 +87,9 @@ class EquilibriumIterator(object):
     def loadIMASEquilibriums(self, d: dict = {}) -> None:
         """Loads equilibriums from IMAS.
         """
+        import numpy as np
+        from l2g.equil import getEquilibriumFromIMAS
+
         shot = d['shot']
         run = d['run']
 
@@ -123,7 +124,6 @@ class EquilibriumIterator(object):
             time_end = d["time_end"]
 
         times = None
-        import numpy as np
         if "times" in d:
             times = d["times"]
             if isinstance(times, np.ndarray):
@@ -228,7 +228,7 @@ class EquilibriumIterator(object):
             equilibrium.wall_contour_r = [_ + r_shift for _ in equilibrium.wall_contour_r]
             equilibrium.wall_contour_z = [_ + z_shift for _ in equilibrium.wall_contour_z]
 
-    def applyPlasmaShift(self, r_shift: float | List[float], z_shift: float | List[float]):
+    def applyPlasmaShift(self, r_shift: float | list[float], z_shift: float | list[float]):
 
         log.info("Applying shift to input plasma equilibrium data")
 
