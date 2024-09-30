@@ -1,11 +1,12 @@
 # The following import line is used only for type hints. Remove it and the
 # used types to avoid importing the main module.
-from l2g.comp import L2GResults, L2GResultsHLM, L2GFLs
 import numpy as np
 import logging
 import os
 log = logging.getLogger(__name__)
-from typing import Dict, Optional, Tuple, Union, List
+from typing import Dict, Optional, Tuple, Union, List, TYPE_CHECKING
+if TYPE_CHECKING:
+    from l2g.comp import L2GResults, L2GResultsHLM, L2GFLs
 
 
 def supportedFileExts() -> List[str]:
@@ -191,10 +192,6 @@ class Mesh():
             from . import _vtk
             self.backend = _vtk
             self.backend_name = "VTK"
-        # elif "h5" in ext or "hdf" in ext:
-        #     from . import _hdf5
-        #     self.backend = _hdf5
-        #     self.backend_name = "HDF5"
         else:
             self.backend_name = "UNKNOWN"
             self.backend = None
