@@ -505,6 +505,10 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
     if "fl_ids" in geod:
         fl_ids = geod["fl_ids"]
         get_fls = True
+
+        # Create the directory!
+        os.makedirs(os.path.join(output_directory, "fieldlines"),
+                    exist_ok=True)
     else:
         get_fls = False
         fl_ids = []
@@ -724,7 +728,8 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
             for fl_group in fl_ids:
                 flt_obj.fl_ids = fl_ids[fl_group]
                 flt_obj.getFL()
-                file_path = os.path.join(output_directory, f"{case_name}_{fl_group}_{index}.vtk")
+                file_path = os.path.join(output_directory, "fieldlines",
+                                         f"{case_name}_{fl_group}_{index}.vtk")
                 pprint(f"INFO: Saving fl to {file_path}")
                 l2g.mesh.save_results_to_vtk(flt_obj.fl_results, file_path)
 
