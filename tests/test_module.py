@@ -1,6 +1,7 @@
 import unittest
 
-from l2g.comp.core import PyEmbreeAccell, PyFLT
+from l2g.external.embree import PyEmbreeAccell
+from l2g.external.flt import PyFLT
 import numpy as np
 
 """Check

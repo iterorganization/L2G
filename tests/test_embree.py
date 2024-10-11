@@ -1,6 +1,6 @@
 import unittest
 
-from l2g.comp.core import PyEmbreeAccell
+from l2g.external.embree import PyEmbreeAccell
 import numpy as np
 
 class TestEmbree(unittest.TestCase):
