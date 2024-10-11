@@ -171,6 +171,8 @@ def check_yaml(path_to_yaml_file: str):
                             raise WrongTypeException("ERROR: Entry fl_ids is of wrong type!")
 
                         for key in fl_ids:
+                            if key == "__line__":
+                                continue
                             if not isinstance(fl_ids[key], list):
                                 raise WrongTypeException(f"ERROR: An entry of fl_ids {key} does not have a list!")
                             if not all(isinstance(_, int) for _ in fl_ids[key]):
@@ -249,8 +251,8 @@ def check_yaml(path_to_yaml_file: str):
                         case "custom":
                             check_list_of_paths("profile_files", d)
                             test_list = [
-                                ["extrapolate", bool, d, True],
-                                ["outside_value", float, d, True],
+                                ["extrapolate", bool, d, isOptional],
+                                ["outside_value", float, d, isOptional],
                             ]
                         case "elm":
                             test_list = [
@@ -270,7 +272,7 @@ def check_yaml(path_to_yaml_file: str):
                             test_list = [
                                 ["p_sol", (float, int, list), d],
                                 ["lambda_q_near", (float, int, list), d],
-                                ["lambda_q_main", (float, int, list), d],
+                                ["lambda_q_main", (float, int, list), d, isOptional],
                             ]
                         case _:
                             epprint(f"ERROR: In hlm document at {line_number}")
