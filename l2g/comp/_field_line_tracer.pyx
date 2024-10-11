@@ -97,6 +97,48 @@ cdef void getTriangleNormal(vector[double] points, vector[double] &out) nogil:
 
 
 cdef class FieldLineTracer:
+    """This is the class that performs FLT on input mesh data.
+
+    Example usage:
+
+    ``` py
+    import l2g.comp
+
+    flt = l2g.comp.FieldLineTracer()
+
+    # Set the parameters, options and hlm settings
+
+    flt.parameters
+    flt.options
+    flt.hlm_params
+
+    # Set mesh data in the form of vertices and triangles
+    flt.setTargetData(v, t)
+    # Or just on points
+    flt.setTargetData(v)
+
+    # Set the equilibrium data
+    flt.setEquilibrium(equilibrium)
+
+    flt.applyParameters()
+    flt.loadEq()
+    flt.processMagneticData()
+
+    # Run the FLT
+    flt.runFLT()
+
+    # Process the data
+    flt.results
+    flt.hlm_results
+
+    # Get specific field lines
+    flt.fl_ids = [1,2,3,...]
+
+    flt.getFL()
+
+
+    ```
+    """
     cdef FLT *c_FLT
     cdef vector[double] c_points # In Cylindrical Coordinate system. (R [m], Z [m], Phi [rad])
     cdef vector[int] c_direction
@@ -324,6 +366,10 @@ cdef class FieldLineTracer:
     def setEquilibrium(self, equilibrium: 'l2g.equil.Equilibrium') -> None:
         """Set the equilibrium data, which is propagated to the eq analyze
         class and the external FLT C++ code.
+
+        Arguments:
+            equilibrium (l2g.equil.Equilibrium): Contains equilibrium magnetic
+                data (2D axisymmetric)
         """
         self.equilibrium = equilibrium
         self.eq.setEquilibrium(equilibrium)
@@ -723,11 +769,11 @@ cdef class FieldLineTracer:
         the input geometry, so that the equilibrium LCFS is limiting also on
         the geometry.
 
-       .. note::
+        !!! note
 
-          In order to use it, the diagnostic for the equilibrium must have a
-          the points of the LCFS or boundary contour prepared so that there
-          are points to compare.
+            In order to use it, the diagnostic for the equilibrium must have a
+            the points of the LCFS or boundary contour prepared so that there
+            are points to compare.
 
         The LCFS contour is clipped to the closest element on the mesh.
         Afterwards the distance is set as the displacement for the radial and
@@ -736,10 +782,10 @@ cdef class FieldLineTracer:
         LCFS points are following the shift, therefore the underlying C++ code
         will receive the full correct displacement.
 
-        .. todo::
+        !!! todo
 
-           Find a good algorithm to obtain LCFS contour points with a good
-           resolution. But this has to be done in EQ class.
+            Find a good algorithm to obtain LCFS contour points with a good
+            resolution. But this has to be done in EQ class.
 
         """
         log.info("Checking whether the input geometry is aligned with the" +

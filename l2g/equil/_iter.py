@@ -172,7 +172,7 @@ class EquilibriumIterator(object):
 
         self._ids_summary = self._ids.get("summary")
 
-        # Get times
+        # Get times.
         if times is None:
 
             times_indexes = np.where(np.logical_and(
@@ -208,7 +208,8 @@ class EquilibriumIterator(object):
 
             self._equilibriums.append(equilibrium)
 
-            truncate_time = truncate(t, self.truncate_digits)
+            # Get the actual time of the slice
+            truncate_time = truncate(time_slice.time, self.truncate_digits)
             # Truncate the time
             self._times.append(truncate_time)
 

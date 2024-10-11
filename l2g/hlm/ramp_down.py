@@ -11,10 +11,9 @@ def decay_length_L_mode_diverted(a: float, R: float, Ip: float, Area: float):
      - Ip = equilibirum.time_slice[:].global_quantities.ip
      - Area = equilibrium.time_slice[:].global_quantities.area
 
-    .. math::
-
+    $$
        \lambda_q = 4350 (\frac{a}{R})^{1.09} (\frac{Ip}{Area})^{-0.43}
-
+    $$
 
     Returns:
         lambda_q (float): Decay length. In millimeters.

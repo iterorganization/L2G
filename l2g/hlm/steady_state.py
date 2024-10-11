@@ -5,17 +5,17 @@ import logging
 log = logging.getLogger(__name__)
 
 def conservative(drsep: np.ndarray) -> np.ndarray:
-    """From input drsep (in this case it has to be distance from the second
+    r"""From input drsep (in this case it has to be distance from the second
     separatrix) calculate the contributions from inter-ELM and ELMs (old HNLS).
 
     Heat load parallels are hard-coded, so are decay lengths!
 
-    .. math::
-
+    $$
        q_{elm \parallel} & = 5 \frac{MW}{m^2} \\\\
        \lambda_{q, elm} & = 0.09 m \\\\
        q_{inter-elm \parallel} & = 3 \frac{MW}{m^2} \\\\
        \lambda_{q, inter-elm} & = 0.17 m
+    $$
     """
     q_elm = 5e6 * np.exp(-(drsep) / 0.09)
     q_inter = 3e6 * np.exp(-(drsep) / 0.17)
@@ -527,7 +527,7 @@ def get_elm_data(conlen_graph_data, generate_graphics=False, output_name="",
 
     axs[0].set_title('a) $L_{conn}[m]$')
     axs[1].set_title('b) $W_{fil}/W_{0fil}$')
-    axs[2].set_title('c) $\lambda [mm]$')  # $[(dW/dr)/W]^{-1}[mm]$
+    axs[2].set_title(r'c) $\lambda [mm]$')  # $[(dW/dr)/W]^{-1}[mm]$
     axs[3].set_title(r'a) $q_{\parallel, ELM} + q_{\parallel, inter-ELM}[\frac{MW}{m^2}]$')
 
     XLABEL = '$r-r_{sep}[mm]$'

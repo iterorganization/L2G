@@ -38,7 +38,7 @@ class EQDSKIO(object):
 
     They are all accessible with the following example
 
-    .. code-block:: python
+    ``` python
 
        import l2g.equil
        x = l2g.equil.EQDSKIO()
@@ -63,6 +63,7 @@ class EQDSKIO(object):
        # geometry of the limiter
        x.RLIM
        x.ZLIM
+    ```
     """
 
     def __init__(self, file=''):
@@ -138,7 +139,7 @@ class EQDSKIO(object):
         to the **Salome Object** in **Object browser**.
 
         Arguments:
-            eqdskName (str): Name for the case.
+            name (str): Name for the case.
         """
         self.name = name
 
@@ -185,7 +186,7 @@ class EQDSKIO(object):
         HEADER = LINES[0]
         self.HEADER = HEADER
         # regexHeader = '^.+[0-9] +?([0-9]+) +?([0-9]+)'
-        regexHeader = '\s[0-9]\s+([0-9]+)\s+([0-9]+)'
+        regexHeader = r'\s[0-9]\s+([0-9]+)\s+([0-9]+)'
 
         result = re.findall(regexHeader, HEADER)
         # self.log("Reading 1st line of EQDSK.")
@@ -346,7 +347,7 @@ class EQDSKIO(object):
             out (Union[int, List[Float]]): Returns -1 if a line contains an
                 alpha at the beginning, else it returns a list of values.
         """
-        pattern = '-?[0-9]{1}\.[0-9]{9}[eE][-+]?[0-9]{2}'
+        pattern = r'-?[0-9]{1}\.[0-9]{9}[eE][-+]?[0-9]{2}'
 
         result = re.findall(pattern, line)
 
@@ -385,10 +386,10 @@ class EQDSKIO(object):
         part_2 = []
 
         # Pattern for reading integer values separated with spaces
-        integerPattern = u'(?:^|(?<=\s))-?[0-9]+(?:$|(?=\s))'
+        integerPattern = r'(?:^|(?<=\s))-?[0-9]+(?:$|(?=\s))'
         intPatt = re.compile('.*' + integerPattern + '.*')
         # Pattern for reading scientific numbers
-        scientificPattern = u'[+-]?[0-9]\.[0-9]{6,9}[eE][+-][0-9]{2}'
+        scientificPattern = r'[+-]?[0-9]\.[0-9]{6,9}[eE][+-][0-9]{2}'
 
         pattern = u'(?:%s|%s)' % (integerPattern, scientificPattern)
         genPatt = re.compile(pattern)

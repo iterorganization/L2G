@@ -81,7 +81,7 @@ class Mesh():
     MED format (MED-file, MEDCoupling) but it is intended to be an easy to use
     interface with different I/O backends behind.
 
-    .. code-block:: python
+    ``` python
 
        import l2g.mesh
        m = l2g.mesh.Mesh("/path/to/file.med")
@@ -125,7 +125,7 @@ class Mesh():
 
        # Finally write the fields.
        m.writeFields()
-
+    ```
 
 
     """
@@ -379,6 +379,13 @@ class Mesh():
             return self.backend.getGroupArr(self.file_path, group_name)
         return None
 
+    def getAllGroups(self) -> list[str]:
+        """Returns a list of all defined groups inside the MED file.
+        """
+        if self.backend:
+            return self.backend.getAllGroups(self.file_path)
+        return []
+
     def writeMeshTo(self, file_path: str) -> 'Mesh':
         """In this case we wish to copy the mesh of a file to a new location.
         Same file paths are *not* allowed, i.e., over-writing mesh in the same
@@ -441,8 +448,6 @@ class Mesh():
                 is an array, it becomes a field when written in the file.
             array (np.ndarray): Numpy array. Can be multi-dimensional, i.e.,
                 vector data.
-            index (int): Time step of the array.
-            time (float): Self-describing.
             info_on_components (list): When we have vector data it is necessary to also
                 provides the info_on_components of each component of the vector data.
         """
@@ -566,7 +571,7 @@ class Mesh():
         out.triangles = self.triangles.copy()
         return out
 
-def load_flt_results_from_mesh(mesh_results: L2GResults, mesh_object: Mesh):
+def load_flt_results_from_mesh(mesh_results: 'L2GResults', mesh_object: Mesh):
     """Loads required fields from the Mesh objects to the mesh results.
 
     It is necessary to set the index of the fields *before* calling this \
@@ -591,7 +596,7 @@ def load_flt_results_from_mesh(mesh_results: L2GResults, mesh_object: Mesh):
     # mesh_results.baryCent = mesh_object.getField("baryCent").flatten()
     mesh_results.empty = False
 
-def dump_flt_results_to_mesh(mesh_results: L2GResults, mesh_object: Mesh):
+def dump_flt_results_to_mesh(mesh_results: 'L2GResults', mesh_object: Mesh):
     """Dumps flt_mesh results to mesh object.
 
     mesh_results is L2GResults
@@ -634,7 +639,7 @@ def dump_flt_results_to_mesh(mesh_results: L2GResults, mesh_object: Mesh):
 
     mesh_object.writeFields()
 
-def dump_hlm_results_to_mesh(hlm_results: L2GResultsHLM, mesh_object: Mesh,
+def dump_hlm_results_to_mesh(hlm_results: 'L2GResultsHLM', mesh_object: Mesh,
                              hlm_type: str):
     """Dumps flt_mesh results to mesh object.
 
@@ -697,7 +702,7 @@ def save_mesh_to_vtk(data, file_path):
     writer.SetFileName(file_path)
     writer.Write()
 
-def save_results_to_vtk(result_obj: Union[L2GFLs, L2GResults],
+def save_results_to_vtk(result_obj: Union['L2GFLs', 'L2GResults'],
                        file_path: str) -> None:
     """Helper function to save result objects: :class:`L2GResults`,
     :class:`L2GFLs` to a file.
@@ -708,6 +713,8 @@ def save_results_to_vtk(result_obj: Union[L2GFLs, L2GResults],
     In case of :class:`L2GFLs` a new VTK file is created
 
     """
+    from l2g.comp import L2GResults, L2GFLs
+
     if not isinstance(result_obj, (L2GResults, L2GFLs)):
         log.error("Wrong object provided to results")
 

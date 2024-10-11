@@ -286,3 +286,9 @@ def getGroupArr(file_path: str, group_name: str) -> np.ndarray:
     umedf = __file_med__[file_path]
 
     return umedf.getGroupArr(0, group_name).toNumPyArray()
+
+def getAllGroups(file_path: str) -> list[str]:
+    import medcoupling as mc
+    mesh_name = mc.GetMeshNames(file_path)[0]
+    groups: list = mc.GetMeshGroupsNames(file_path, mesh_name)
+    return groups

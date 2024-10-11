@@ -369,12 +369,11 @@ class EQ:
 
         Returns:
             (tuple): tuple containing:
-
-              - Rb (float): Starting position in the major radius.
-              - Z (float): Height of the midplane.
-              - Btotal (float): Total magnetic field magnitude at start of the
-                midplane
-              - Bpm (float): Poloidal component at start of the midplane
+                - Rb (float): Starting position in the major radius.
+                - Z (float): Height of the midplane.
+                - Btotal (float): Total magnetic field magnitude at start of the
+                  midplane
+                - Bpm (float): Poloidal component at start of the midplane
 
         """
 
@@ -476,7 +475,7 @@ class EQ:
         to point p.
 
         Arguments:
-            p (np.ndarray): 1D array with 2 values.
+            point (np.ndarray): 1D array with 2 values.
 
         Returns:
             displ (np.ndarray): New evaluated displacement.

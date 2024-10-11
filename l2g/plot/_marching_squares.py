@@ -54,9 +54,9 @@ def calculate_length_longest(paths: list) -> float:
 
 class Segment:
     def __init__(self):
-        self.points: Tuple = None, None
-        self.next: Optional[Tuple[int, int]] = None
-        self.id: Tuple[int, int] = None
+        self.points: tuple = None, None
+        self.next: tuple[int, int] | None = None
+        self.id: tuple[int, int] = None
 
         # Whether this is a starting segment
         self.start = False
@@ -86,7 +86,7 @@ class Marching(object):
         self.c_interpolator = i
         self.c_interpolator_set = True
 
-    def getContourPath(self, val: float) -> Tuple[list, list]:
+    def getContourPath(self, val: float) -> tuple[list, list]:
         r"""Obtain a collection of all contours on a 2D grid.
 
         The following orientation is used for obtaining segments from cells.
@@ -389,7 +389,7 @@ class Marching(object):
 
         return paths, types
 
-def plot_paths(ax, paths: Tuple[list, list], *args, **kwargs) -> None:
+def plot_paths(ax, paths: tuple[list, list], *args, **kwargs) -> None:
     label = False
     if 'label' in kwargs:
         label = True

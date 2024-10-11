@@ -137,6 +137,20 @@ cdef class PyBfgs2d:
         """Zoom function of the approximate line-search satisfying strong
         Wolfe conditions.
 
+
+        Arguments:
+            x (float): X of starting position.
+            y (float): Y of starting position.
+            a1 (float): Acceptable but very short (usually) distance.
+            a2 (float): Unacceptable distance.
+            f0 (float): Function value f(x, y).
+            gk0 (float): Dot product between the gradient and direction vector
+                at (x, y).
+            p1 (float): X component of direction vector.
+            p2 (float): Y component of direction vector.
+            c1 (float): Searching constant c1 for Wolfe conditions.
+            c2 (float): Searching constant c2 for Wolfe conditions.
+
         The process is as following:
 
             We have a Phi function Phi(a) = f(x + ap1, y + a p2), for which
@@ -155,7 +169,8 @@ cdef class PyBfgs2d:
             1.) Use one of the methods, quadratic, cubic minimizers
                 or simply bisection, that try to find a a* which minimizes the
                 function the most and see if it satisfies the strong Wolfe
-                condition.
+                condition. If they are not satisfied go to 2.) otherwise return
+                a*
 
             2.) If the calculated a* fails to satisfies the (normal) Wolfe
                 conditions, we zoom to the [a1, a*] interval. We go back to
@@ -311,6 +326,9 @@ cdef class PyBfgs2d:
             y: Y component of the starting point
             p1: X component of the direction vector
             p2: Y component of the direction vector
+
+        Returns:
+
         """
 
         cdef:
