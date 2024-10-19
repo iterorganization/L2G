@@ -625,6 +625,7 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
                     f"{result_file_path}!")
             result_file = l2g.mesh.Mesh(result_file_path)
 
+
     else:
         # We do not need to obtain the FLT results but still require the FLT
         # data
@@ -670,7 +671,7 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
             flt_obj.processMagneticData()
 
             # Check if we have to aglign the LCFS
-            if flt_obj.eq.getType() == "lim" and align_lcfs:
+            if flt_obj.eq.getType() == "lim" and align_lcfs and (run_flt or get_fls):
                 pprint("INFO: Aligning limiter plasma with target geometry!")
                 flt_obj.alignGeometryWithLCFS()
 
@@ -843,9 +844,15 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
 
 def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
     import os
+
     import matplotlib.pyplot as plt
     import matplotlib.colors as colors
+    import matplotlib.figure
+    import matplotlib.axes
+
     import l2g.equil
+    import l2g.plot
+    import l2g.external.equilibrium_analysis
     import numpy as np
 
     equil_obj = l2g.equil.EquilibriumIterator()
@@ -861,13 +868,8 @@ def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
             sys.exit(2)
     # Additional arrays if they are needed
     time_array = []
-    # Used for ramp-down graphics
-    psol_array = []
-    ip_array = []
-    lambdaq_array = []
     # Create a simple X-axis drsep array for plotting Q_parallels.
     drsep = np.linspace(0, 0.3, 100)
-    label = ""
 
 
     def truncate_colormap(cmap, minval=0.0, maxval=1.0, n=100):
@@ -880,9 +882,20 @@ def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
     base_cmap_drsep = plt.get_cmap('jet_r')
     base_cmap_vacc = plt.get_cmap('jet_r')
 
-    import l2g.plot
-    import l2g.external.equilibrium_analysis
-    import numpy as np
+    def plot_paths(ax, paths: tuple[list, list], *args, **kwargs) -> None:
+        label = False
+        if 'label' in kwargs:
+            label = True
+        for path in paths[0]:
+            ax.plot(path[0], path[1], *args, **kwargs)
+
+            # ax.plot(path[0][0], path[1][0], "bo", ms=12)
+            # ax.plot(path[0][-1], path[1][-1], "yo", ms=12)
+
+            if label:
+                label = False
+                kwargs.pop('label')
+        return None
 
     if not (base_name:=kwargs.get("file_base_name")):
         base_name = f"{eqid['name']}"
@@ -904,9 +917,8 @@ def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
         name = f"{base_name}_{associated_time}"
 
         ## Plot the fluxes
-
-        fig = plt.figure(figsize=plt.figaspect(3/2))
-        ax = fig.add_subplot(111)
+        fig: matplotlib.figure.Figure = plt.figure(figsize=plt.figaspect(3/2))
+        ax: matplotlib.axes.Axes = fig.add_subplot(111)
 
         ax.axis("equal")
         ax.set_xlabel("R[m]")
@@ -957,9 +969,7 @@ def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
             ax.contourf(grid_r, grid_z, psi, levels=band, cmap=cmap_drsep,
                         alpha=0.2)
 
-        import l2g.plot._marching_squares
-
-        obj = l2g.plot._marching_squares.Marching()
+        obj = l2g.plot.Marching()
         obj.setData(equilibrium.grid_r, equilibrium.grid_z,
                     equilibrium.psi * eq.psi_grad_sign)
 
@@ -968,26 +978,25 @@ def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
         if eq_type == "div":
             contourPaths = obj.getContourPath(psi_boundary)
 
-            l2g.plot._marching_squares.plot_paths(ax, contourPaths, label=r"$1^{st}$",
-                color='g', linewidth=1.5)
+            plot_paths(ax, contourPaths, label=r"$1^{st}$", color='g',
+                       linewidth=1.5)
             contourPaths = obj.getContourPath(psi_2nd_boundary)
-            l2g.plot._marching_squares.plot_paths(ax, contourPaths, label=r"$2^{nd}$",
-                color='b', linewidth=1.5)
+            plot_paths(ax, contourPaths, label=r"$2^{nd}$", color='b',
+                       linewidth=1.5)
 
             # Get the drsep=4cm separatrix
             flux4cm, _, _ = eq.getPsi(Rb + 0.04, Zc)
             contourPaths = obj.getContourPath(flux4cm)
-            l2g.plot._marching_squares.plot_paths(ax, contourPaths, label=r"$\Delta_{sep}=4cm$",
+            plot_paths(ax, contourPaths, label=r"$\Delta_{sep}=4cm$",
                 color='tab:orange', linewidth=1.5)
 
             ax.legend(title="Separatrix")
-
-
         else:
             paths, types = obj.getContourPath(psi_boundary)
             for i, path in enumerate(paths):
                 if i == 0:
-                    ax.plot(path[0], path[1], label="LCFS", color='g', linewidth=1.5)
+                    ax.plot(path[0], path[1], label="LCFS", color='g',
+                        linewidth=1.5)
                 else:
                     ax.plot(path[0], path[1], 'g', linewidth=1.5)
             ax.legend(title="Contour")
