@@ -44,17 +44,26 @@ ax.grid(True)
 lambdaq_vals = []
 lambdaq_tims = []
 
-ip_vals = []
-psol_vals = []
+time = summary.time
+
 
 ip_vals = summary.global_quantities.ip.value
-Psol = summary.global_quantities.power_loss.value
 ip_vals = np.abs(np.asarray(ip_vals))
-psol_vals = np.asarray(Psol)
-
-time = summary.time
 ax.plot(time, ip_vals*1e-6, color='r', label=r'$I_p$')
-ax.plot(time, psol_vals*1e-6, color='g', label=r'$P_{sol}$')
+
+Psol = summary.global_quantities.power_loss.value
+psol_vals = np.asarray(Psol)
+title = r"$I_p$ [MA]"
+if psol_vals.size == time.size:
+    ax.plot(time, psol_vals*1e-6, color='g', label=r'$P_{sol}$')
+    title += ", $P_{sol}$ [MW]"
+else:
+    # Let's plot Ohmic.
+    p_ohm = summary.global_quantities.power_ohm.value
+    if p_ohm.size == time.size:
+        title += ", $P_{ohm}$ [MW]"
+        ax.plot(time, p_ohm, color='g', label=r'$P_{ohm}$')
+
 ax.set_ylabel('Ip [MA], Psol [MW]')
 ax.set_xlabel('Time [s]')
 ax.hlines(y=10, xmin=time[0], xmax=time[ip_vals <= 10e6][0], linewidth=2, color='r')

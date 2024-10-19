@@ -176,8 +176,8 @@ ax.set_title(title)
 eq = l2g.equil.EQ(equilibrium)
 eq.evaluate()
 
-import l2g.plot._plot_psi
-l2g.plot._plot_psi.plot_psi_to_mpl_ax(ax, eq)
+import l2g.plot
+l2g.plot.plot_psi_to_mpl_ax(ax, eq)
 ax.set_ylim((np.min(WALL_Z) -1), np.max(WALL_Z) + 1)
 ax.set_xlim((np.min(WALL_R) -1), np.max(WALL_R) + 1)
 if not args.interactive:

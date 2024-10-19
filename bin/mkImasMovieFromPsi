@@ -109,7 +109,7 @@ l2g.enableDebugging()
 l2g.addStreamHandler()
 import l2g.equil
 import l2g.external.equilibrium_analysis
-import l2g.plot._marching_squares
+import l2g.plot
 
 it = l2g.equil.EquilibriumIterator()
 
@@ -136,7 +136,7 @@ it.loadIMASEquilibriums(dictionary)
 print("Done")
 paths_to_plot = []
 secondary_paths_to_plot = []
-x = l2g.plot._marching_squares.Marching()
+x = l2g.plot.Marching()
 print("Processing equilibrium")
 for index, time, equilibrium in it:
     print(time, flush=True)
