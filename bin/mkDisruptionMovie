@@ -1,0 +1,238 @@
+#!/usr/bin/env python3
+import argparse
+description = """Make a movie of the halo fluxes region out of an IMAS
+Disruption IDS.
+"""
+
+
+def get_contour_paths(marching_obj: "Marching", polygon_obj: "Polygon",
+        fluxes: list)->list:
+    out_paths = []
+
+    for flux in fluxes:
+        paths, types = marching_obj.getContourPath(flux)
+        found = False
+
+        sub_paths = []
+        for path in paths:
+
+            seg_x = []
+            seg_y = []
+            for i in range(len(path[0])):
+                if polygon.checkIfIn(path[0][i], path[1][i], False):
+                    seg_x.append(path[0][i])
+                    seg_y.append(path[1][i])
+                else:
+                    # Store the segment in sub_paths and start a new one
+                    if seg_x:
+                        # Store
+                        sub_paths.append([seg_x, seg_y])
+                        # Start a new segment
+                        seg_x = []
+                        seg_y = []
+            if seg_x:
+                sub_paths.append([seg_x, seg_y])
+        out_paths.append(sub_paths)
+    return out_paths
+
+def obtain_connection_length(equilibrium: "l2g.equil.Equilibrium",
+        polygon: "Polygon", rz_points: list[list[float]]):
+    bicubic = PyBicubic(equilibrium.grid_r, equilibrium.grid_z, equilibrium.psi)
+    rkf45_obj = PyRKF45FLT()
+    rkf45_obj.setInterpolator(bicubic)
+    rkf45_obj.set_vacuum_fpol(equilibrium.fpol_vacuum)
+
+    def get_fl_length(r: float, z: float, th: float, step: float) -> float:
+        length = 0.0
+        while True:
+            nr, nz, nth = rkf45_obj.run_step(r, z, th, step)
+            if not polygon.checkIfIn(nr, nz, False): # Do not check if on edge
+                break
+
+            curr_l = sqrt(nr*nr + r*r - 2*nr*r*np.cos(nth-th) + (nz - z)*(nz - z))
+            length += curr_l
+            r = nr
+            z = nz
+            th = nth
+        return length
+
+    out = np.zeros(len(rz_points))
+    for i in range(len(rz_points)):
+        length = 0.0
+        for p in rz_points[i]:
+            # Get FL length
+            length += get_fl_length(p[0], p[1], 0.0, 0.01)
+            length += get_fl_length(p[0], p[1], 0.0, -0.01)
+        out[i] = length
+    return out
+
+###############################################################################
+
+parser = argparse.ArgumentParser(description='Create EQDSK from IDS time slice')
+
+parser.add_argument('-s', '--shot', metavar='SHOT', type=int,
+                    help='Shot number',
+                    required=True)
+parser.add_argument('-r', '--run', metavar='RUN', type=int,
+                    help='Run number', required=True)
+parser.add_argument('-u', '--user', metavar='USER', type=str, default="public",
+                    help='Username')
+parser.add_argument('-d', '--device',
+                    metavar="DEVICE", type=str, default="ITER_DISRUPTIONS", help='Device')
+parser.add_argument('-ts', '--time_start', metavar='#time_start', type=float,
+                    default=0.0, help='Starting time')
+parser.add_argument('-te', '--time_end', type=float, default=999999)
+parser.add_argument('-o', '--output_name', type=str, default="out.gif",
+                    help="Name of gif.", metavar="OUTNAME")
+
+# Additional cosmetic arguments
+parser.add_argument('-minx', '--min_x', type=float, help="Abscissa lower limit",
+                    metavar="MIN X")
+parser.add_argument('-maxx', '--max_x', type=float, help="Abscissa upper limit",
+                    metavar="MAX X")
+parser.add_argument('-miny', '--min_y', type=float, help="Ordinate lower limit",
+                    metavar="MIN Y")
+parser.add_argument('-maxy', '--max_y', type=float, help="Ordinate upper limit",
+                    metavar="MAX Y")
+parser.add_argument("-ns", '--number_of_samples', type=int,
+                    metavar="#number_of_samples", default=100,
+                    help="Number of samples to take. If the " +
+                    "number of time slices in the IMAS IDS is lower than this" +
+                    " then it is ignored.")
+args = parser.parse_args()
+
+import imas
+import numpy as np
+from math import isclose
+
+ids = imas.DBEntry(backend_id=imas.imasdef.MDSPLUS_BACKEND,
+    user_name=args.user, db_name=args.device, shot=args.shot, run=args.run,
+    data_version='3')
+
+ids.open()
+wall_ids = ids.get("wall")
+summary_ids = ids.get("summary")
+
+times = summary_ids.time
+
+import l2g.external.equilibrium_analysis
+from l2g.external.bicubic import PyBicubic
+from l2g.external.rkf45 import PyRKF45FLT
+from l2g.plot import (Marching, Polygon)
+import l2g.equil
+
+import matplotlib.pyplot as plt
+
+import matplotlib
+def get_jet_cycler(n: int) -> "matplotlib.colors.LinearSegmentedColormap":
+    return plt.cycler("color", matplotlib.cm.jet(np.linspace(0, 1, n)))
+
+
+eq = l2g.external.equilibrium_analysis.EQA()
+
+marching_obj = Marching()
+
+ALL_CONTOUR_PATHS = []
+TIMES = []
+
+for time in times:
+    print(f"Processing time {time}")
+    TIMES.append(f"t={time:12.4f}s")
+    equilibrium_ids = ids.get_slice("equilibrium", time,
+                                    imas.imasdef.CLOSEST_SAMPLE)
+    disruption = ids.get_slice("disruption", time, imas.imasdef.CLOSEST_SAMPLE)
+
+    # Obtain the equilibrium. First get it without the helicity correction, so
+    # that we get the sign of the flux gradient.
+    equilibrium = l2g.equil.getEquilibriumFromIMAS(equilibrium_ids.time_slice[0],
+        equilibrium_ids.vacuum_toroidal_field, wall_ids, summary_ids, False)
+    flux_flip_sign = equilibrium.psi_sign
+
+    equilibrium = l2g.equil.getEquilibriumFromIMAS(equilibrium_ids.time_slice[0],
+        equilibrium_ids.vacuum_toroidal_field, wall_ids, summary_ids, True)
+
+
+    eq.setEquilibrium(equilibrium)
+    eq.evaluate()
+    if not eq.evaluated:
+        print("Failed to evaluate equilibrium! Skipping!")
+        continue
+
+    fluxes = flux_flip_sign * disruption.profiles_1d[0].grid.psi[:] / (2*np.pi)
+    psi_boundary = eq.getBoundaryFluxValue()
+    mask = fluxes >= psi_boundary
+    fluxes = fluxes[mask]
+    if len(fluxes) < 2:
+        print("Skipping because less than two magnetic surfaces defining " +
+              "halo region")
+        continue
+
+    ppar = disruption.profiles_1d[0].power_density_conductive_losses[mask]
+    # Cleaning values
+    idx = np.where(ppar==0.0)[0]
+
+    if idx.size:
+        fluxes = fluxes[:idx[0]+1]
+    if len(fluxes) < 2:
+        print("Skipping because less than two magnetic surfaces defining " +
+              "halo region")
+        continue
+
+    marching_obj.setData(equilibrium.grid_r, equilibrium.grid_z, equilibrium.psi)
+    polygon = Polygon(equilibrium.wall_contour_r, equilibrium.wall_contour_z)
+
+
+    # Get the points to plot.
+    contour_paths = get_contour_paths(marching_obj, polygon, fluxes)
+    ALL_CONTOUR_PATHS.append(contour_paths)
+    # print(contour_paths)
+    # Test plot
+    # colors = matplotlib.cm.jet_r(np.linspace(0, 1, len(fluxes)))
+    # f, ax = plt.subplots()
+    # for i, paths in enumerate(contour_paths):
+    #     for path in paths:
+    #         ax.plot(path[0], path[1], color=colors[i])
+
+    # ax.plot(equilibrium.wall_contour_r, equilibrium.wall_contour_z, "r-")
+    # ax.axis("equal")
+    # plt.show()
+
+# Create animation
+from matplotlib.animation import FuncAnimation, PillowWriter
+from functools import partial
+
+def update(i, paths, lines, labels):
+    contour_paths = paths[i]
+    while lines:
+        el = lines.pop(0)
+        el.remove()
+
+    colors = matplotlib.cm.jet_r(np.linspace(0, 1, len(contour_paths)))
+    for j, sub_paths in enumerate(contour_paths):
+        for path in sub_paths:
+            lines += ax.plot(path[0], path[1], '-', color=colors[j])
+
+    # if len(sr[i]):
+    #     for j in range(len(sr[i])):
+    #         lines += ax.plot(sr[i][j], sz[i][j], '-', c='g')
+    # ax.set_ylim(Z_LIMITS)
+    # ax.set_xlim(R_LIMITS)
+
+    lines.append(ax.text(0.7, 0.9, labels[i], transform = ax.transAxes))
+
+lines = [] # Holds plotting objects
+frame_update = partial(update, paths=ALL_CONTOUR_PATHS,
+                              lines=lines, labels=TIMES)
+figure = plt.figure(figsize=(600/100, 800/100), dpi=100)
+figure.set_tight_layout(True)
+ax = figure.add_subplot()
+ax.grid(True)
+ax.axis('equal')
+ax.set_xlabel('R [m]')
+ax.set_ylabel('Z [m]')
+# Plot limiter
+ax.plot(equilibrium.wall_contour_r, equilibrium.wall_contour_z, 'r-')
+ax.set_title(f"S={args.shot} R={args.run} U={args.user} D={args.device}")
+
+anim = FuncAnimation(figure, frame_update, frames=len(ALL_CONTOUR_PATHS), interval=250)
+anim.save("disruption_movie.gif", writer=PillowWriter())
