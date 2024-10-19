@@ -2,57 +2,18 @@ import numpy as np
 from scipy.optimize import bisect
 from l2g.external.bicubic import PyBicubic
 
-def calculate_length(paths: list, which="all") -> float:
-    l = 0.0
-
-    path_types = paths[1]
-
-    for i, path in enumerate(paths[0]):
-
-        # Sometimes we wish to calculate the length of only closed contours.
-        if not which=="all" and path_types[i] != which:
-            continue
-
-        pathx = path[0]
-        pathy = path[1]
-        x0 = pathx[0]
-        y0 = pathy[0]
-        for i in range(1, len(pathx)):
-            x = pathx[i]
-            y = pathy[i]
-            dx = x - x0
-            dy = y - y0
-            l += np.sqrt(dx*dx + dy*dy)
-
-            x0 = x
-            y0 = y
-    return l
-
-def calculate_length_longest(paths: list) -> float:
-    l = 0.0
-
-    path_types = paths[1]
-
-    for i, path in enumerate(paths[0]):
-        pathx = path[0]
-        pathy = path[1]
-        x0 = pathx[0]
-        y0 = pathy[0]
-        current_length = 0.0
-        for i in range(1, len(pathx)):
-            x = pathx[i]
-            y = pathy[i]
-            dx = x - x0
-            dy = y - y0
-            current_length += np.sqrt(dx*dx + dy*dy)
-
-            x0 = x
-            y0 = y
-        if current_length > l:
-            l = current_length
-    return l
 
 class Segment:
+    """Smallest part of the contour. It contains the points of the line in a
+    2D cell, the index of the cell and towards which cell it points next (delta
+    index).
+
+    Arguments:
+        points (tuple): Two points (or none) creating a line inside a 2D cell
+        next (tuple): Pointing towards the next segment
+        id (tuple): (x, y) index of the cell.
+
+    """
     def __init__(self):
         self.points: tuple = None, None
         self.next: tuple[int, int] | None = None
@@ -65,6 +26,11 @@ class Segment:
         return f"{self.i}, {self.j}\n{self.points}"
 
 class Marching(object):
+    """Class implementing marching squares algorithm for obtaining 2D contours.
+    Points on the grid lines are obtained via the use of bicubic interpolator
+    (not linear) and bisection.
+
+    """
     def __init__(self):
         pass
         self.c_interpolator: PyBicubic
@@ -76,6 +42,14 @@ class Marching(object):
         self.c_f: np.ndarray
 
     def setData(self, x, y, f):
+        """Set 2D data from which to draw the iso contours.
+
+        Arguments:
+            x (np.ndarray): 1D X array
+            y (np.ndarray): 1D Y array
+            f (np.ndarray): Function value on (x, y)
+
+        """
         self.c_x = x
         self.c_y = y
         self.c_f = f
@@ -83,6 +57,8 @@ class Marching(object):
         self.c_data_set = True
 
     def setInterpolator(self, i: PyBicubic):
+        """Set's the interpolator object.
+        """
         self.c_interpolator = i
         self.c_interpolator_set = True
 
@@ -160,6 +136,7 @@ class Marching(object):
 
                              |i>
 
+
         Arguments:
             val (float): Value of the contour
         """
@@ -186,6 +163,8 @@ class Marching(object):
         x = self.c_x
         y = self.c_y
 
+        # Index assignment
+
         for i in range(x.shape[0] - 1):
             for j in range(y.shape[0] - 1):
                 cell = mask[j: j+2, i: i+2]
@@ -201,8 +180,13 @@ class Marching(object):
 
                 # Obtain segments
                 if ind == 0 or ind == 15:
+                    # This cell either has all points above the value or below
+                    # the value.
                     continue
                 if ind == 5 or ind == 10:
+                    # One set of opposing corners is above/below the value
+                    # the other is below/above the value.
+
                     # Create Saddle segments
                     sad_obj1 = Segment()
                     sad_obj1.i = i
@@ -213,26 +197,31 @@ class Marching(object):
                     sad_obj2.j = j
                     sad_obj2.id = (i, j)
 
-                    # Do not map it in the segment map
+                    # Do not map it in the segment map as saddle points create
+                    # two segments which are crossing (intentionally).
                     saddle_indexes.append((i, j))
                     if ind == 5:
                         sad_obj1.next = i, j + 1
                         sad_obj2.next = i, j - 1
 
+                        # Horizontally search for the point on the upper edge.
                         p1 = x[i], bisect(fun_ver, y[j], y[j+1], args=(x[i]))
                         p2 = bisect(fun_hor, x[i], x[i+1], args=(y[j+1])), y[j+1]
                         sad_obj1.points = p1, p2
 
+                        # Horizontally search for the point on the lower edge.
                         p1 = x[i+1], bisect(fun_ver, y[j], y[j+1], args=(x[i+1]))
                         p2 = bisect(fun_hor, x[i], x[i+1], args=(y[j])), y[j]
                         sad_obj2.points = p1, p2
                     else: # ind == 10
                         sad_obj1.next = i + 1, j
                         sad_obj2.next = i - 1, j
+                        # Vertically search for the point on the right edge
                         p1 = bisect(fun_hor, x[i], x[i+1], args=(y[j+1])), y[j+1]
                         p2 = x[i+1], bisect(fun_ver, y[j], y[j+1], args=(x[i+1]))
                         sad_obj1.points = p1, p2
 
+                        # Vertically search for the point on the left edge.
                         p1 = bisect(fun_hor, x[i], x[i+1], args=(y[j])), y[j]
                         p2 = x[i], bisect(fun_ver, y[j], y[j+1], args=(x[i]))
                         sad_obj2.points = p1, p2
@@ -319,6 +308,8 @@ class Marching(object):
             # print(f'Starting from: {segment_id}')
             points_x = []
             points_y = []
+
+            # Remember the starting id in case the path is circular
             starting_id = segment_id
             path_type = "segment"
             new_path = True
@@ -334,8 +325,11 @@ class Marching(object):
                     break
                 elif segment.next in saddle_indexes:
                     # Continue from the saddle point that goes diagonally
-                    # away.
+                    # away in the same direction. No need to create two new
+                    # paths here just continue with the same direction segment.
 
+                    # Direction is calculated from the position of the next
+                    # segment id and the current segment id.
                     dind = (segment.next[0] - segment.id[0],
                             segment.next[1] - segment.id[1])
 
@@ -375,16 +369,24 @@ class Marching(object):
                                 paths[i] = (points_x, points_y)
                                 break
 
+                        #
                         if not new_path:
+                            # The current path was merged with an existing
+                            # path because the existing path did not start from
+                            # the beginning of the contour on the map.
                             break
                     break
 
+                # Continue towards the next segment
                 segment_id = segment.next
                 segment = segment_map.pop(segment.next)
 
             if new_path:
                 paths.append((points_x, points_y))
                 types.append(path_type)
+
+                # Collect all the starting ids of the paths. In case we have to
+                # combine together paths.
                 starting_ids_of_paths.append(starting_id)
 
         return paths, types
@@ -406,6 +408,57 @@ def plot_paths(ax, paths: tuple[list, list], *args, **kwargs) -> None:
 
 
 if __name__ == "__main__":
+
+
+    def calculate_length(paths: list, which="all") -> float:
+        l = 0.0
+
+        path_types = paths[1]
+
+        for i, path in enumerate(paths[0]):
+
+            # Sometimes we wish to calculate the length of only closed contours.
+            if not which=="all" and path_types[i] != which:
+                continue
+
+            pathx = path[0]
+            pathy = path[1]
+            x0 = pathx[0]
+            y0 = pathy[0]
+            for i in range(1, len(pathx)):
+                x = pathx[i]
+                y = pathy[i]
+                dx = x - x0
+                dy = y - y0
+                l += np.sqrt(dx*dx + dy*dy)
+
+                x0 = x
+                y0 = y
+        return l
+
+    def calculate_length_longest(paths: list) -> float:
+        l = 0.0
+
+        path_types = paths[1]
+
+        for i, path in enumerate(paths[0]):
+            pathx = path[0]
+            pathy = path[1]
+            x0 = pathx[0]
+            y0 = pathy[0]
+            current_length = 0.0
+            for i in range(1, len(pathx)):
+                x = pathx[i]
+                y = pathy[i]
+                dx = x - x0
+                dy = y - y0
+                current_length += np.sqrt(dx*dx + dy*dy)
+
+                x0 = x
+                y0 = y
+            if current_length > l:
+                l = current_length
+        return l
 
     r = np.linspace(0, 50, 100)
     z = np.linspace(0, 50, 100)
