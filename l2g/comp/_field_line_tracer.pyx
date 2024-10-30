@@ -31,7 +31,7 @@ cdef int valSign(double inp) nogil:
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-cdef double angleBetweenVectors(vector[double] v1, vector[double] v2) nogil:
+cdef double angleBetweenVectors(vector[double] v1, vector[double] v2) noexcept nogil:
     cdef float dot, sq1, sq2, angle
     dot = v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]
     sq1 = v1[0] * v1[0] + v1[1] * v1[1] + v1[2] * v1[2]
@@ -41,7 +41,7 @@ cdef double angleBetweenVectors(vector[double] v1, vector[double] v2) nogil:
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef void getBaryCenterInCyln(vector[double] points, float mul, vector[double] &out) nogil:
+cdef void getBaryCenterInCyln(vector[double] points, float mul, vector[double] &out) noexcept nogil:
     """Get barycenter of triangle. And return it in cylindrical coordinate
     system.
 

@@ -26,17 +26,18 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Cython"
 ]
+requires-python = ">=3.10"
 
 [project.optional-dependencies]
 tmp = [
     "imas",
-    "medcoupling",
+    "medcoupling==9.13.0",
     "vtk"
 ]
 
 [build-system]
 requires = [
-    "setuptools",
+    "setuptools>68",
     "numpy>=1.19.4",
     "Cython>=0.29.21",
     "wheel",
