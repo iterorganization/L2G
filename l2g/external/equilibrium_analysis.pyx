@@ -204,7 +204,7 @@ cdef class EQA:
         self.mag_axis_z = self.equilibrium.mag_axis_z
         self.psi_grad_sign = self.equilibrium.psi_sign
 
-    def setDisplacement(self, r_displ: float, z_displ: float):
+    def setDisplacement(self, r_displ: double, z_displ: double):
         self.r_displ = r_displ
         self.z_displ = z_displ
 
