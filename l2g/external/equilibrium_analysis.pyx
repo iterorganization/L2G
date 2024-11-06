@@ -99,13 +99,14 @@ cdef class EQA:
 
 
     def __cinit__(self):
-        log.debug("cinit")
+        log.debug("cinit start")
         self.c_bicubic = new BICUBIC_INTERP()
         self.c_saddle_bicubic = new BICUBIC_INTERP()
 
         self.c_rkf45 = new RKF45()
         self.c_rkf45.set_omp_thread(0)
         self.c_bfgs = PyBfgs2d()
+        log.debug("cinit stop")
 
     def __init__(self, equilibrium: 'Equilibrium' = None):
         self.resetValues()
