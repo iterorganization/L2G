@@ -176,7 +176,7 @@ for index, time in enumerate(tsteps):
         print("Something is wrong with this equilibrium slice. Skipping!")
         continue
     drsep = (fluxes - psi_boundary) / (Rb * Bpm)
-    ppar = disruption.profiles_1d[0].power_density_conductive_losses
+    ppar = disruption.profiles_1d[0].power_density_conductive_losses[mask]
 
     # Reverse the array?
     reverse_array = False
@@ -238,7 +238,7 @@ for index, time in enumerate(tsteps):
         rz_points.append(possible_points[np.argmin(_distances_to_axis)])
     # Get fluxes from the disruption ids
     parallel_conlen = obtain_connection_length(equilibrium, polygon, rz_points)
-    qpar = ppar[mask] * parallel_conlen * 0.5
+    qpar = ppar * parallel_conlen * 0.5
 
     # Ppar and Qpar are parallel components. So in order to put it to
     # use for SFLT, apply inverse of pitch
