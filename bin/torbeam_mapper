@@ -1,0 +1,432 @@
+#!/usr/bin/env python
+
+from sympy import integrals
+
+
+description = """Torbeam output mapper to meshes. It takes the torbeam output
+files (X and O files of the same case) and a set of meshes and projects the
+beams onto the meshes.
+"""
+
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+
+def pprint(string, *args, **kwargs):
+    print(string, *args, **kwargs, flush=True)
+
+def epprint(string, *args, **kwargs):
+    print(f"{bcolors.FAIL}{string}{bcolors.ENDC}", *args, **kwargs)
+
+def ipprint(string, *args, **kwargs):
+    print(f"{bcolors.OKBLUE}{string}{bcolors.ENDC}", *args, **kwargs)
+
+def opprint(string, *args, **kwargs):
+    print(f"{bcolors.OKGREEN}{string}{bcolors.ENDC}", *args, **kwargs)
+
+def read_torbeam_data(file: str):
+    """Reads torbeam data and stores it into a dictionary.
+    """
+
+    time_data = {}
+
+
+    beams = []
+    # First read the file to igure out how many beams are there
+    time_steps = []
+    ind = None
+    with open(file, "r") as f:
+        for line in f:
+            sline = line.split()
+            beam_index = int(sline[0])
+            time = float(sline[2])
+            # Collect the times. Each beam has the same time
+            if ind is None:
+                ind = beam_index
+
+            if beam_index == ind:
+                time_steps.append(time)
+
+            if beam_index not in beams:
+                beams.append(beam_index)
+
+    if len(beams) - 1 != beams[-1]:
+        print("Last beam index does not match the number of beams...")
+
+    n_beams = len(beams)
+    n_steps = len(time_steps)
+    print(f"We have {n_beams} beams and {n_steps} time steps.")
+
+    # Construct the time data
+
+    time_data = {}
+    id2beamname = {}
+    for time in time_steps:
+        time_data[time] = {}
+
+        time_data[time]['center'] = np.zeros((n_beams, 3))
+        time_data[time]['g31'] = np.zeros((n_beams, 3))
+        time_data[time]['g32'] = np.zeros((n_beams, 3))
+        time_data[time]['k'] = np.zeros((n_beams, 3))
+        time_data[time]['power'] = np.zeros(n_beams)
+
+
+
+    # Now actually read the data
+
+    with open(file, "r") as f:
+
+        for beam_ind in beams:
+            for time in time_steps:
+
+
+
+                sline = f.readline().split()
+
+                if beam_ind != int(sline[0]):
+                    print(f"Beam index mismatch!!! {beam_ind} {sline[0]}")
+                    sys.exit(1)
+
+                if time != float(sline[2]):
+                    print(f"Time mismatch!!! {time} {sline[2]}")
+                    sys.exit(1)
+
+                id2beamname[beam_ind] = sline[1]
+                center = np.array([float(_) for _ in sline[3:6]])
+                angle_pol = float(sline[6])
+                power = float(sline[7])
+                g31 = np.array([float(_) for _ in sline[8:11]])
+                g32 = np.array([float(_) for _ in sline[11:14]])
+                k = np.array([float(_) for _ in sline[14:17]])
+
+                time_data[time]['center'][beam_ind] = center
+                # time_data[time][beam_ind]['angle_pol'] = angle_pol
+                time_data[time]['g31'][beam_ind] = g31
+                time_data[time]['g32'][beam_ind] = g32
+                time_data[time]['k'][beam_ind] = k
+                time_data[time]['power'][beam_ind] = power
+
+    return id2beamname, time_data
+
+def generate_beam_points(center, g31, g32, scale:float =1.0,N:int =1000) -> "np.ndarray":
+    """Produces an array of points on an ellipse isocontour.
+
+    Returns:
+        points (np.ndarray): An array with shape ((N, 3)).
+    """
+
+    angles = np.linspace(0, 2*np.pi, N).reshape((N, 1))
+
+    points = center + scale * (np.cos(angles) * g31 + \
+                               np.sin(angles) * g32)
+    return points
+
+def beam_heat_load(q_max: float, sa: float, sb: float) -> float:
+    """Get the beam power at certain iso-contour. Using 2D Gaussian function
+
+    F(sa, sb) = q_max * exp(-(sa*a)^2/(2a^2)) * exp(-(sb*b)^2/(2b^2))
+
+    which transposes to:
+
+    F(sa, sb) = q_max * exp(-sa^2/2) * exp(-sb^2/2), as the contours are drawn
+    as % of half-axes-es. In usage sa==sb.
+
+    Integrating the function to get the total power is:
+    I = q_max * 2 * pi * a * b * erf(1/sqrt(2))**2
+
+    INCORRECT
+    return q_max * np.exp(-0.5 * sa**2) / (2 * np.pi * math.sqrt(a * b))
+
+    """
+
+    return q_max * np.exp(-0.5 * sa)**2 * np.exp(-0.5 * sb)**2
+
+def beam_heat_load_isocontour(q_max: float, sa: float) -> float:
+    """The previous function is wrong
+
+    2D Gaussian
+
+    F(sa, sb) = q_max * exp(-(sa * a)^2/(2a^2)) * exp(-(sb * b)^2/(2b^2))
+
+    sa, sb are isocontour values. And actually we just want one value, sa.
+
+    So essentially, for a isocontour we just provide one axis and set the other
+    value to 0
+
+    sa=sa, sb=0
+    F(sa, 0) = q_max * exp(-sa**2/2)
+
+    """
+
+    return q_max * np.exp(-sa**2) # / (2 * np.pi * math.sqrt(a * b))
+
+def integrate_beam(a, b) -> float:
+    """
+    2*sqrt(pi)*A*Integral(erf(sqrt(B**2 - y**2)/B), (y, 0, B))
+    """
+    def fun(y):
+        return np.exp(-y**2/b**2) * scipy.special.erf(math.sqrt(b**2 - y**2)/b)
+
+    I = 2 * math.sqrt(np.pi) * a * scipy.integrate.quad(fun, 0, b)[0]
+
+    return I
+
+
+def apply_torbeam_map(id2meshes: dict, normals: dict, cell_measurements: dict,
+                      embree_obj: "l2g.external.embree.PyEmbreeAccell",
+                      tor_data: dict):
+    """Applies tor_data to meshes.
+    """
+
+    isoscales = np.linspace(0.0, 1.0, 100)
+    points_per_isoscale = 1000
+
+    tnear = 0.0
+    tfar = 500.0 # 50 cm
+
+    # Constant for integrating elipse with 2D exp(-x^2/c^2)
+    times = list(tor_data.keys())
+    times.sort()
+
+
+    # Previous incident heat load arrays. Zeroed here
+    prev_q_inc = {}
+    # Energy density over time
+    energy_density = {}
+    for geom_id in cell_measurements:
+        prev_q_inc[geom_id] = np.zeros(cell_measurements[geom_id].size)
+        energy_density[geom_id] = np.zeros(cell_measurements[geom_id].size)
+
+    prev_time = 0
+    for index, time in enumerate(times):
+        print(f"Processing step {index + 1}. Time={time}")
+        hit_indexes = {_:{} for _ in id2meshes}
+        # Set the time and index to the meshes
+        for k in id2meshes:
+            id2meshes[k].setIndex(index)
+            id2meshes[k].setTime(time)
+
+
+        # Start the projection
+        total_hits = 0
+        total_lines = 0
+
+        tor_time_step_data = tor_data[time]
+
+        n_beams = tor_time_step_data["power"].size
+
+        total_input_power = 0
+
+        for i in range(n_beams):
+            g31 = tor_time_step_data["g31"][i]
+            g32 = tor_time_step_data["g32"][i]
+
+            if np.any(np.isnan(g31)) or np.any(np.isnan(g32)):
+                print(f"Beam {i} at time {time} has NaN in g3X vectors. " +
+                      "Skipping")
+                continue
+
+            center = tor_time_step_data["center"][i] # In meters
+            power = tor_time_step_data["power"][i] # Actually W/m^2
+
+            beam_hit_counter = 0
+            beam_total_rays = 0
+
+            k = tor_time_step_data["k"][i] # Normalized
+            a = np.linalg.norm(g31) # In meters
+            b = np.linalg.norm(g32) # In meters
+
+            # Eliptic integral of exp(-x^/a^2) exp(-y^2/b^2)
+            beam_power = power * integrate_beam(a, b)
+            total_input_power += beam_power
+
+            for scale in isoscales:
+                if scale == 0.0:
+                    # At the beam center we take the beam center!
+                    points = np.array(center, copy=True)
+                    points = points.reshape((1, 3))
+                    q_par = power
+                    n_points = 1
+                else:
+                    points = generate_beam_points(center, g31, g32, scale,
+                                                  points_per_isoscale)
+                    q_par = beam_heat_load_isocontour(power, scale)
+                    n_points = points_per_isoscale
+
+                points *= 1e3 # Convert to mm. Of course if meshes are in mm.
+
+                # Perform ray tracing
+                for j in range(n_points):
+                    p = points[j]
+                    embree_obj.castRay(p[0], p[1], p[2], k[0], k[1], k[2],
+                                       tnear, tfar)
+                    total_lines += 1
+                    beam_total_rays += 1
+                    if not embree_obj.checkIfHit():
+
+                        # Try to see if there is a hit in reverse
+                        embree_obj.castRay(p[0], p[1], p[2], -k[0], -k[1],
+                                           -k[2], tnear, tfar)
+                        if not embree_obj.checkIfHit():
+                            continue
+
+                    total_hits += 1
+                    beam_hit_counter += 1
+                    # Mesh or geometry id.
+                    geom_id = embree_obj.returnGeomId()
+                    # Cell or triangle id.
+                    primId = embree_obj.returnPrimId()
+
+                    # Take into account incident angle. Both vector here are
+                    # normalized
+                    q_inc_tri = abs(k @ normals[geom_id][primId]) * q_par
+
+                    if primId not in hit_indexes[geom_id]:
+                        hit_indexes[geom_id][primId] = [q_inc_tri]
+                    else:
+                        hit_indexes[geom_id][primId].append(q_inc_tri)
+            # Just a message for filtering problematic beams.
+            if beam_hit_counter/beam_total_rays < 0.9:
+                print(f"Beam {i} has less than 90% hits: " +
+                      f"{100*beam_hit_counter/beam_total_rays:.2f}%")
+
+        # Apply the heat load to geometries
+        total_geometry_power = 0
+        for geom_id in hit_indexes:
+
+            q_inc = np.zeros(cell_measurements[geom_id].size)
+
+            for hit_ind in hit_indexes[geom_id]:
+                q_inc[hit_ind] = np.average(hit_indexes[geom_id][hit_ind])
+
+            power_on_geometry = np.sum(q_inc * cell_measurements[geom_id])
+            total_geometry_power += power_on_geometry
+
+            id2meshes[geom_id].addField(r"Heat load Wm^-2", q_inc)
+
+            if index == 0:
+                # No energy for first time step.
+                id2meshes[geom_id].addField(r"Energy density[MJm2]",
+                                            energy_density[geom_id])
+                id2meshes[geom_id].addField(r"Energy [J]", energy_density[geom_id])
+            else:
+                # Calculate the new energy density
+                energy_density[geom_id] += 0.5*(q_inc + prev_q_inc[geom_id]) * \
+                                               (time - prev_time)
+
+
+                # No energy for first time step.
+                id2meshes[geom_id].addField(r"Energy density[MJm2]",
+                                            energy_density[geom_id])
+                id2meshes[geom_id].addField(r"Energy [J]",
+                                energy_density[geom_id] * cell_measurements[geom_id])
+            id2meshes[geom_id].writeFields()
+
+            prev_q_inc[geom_id] = q_inc
+        prev_time = time
+
+
+        print(f"Total beam power at time from file: {total_input_power:1.1e}")
+        print(f"Power on the geometry: {total_geometry_power:1.1e} Percentage: {100*total_geometry_power/total_input_power:.2f}%")
+        print(f"Total lines: {total_lines}, Total hits: {100*total_hits/total_lines:.2f}%")
+        print()
+
+###############################################################################
+
+import argparse
+import os
+import sys
+parser = argparse.ArgumentParser(description=description)
+
+parser.add_argument('yaml_file')
+
+args = parser.parse_args()
+
+
+if os.path.dirname(os.path.abspath(args.yaml_file)) != os.getcwd():
+    print("Call this command in the same directory as the yaml file")
+    sys.exit(1)
+
+import yaml
+data = yaml.safe_load_all(open(args.yaml_file).read())
+data = next(data)
+
+meshes = data["meshes"]
+torbeam = data["torbeam"]
+name = data["name"]
+
+# Load the meshes into embree
+import l2g.mesh
+import l2g.external.embree
+import numpy as np
+import scipy.special
+import scipy.integrate
+import shutil
+import pathlib
+import medcoupling as mc
+import math
+
+
+result_dir = pathlib.Path(os.path.join("results", name))
+if not os.path.exists(result_dir):
+    os.makedirs(result_dir, exist_ok=True)
+
+embree_obj = l2g.external.embree.PyEmbreeAccell()
+cell_measurements = {}
+normals = {}
+result_meshes = {}
+result_id_to_mesh = {}
+result_id_to_mesh["x"] = {}
+result_id_to_mesh["o"] = {}
+
+# Load the mesh and create a copy of it in result directory.
+for file in meshes:
+    mesh = l2g.mesh.Mesh(str(file))
+    vertices, triangles = mesh.getMeshData()
+    geom_id = embree_obj.commitMesh(vertices, triangles)
+    cell_measurements[geom_id] = mesh.getCellMeasurements() * 1e-6
+    old_path = pathlib.Path(file)
+
+    # Get normals
+    medFile = mc.MEDFileUMesh.New(file)
+    medMesh = medFile.getMeshAtLevel(0)
+
+    # Use medcoupling function buildPartOrthogonalField
+    normal_field = medMesh.buildOrthogonalField()
+    normals[geom_id] = normal_field.getArray().toNumPyArray()
+
+    # print(cell_measurements[geom_id].size, normals[geom_id].size)
+
+    new_path = result_dir / (old_path.stem + f"_{name}_x.med")
+    if not os.path.exists(new_path):
+        shutil.copyfile(old_path, new_path)
+    result_id_to_mesh["x"][geom_id] = l2g.mesh.Mesh(str(new_path))
+
+    new_path = result_dir / (old_path.stem + f"_{name}_o.med")
+    if not os.path.exists(new_path):
+        shutil.copyfile(old_path, new_path)
+    result_id_to_mesh["o"][geom_id] = l2g.mesh.Mesh(str(new_path))
+
+
+for case in ["x", "o"]:
+    for file in meshes:
+        # Create a result file
+        # Copy it in the result file
+        old_path = pathlib.Path(file)
+        new_path = result_dir / (old_path.stem + f"_{name}_{case}.med")
+
+        if not os.path.exists(new_path):
+            shutil.copyfile(old_path, new_path)
+
+    ind2beam, tor_data = read_torbeam_data(torbeam[case])
+    apply_torbeam_map(result_id_to_mesh[case], normals, cell_measurements,
+                      embree_obj, tor_data)
+

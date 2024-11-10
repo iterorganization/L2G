@@ -1,0 +1,311 @@
+#!/usr/bin/env python
+
+description = """Torbeam plotter creates VTK of the torbeam ellipses.
+"""
+
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+
+def pprint(string, *args, **kwargs):
+    print(string, *args, **kwargs, flush=True)
+
+def epprint(string, *args, **kwargs):
+    print(f"{bcolors.FAIL}{string}{bcolors.ENDC}", *args, **kwargs)
+
+def ipprint(string, *args, **kwargs):
+    print(f"{bcolors.OKBLUE}{string}{bcolors.ENDC}", *args, **kwargs)
+
+def opprint(string, *args, **kwargs):
+    print(f"{bcolors.OKGREEN}{string}{bcolors.ENDC}", *args, **kwargs)
+
+def read_torbeam_data(file: str):
+    """Reads torbeam data and stores it into a dictionary.
+    """
+
+    time_data = {}
+
+
+    beams = []
+    # First read the file to igure out how many beams are there
+    time_steps = []
+    ind = None
+    with open(file, "r") as f:
+        for line in f:
+            sline = line.split()
+            beam_index = int(sline[0])
+            time = float(sline[2])
+            # Collect the times. Each beam has the same time
+            if ind is None:
+                ind = beam_index
+
+            if beam_index == ind:
+                time_steps.append(time)
+
+            if beam_index not in beams:
+                beams.append(beam_index)
+
+    if len(beams) - 1 != beams[-1]:
+        print("Last beam index does not match the number of beams...")
+
+    n_beams = len(beams)
+    n_steps = len(time_steps)
+    print(f"We have {n_beams} beams and {n_steps} time steps.")
+
+    # Construct the time data
+
+    time_data = {}
+    id2beamname = {}
+    for time in time_steps:
+        time_data[time] = {}
+
+        time_data[time]['center'] = np.zeros((n_beams, 3))
+        time_data[time]['g31'] = np.zeros((n_beams, 3))
+        time_data[time]['g32'] = np.zeros((n_beams, 3))
+        time_data[time]['k'] = np.zeros((n_beams, 3))
+        time_data[time]['power'] = np.zeros(n_beams)
+
+
+
+    # Now actually read the data
+
+    with open(file, "r") as f:
+
+        for beam_ind in beams:
+            for time in time_steps:
+
+
+
+                sline = f.readline().split()
+
+                if beam_ind != int(sline[0]):
+                    print(f"Beam index mismatch!!! {beam_ind} {sline[0]}")
+                    sys.exit(1)
+
+                if time != float(sline[2]):
+                    print(f"Time mismatch!!! {time} {sline[2]}")
+                    sys.exit(1)
+
+                id2beamname[beam_ind] = sline[1]
+                center = np.array([float(_) for _ in sline[3:6]])
+                angle_pol = float(sline[6])
+                power = float(sline[7])
+                g31 = np.array([float(_) for _ in sline[8:11]])
+                g32 = np.array([float(_) for _ in sline[11:14]])
+                k = np.array([float(_) for _ in sline[14:17]])
+
+                time_data[time]['center'][beam_ind] = center
+                # time_data[time][beam_ind]['angle_pol'] = angle_pol
+                time_data[time]['g31'][beam_ind] = g31
+                time_data[time]['g32'][beam_ind] = g32
+                time_data[time]['k'][beam_ind] = k
+                time_data[time]['power'][beam_ind] = power
+
+    return id2beamname, time_data
+
+def generate_beam_points(center, g31, g32, scale:float =1.0,N:int =1000) -> "np.ndarray":
+    """Produces an array of points on an ellipse isocontour.
+
+    Returns:
+        points (np.ndarray): An array with shape ((N, 3)).
+    """
+
+    angles = np.linspace(0, 2*np.pi, N).reshape((N, 1))
+
+    points = center + scale * (np.cos(angles) * g31 + \
+                               np.sin(angles) * g32)
+    return points
+
+def beam_heat_load(q_max: float, sa: float, sb: float) -> float:
+    """Get the beam power at certain iso-contour. Using 2D Gaussian function
+
+    F(sa, sb) = q_max * exp(-(sa*a)^2/(2a^2)) * exp(-(sb*b)^2/(2b^2))
+
+    which transposes to:
+
+    F(sa, sb) = q_max * exp(-sa^2/2) * exp(-sb^2/2), as the contours are drawn
+    as % of half-axes-es. In usage sa==sb.
+
+    Integrating the function to get the total power is:
+    I = q_max * 2 * pi * a * b * erf(1/sqrt(2))**2
+
+    INCORRECT
+    return q_max * np.exp(-0.5 * sa**2) / (2 * np.pi * math.sqrt(a * b))
+
+    """
+
+    return q_max * np.exp(-0.5 * sa)**2 * np.exp(-0.5 * sb)**2
+
+def beam_heat_load_isocontour(q_max: float, sa: float) -> float:
+    """The previous function is wrong
+
+    2D Gaussian
+
+    F(sa, sb) = q_max * exp(-(sa * a)^2/(2a^2)) * exp(-(sb * b)^2/(2b^2))
+
+    sa, sb are isocontour values. And actually we just want one value, sa.
+
+    So essentially, for a isocontour we just provide one axis and set the other
+    value to 0
+
+    sa=sa, sb=0
+    F(sa, 0) = q_max * exp(-sa**2/2)
+
+    """
+
+    return q_max * np.exp(-sa**2) # / (2 * np.pi * math.sqrt(a * b))
+
+def integrate_beam(a, b) -> float:
+    """
+    2*sqrt(pi)*A*Integral(erf(sqrt(B**2 - y**2)/B), (y, 0, B))
+    """
+    def fun(y):
+        return np.exp(-y**2/b**2) * scipy.special.erf(math.sqrt(b**2 - y**2)/b)
+
+    I = 2 * math.sqrt(np.pi) * a * scipy.integrate.quad(fun, 0, b)[0]
+
+    return I
+
+
+def plot_torbeam_map(tor_data: dict, ind2beam_name: dict,
+                     result_dir: "pathlib.Path"):
+    """Applies tor_data to meshes.
+    """
+
+    isoscales = np.linspace(0.0, 1.0, 20)
+    points_per_isoscale = 500
+
+    # Constant for integrating elipse with 2D exp(-x^2/c^2)
+    times = list(tor_data.keys())
+    times.sort()
+
+    VTK_DIR = result_dir
+    if not os.path.exists(VTK_DIR):
+        os.makedirs(VTK_DIR, exist_ok=True)
+
+    for index, time in enumerate(times):
+        print(f"Processing step {index + 1}. Time={time}")
+        tor_time_step_data = tor_data[time]
+        n_beams = tor_time_step_data["power"].size
+
+        for i in range(n_beams):
+
+            if not os.path.exists(VTK_DIR / f"{i}"):
+                os.makedirs(VTK_DIR / f"{i}", exist_ok=True)
+
+            g31 = tor_time_step_data["g31"][i]
+            g32 = tor_time_step_data["g32"][i]
+            center: np.ndarray = tor_time_step_data["center"][i]
+            k = tor_time_step_data["k"][i]
+            power = tor_time_step_data["power"][i] # Actually W/m^2
+
+            a = np.linalg.norm(g31)
+            b = np.linalg.norm(g32)
+
+            # VTK STUFF START
+            vtkData = vtk.vtkPolyData()
+            vtkPoints = vtk.vtkPoints()
+            vtkCells = vtk.vtkCellArray()
+            _vtk_scales_heat_load = []
+            _id_offset = 0
+
+            vtkPoints.SetNumberOfPoints(1 + (len(isoscales) - 1) * points_per_isoscale)
+            # VTK END
+
+            # Eliptic integral of exp(-x^/a^2) exp(-y^2/b^2)
+            if np.any(np.isnan(g31)) or np.any(np.isnan(g32)):
+                print(f"Beam {i} at time {time} has NaN in g3X vectors.")
+                continue
+
+            for scale in isoscales:
+                if scale == 0.0:
+                    # At the beam center. We take the beam center!
+                    points = np.array(center, copy=True)
+                    points = points.reshape((1, 3))
+                    q_par = power
+                    n_points = 1
+                else:
+                    points = generate_beam_points(center, g31, g32, scale,
+                                                  points_per_isoscale)
+                    q_par = beam_heat_load_isocontour(power, scale)
+                    n_points = points_per_isoscale
+
+
+                points *= 1e3 # Convert to mm
+                # VTK START
+                polyline = vtk.vtkPolyLine()
+                polylineIds = polyline.GetPointIds()
+                polylineIds.SetNumberOfIds(n_points)
+                _vtk_scales_heat_load.append(q_par)
+                for m in range(n_points):
+                    vtkPoints.SetPoint(_id_offset + m , points[m, 0], points[m, 1], points[m, 2])
+                    polylineIds.SetId(m, _id_offset + m)
+                _id_offset += n_points
+                vtkCells.InsertNextCell(polyline)
+                # VTK END
+                # Perform ray tracing
+
+            # VTK START
+            vtkData.SetPoints(vtkPoints)
+            vtkData.SetLines(vtkCells)
+            vtkCellData = vtkData.GetCellData()
+            qinc_scalar = numpy_support.numpy_to_vtk(_vtk_scales_heat_load)
+            qinc_scalar.SetName("qpar")
+            vtkCellData.AddArray(qinc_scalar)
+            # Save it to a vtk
+            writer = vtk.vtkGenericDataObjectWriter()
+            writer.SetInputData(vtkData)
+            writer.SetFileName(VTK_DIR / f'{ind2beam_name[i].replace("/", "_")}_{index}.vtk')
+            writer.Write()
+            # VTK END
+###############################################################################
+
+import argparse
+import os
+import sys
+parser = argparse.ArgumentParser(description=description)
+
+parser.add_argument('yaml_file')
+
+args = parser.parse_args()
+
+
+if os.path.dirname(os.path.abspath(args.yaml_file)) != os.getcwd():
+    print("Call this command in the same directory as the yaml file")
+    sys.exit(1)
+
+import yaml
+data = yaml.safe_load_all(open(args.yaml_file).read())
+data = next(data)
+print("asd", data)
+
+meshes = data["meshes"]
+torbeam = data["torbeam"]
+name = data["name"]
+
+# Load the meshes into embree
+import numpy as np
+import scipy.special
+import scipy.integrate
+import pathlib
+import math
+import vtk
+from vtk.util import numpy_support
+
+
+result_dir = pathlib.Path(os.path.join("results", name))
+if not os.path.exists(result_dir):
+    os.makedirs(result_dir, exist_ok=True)
+
+for case in ["x", "o"]:
+
+    ind2beam, tor_data = read_torbeam_data(torbeam[case])
+    plot_torbeam_map(tor_data, ind2beam, result_dir / "beams_vtk" / case)
