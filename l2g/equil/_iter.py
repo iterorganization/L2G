@@ -209,7 +209,14 @@ class EquilibriumIterator(object):
             self._equilibriums.append(equilibrium)
 
             # Get the actual time of the slice
-            truncate_time = truncate(time_slice.time, self.truncate_digits)
+
+            # In case in equilibrium the time_slice is written as -9e+40 or
+            # 9e+40
+            if abs(time_slice.time) > 1e10:
+                truncate_time = truncate(t, self.truncate_digits)
+            else:
+                truncate_time = truncate(time_slice.time, self.truncate_digits)
+
             # Truncate the time
             self._times.append(truncate_time)
 
