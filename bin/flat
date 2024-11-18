@@ -413,6 +413,9 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
 
     pprint("INFO: Running FLT")
 
+    pprint(f"INFO: Dumping geometry dictionary: {geod}")
+    pprint(f"INFO: Dumping equilibrium dictionary: {eqid}")
+
     ### Main objects
     flt_obj = l2g.comp.FieldLineTracer()
     check_if_in_slurm_job(flt_obj)
