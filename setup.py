@@ -83,7 +83,7 @@ def get_extra_compile_args():
 
     else:
         out.append("-O3")
-        out.append("-march=native")
+        # out.append("-march=native")
         out.append("-Wall")
         if useOpenMP:
             out.append("-fopenmp")
