@@ -2,6 +2,7 @@
 # cython: language_level = 3
 
 from libcpp.vector cimport vector
+from libcpp cimport bool
 
 
 cdef extern from "bicubic.hpp" nogil:
@@ -43,4 +44,4 @@ cdef extern from "bicubic.hpp" nogil:
 cdef class PyBicubic:
     cdef BICUBIC_INTERP *c_bicubic
     cdef BI_DATA c_BI_DATA
-    cdef bint prepared
+    cdef bool prepared
