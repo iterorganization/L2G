@@ -29,7 +29,7 @@ in :ref:`why_openmp`.
     digraph "l2g-workflow" {
         size="8,6";
         rankdir="TD";
-        splines=true;
+        splines=false;
         compound=true;
 
         graph [fontname="Verdana", fontsize="9"];
@@ -46,13 +46,34 @@ in :ref:`why_openmp`.
         input_mesh [label="Mesh data", shape="box3d"]
 
         ext_embree [label="Embree", shape="component", href="https://www.embree.org/", target="_blank"]
-        ext_rkf45 [label="RKF45", shape="component"]
+        ext_rkf45 [label="RKF4(5)", shape="component"]
 
         py_plot [label="Plotting", shape="component"]
-        py_cython [label="Cython+OpenMP", shape="component", href="https://cython.org/"]
+        py_cython [label="Cython", shape="component", href="https://cython.org/"]
         py_mesh [label="Mesh I/O (med, vtk)", shape="component"]
+        py_analysis [label="Plasma equilibrium analysis", shape="component"]
 
-        subgraph cluster_0 {
+        subgraph cluster_1 {
+            color=lightgreen;
+
+            {ext_embree ext_rkf45};
+            label="External libraries";
+        }
+
+        subgraph cluster_2 {
+            {py_plot py_cython py_mesh py_analysis};
+            label="Python modules"
+        }
+
+        subgraph cluster_3 {
+            /*rank=UD;*/
+
+            l2g_py -> l2g_cpp [label="Call FLT", constraint=false];
+            l2g_cpp -> l2g_py [label="Return results", constraint=false];
+            label="L2G code";
+        }
+
+        subgraph cluster_4 {
             color=lightgrey;
 
             input_equil;
@@ -60,14 +81,7 @@ in :ref:`why_openmp`.
             label="Input data";
         }
 
-        subgraph cluster_1 {
-            rank=UD;
-
-            l2g_py -> l2g_cpp [label="Call FLT", constraint=false];
-            l2g_cpp -> l2g_py [label="Return results", constraint=false];
-            label="L2G code";
-        }
-        subgraph cluster_2 {
+        subgraph cluster_5 {
             style=filled;
             color=yellow;
 
@@ -75,21 +89,15 @@ in :ref:`why_openmp`.
             "output_data";
             label="Output results";
         }
-        subgraph cluster_3 {
-            color=lightgreen;
 
-            {ext_embree ext_rkf45};
-            label="External libraries";
-        }
 
-        subgraph cluster_4 {
-            {rank = same; py_plot py_cython py_mesh};
-            label="Python modules"
-        }
-
+        /* Connections */
         input_equil -> l2g_py [ltail=cluster_0]
+        /*l2g_py -> input_equil [dir=back, lhead=cluster_0]*/
         l2g_py -> output_graphics [lhead=cluster_2, label="Write"]
         py_cython -> l2g_py [ltail=cluster_4, style=dashed, arrowhead=none]
+        ext_embree -> l2g_cpp [ltail=cluster_3, style=dashed, arrowhead=none]
+
     }
 
 

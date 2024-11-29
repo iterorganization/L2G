@@ -28,3 +28,6 @@ Glossary
 
    hlm
      heat load mapping
+
+   RKF45
+     Runge-Kutta-Fehlberg 4(5)

@@ -28,4 +28,4 @@ library:
   - `Cython <https://cython.org/>`_, used for wrapping and enabling the use of
     external C++ libraries, enabling the use of OpenMP multithreading.
   - Implementaion of `bicubic interpolation <https://en.wikipedia.org/wiki/Bicubic_interpolation/>`_,
-  - used for 2D spline interpolation of axisymmetric equilibrium data.
+    used for 2D spline interpolation of axisymmetric equilibrium data.

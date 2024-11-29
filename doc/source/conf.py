@@ -14,12 +14,14 @@
 #
 import os
 import sys
-# sys.path.insert(0, os.path.abspath('.'))
+
+path = "/home/ITER/simicg/venvs/sflt/lib/python3.10/site-packages" # Correct this path.
+sys.path.insert(0, path)
 
 # -- Project information -----------------------------------------------------
 
 project = 'L2G_py'
-copyright = '2021, Gregor Simic'
+copyright = '2024, Gregor Simic'
 author = 'Gregor Simic'
 
 # The short X.Y version
@@ -46,6 +48,7 @@ extensions = [
     'sphinx.ext.napoleon',
     'sphinx.ext.autodoc',
     'sphinx.ext.graphviz',
+    'sphinxarg.ext'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -55,7 +58,8 @@ templates_path = ['_templates']
 # You can specify multiple suffix as a list of string:
 #
 # source_suffix = ['.rst', '.md']
-source_suffix = '.rst'
+# source_suffix = '.rst'
+source_suffix = {'.rst': 'restructuredtext'}
 
 # The master toctree document.
 master_doc = 'index'

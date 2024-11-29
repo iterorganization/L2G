@@ -47,34 +47,10 @@ This module contains functions for handling equilibrium data:
  - EquilibriumIterator, a class that can hold multiple equilibriums and acts
    as an iterable object.
 
-.. note::
-
-   The classes are accessible directly from :py:mod:`l2g.equil`, but to avoid
-   cluttered and massive single python files, the code has been chopped and
-   "hidden" in underscore-prefixed python submodules.
-
 .. automodule:: l2g.equil
    :members:
    :undoc-members:
    :private-members:
-
-.. autoclass:: l2g.equil.EQ
-   :members:
-   :undoc-members:
-   :private-members:
-
-.. autoclass:: l2g.equil.Equilibrium
-   :members:
-   :undoc-members:
-   :private-members:
-
-.. autoclass:: l2g.equil.EQDSKIO
-   :members:
-   :undoc-members:
-   :private-members:
-
-
-.. autofunction:: l2g.equil.correct_equilibrium_helicity
 
 ***************************
 Head load mapping submodule
@@ -88,15 +64,18 @@ of a scenario (e.g., Ramp-Down, Steady-State, ...).
    :undoc-members:
    :private-members:
 
+
 .. automodule:: l2g.hlm.ramp_down
    :members:
    :undoc-members:
    :private-members:
 
-.. automodule:: l2g.hlm.steady_state
+
+.. automodule:: l2g.hlm.elm_plm
    :members:
    :undoc-members:
    :private-members:
+
 
 *********************
 Computation submodule
@@ -104,12 +83,6 @@ Computation submodule
 
 The heart or component or compute module. It holds the main classes that
 enables the run of FLT.
-
-.. note::
-
-   Most of these classes are "hidden" in python files that have underscore "_" at
-   the start of the name. All of them are mainly accessible, intentionally via
-   through the :py:mod:`l2g.comp` namespace.
 
 Data storage classes
 ====================
@@ -119,22 +92,26 @@ phase or role and maybe contain functions for generating file-like objects
 for visualization or storage (e.g. generating a VTK object for storage or
 visualization in ParaView).
 
-.. autoclass:: l2g.comp.L2GResults
+The :py:class:`l2g.comp.L2GResults` ontains the arrays for storing all
+quantities that are related to FLT.
+
+.. automodule:: l2g.comp.L2GResults
    :members:
    :undoc-members:
    :private-members:
 
-.. autoclass:: l2g.comp.L2GPointResults
+The :py:class:`l2g.comp.L2GFLs` contains the arrays for storing the points of
+specific fieldline we want to plot.
+
+.. automodule:: l2g.comp.L2GFLs
    :members:
    :undoc-members:
    :private-members:
 
-.. autoclass:: l2g.comp.L2GFLs
-   :members:
-   :undoc-members:
-   :private-members:
 
-.. autoclass:: l2g.comp.L2GResultsHLM
+The :py:class:`l2g.comp.L2GResultsHLM` is the class for containing data
+related to the heat load mapping.
+.. automodule:: l2g.comp.L2GResultsHLM
    :members:
    :undoc-members:
    :private-members:
@@ -143,24 +120,30 @@ FieldLineTracer class
 =====================
 
 The main class that is used for running FLT. It is equipped with functions for
-loading input data, setting parameters, running FLT and post-compute
-application of heat load maps.
+loading input mesh data, equilibrium data, setting parameters, running FLT and
+post-compute application of heat load maps.
 
 .. autoclass:: l2g.comp.FieldLineTracer
    :members:
    :undoc-members:
    :private-members:
 
+
 Settings classes
 ================
 
-This module holds all settings that are and will be introduced to control the
-flow of a FLT study.
+This module holds all settings and parameters the user can set.
+
+
+Parameters are settings that affect the numerical aspect.
 
 .. autoclass:: l2g.settings.Parameters
    :members:
    :undoc-members:
    :private-members:
+
+Options are settings that affect the global behaviour (i.e., activating RT or
+not).
 
 .. autoclass:: l2g.settings.Options
    :members:
@@ -168,28 +151,57 @@ flow of a FLT study.
    :private-members:
 
 
-****************************************************
-Core computation wrapper code of external C++ kernel
-****************************************************
+************************************************
+Cython implementations and wrapped external code
+************************************************
 
-This module holds the "lowest" level functions that operate with external
-libraries (L2G_cpp and Embree) for running FLT. It is written in Cython to
-enable high performance of computation and OpenMP parallelization.
+This module holds Cython implementation of algorithms and the wrappers for
+external code.
 
-Not all functions, especially the ones that are only called with Cython context
-are shown in this section. Best way is to delve into the files directly to see
-the structure.
+.. note::
 
-There you will see that in some cases one function can have up to three
-different signatures, based on the use case: usable in Python, GIL-free for
-use in Cython context and as previous case + overloading.
+   The classes :py:class:`l2g.external.bfgs_2d` and
+   :py:class:`l2g.external.equilibrium_analysis.EQA` are implemented with speed
+   in mind. They perform the same as the python equivalents (find_minimum of
+   scipy and the l2g.equil.EQ class)
 
-.. automodule:: l2g.comp.core._core
+
+.. automodule:: l2g.external.bfgs_2d
    :members:
    :undoc-members:
    :private-members:
 
-.. automodule:: l2g.comp.core.ext_wrapper
+.. automodule:: l2g.external.equilibrium_analysis
+   :members:
+   :undoc-members:
+   :private-members:
+
+The following submodules are wrappers to the external L2G c++ kernel code.
+They are paramount, without them there is no FLT and you can see the usage
+in the :py:class:`l2g.comp.FieldLineTracer` code as example.
+
+.. automodule:: l2g.external.bicubic
+   :members:
+   :undoc-members:
+   :private-members:
+
+
+.. automodule:: l2g.external.embree
+   :members:
+   :undoc-members:
+   :private-members:
+
+.. automodule:: l2g.external.flt
+   :members:
+   :undoc-members:
+   :private-members:
+
+
+And finally, the RKF45 in this case is an implementation of rht :term:`RKF45`
+algorithm but in this case specifically for solving the fieldline equations in
+the plasma axisymmetric case.
+
+.. automodule:: l2g.external.rkf45
    :members:
    :undoc-members:
    :private-members:
@@ -208,21 +220,15 @@ cell types are ignored.
 Mesh class
 ==========
 
-This class is the main interface used for reading/writing data from/to a file.
+This class is the main interface used for reading/writing data from/to a
+MEDCOUPLING med file.
 
 .. code-block:: python
 
    import l2g.mesh
-   file_path = '/path/to/file.ext'
+   file_path = '/path/to/file.med'
 
-   # You can see which file extensions are supported. The program itself will
-   # not try to figure out the magic bits or the file structure.
-
-   file_ext = 'ext'
-   print(file_ext in l2g.mesh.supportedFileExts())
-
-   # If all is okay
-   mesh = l2g.mesh.Mesh(file_ext)
+   mesh = l2g.mesh.Mesh(file_path)
 
    # Get mesh data
    mesh.getMeshData() # Returns vertices, triangles
@@ -254,40 +260,46 @@ This class is the main interface used for reading/writing data from/to a file.
    # Now write the fields
    new_mesh.writeFields()
 
-
-
-
 .. autoclass:: l2g.mesh.Mesh
    :members:
    :undoc-members:
    :private-members:
 
-Backends
-========
+#######
+Scripts
+#######
 
-The backends submodule contains functions on reading their respective file
-formats.
+In the bin/ directory contains various scripts. Here is a short description of
+each:
 
+ - flat
+     Script that takes YAML configuration files and run FLT cases.
+ - get_disruption_profile_from_imas
+     Script that obtains the disruption heat load profile from the IMAS
+     Disruption IDS.
+ - imas2eqdsk
+     From an Equilibirum IDS time slice create a G-EQDSK file.
+ - mat2med
+     Read matlab fields and store it to a MED file (that contains a mesh of same
+     size as fields in matlab)
+ - med2mat
+     Convert the fields of MED file to a matlab file.
+ - mkEqdskMovie
+     Create a GIF out of a set of EQDSK files. It plots the boundary flux
+     surfaces
+ - mkImasMovie
+     Creates a GIF out of an IMAS Equilibrium IDS by taking the boundary flux
+     values stored there.
+ - mkImasMovieFromPsi
+     Creates a GIF out of an IMAS Equilibrium IDS by analyzing the equilibrium
+     data and obtaining the boundary flux surfaces. In case if the Equilibrium IDS
+     do not have stored the boundary flux surfaces.
+ - plotIP
+     Creates a plot of the plasma current and power from the IMAS Summary IDS.
+ - plotMFlux
+     Plots the poloidal magnetic flux from either an IMAS or G-EQDSK source.
+ - submitFLAT
+     Same as flat but it runs the FLT case on the cluster (via SLURM).
 
-MEDCoupling (hdf5)
-------------------
-
-.. automodule:: l2g.mesh._medcoupling
-   :members:
-   :undoc-members:
-   :private-members:
-
-VTK
----
-
-Only the vtkUnstructuredGrid and vtkXMLUnstructuredGrid formats are supported.
-The legacy ASCII VTK format should be avoided as it takes far more data and
-does not support time steps in a single file.
-
-The XML VTU files should be used only as they support having multiple time
-steps in a single file (although writing to the file is not so intuitive).
-
-.. automodule:: l2g.mesh._vtk
-   :members:
-   :undoc-members:
-   :private-members:
+In order to see how to use them simply run each script with ``-h`` or read
+the code itself.
