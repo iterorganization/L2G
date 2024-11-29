@@ -1,7 +1,0 @@
-Cython>=0.29.21
-matplotlib>=3.3.0
-numpy>=1.19.4
-scipy>=1.5.4
-vtk>=9.0.0
-#imas
-#medcoupling
