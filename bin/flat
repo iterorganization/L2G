@@ -929,6 +929,9 @@ def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
             os.makedirs(out_dir, exist_ok=False)
         base_name = os.path.join(out_dir, base_name)
 
+    xlim = kwargs.get("xlim")
+    ylim = kwargs.get("ylim")
+
     for index, associated_time, equilibrium in equil_obj:
 
         eq = l2g.external.equilibrium_analysis.EQA(equilibrium)
@@ -1028,8 +1031,15 @@ def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
         # Plot the wall
         ax.plot(equilibrium.wall_contour_r, equilibrium.wall_contour_z, 'r-',
                 linewidth=2.5)
-        ax.set_xlim(equilibrium.grid_r[0], equilibrium.grid_r[-1])
-        ax.set_ylim(equilibrium.grid_z[0], equilibrium.grid_z[-1])
+
+        if xlim is None:
+            ax.set_xlim(equilibrium.grid_r[0], equilibrium.grid_r[-1])
+        else:
+            ax.set_xlim(xlim)
+        if ylim is None:
+            ax.set_ylim(equilibrium.grid_z[0], equilibrium.grid_z[-1])
+        else:
+            ax.set_ylim(ylim)
         ax.set_title(f"{name}")
         fig.savefig(f"{name}_psi.pdf")
         fig.savefig(f"{name}_psi.png")
@@ -1234,12 +1244,16 @@ check_subparser.add_argument('yaml_file', help='Path to YAML file')
 check_subparser.add_argument('--print-content', help='Print the contents of the YAML file',
     default=False, action='store_true')
 
-graphics_subparser = subparsers.add_parser("plot", help="Plot fluxes and HLMs")
+graphics_subparser = subparsers.add_parser("plot", help="Plot fluxes and HLMs. If using *min *max options, you need to provide values for both min/max per axis. Only ")
 graphics_subparser.add_argument('yaml_file', help="Path to YAML file")
 graphics_subparser.add_argument('equilibrium', help="Name of equilibrium inside YAML")
 graphics_subparser.add_argument('hlm', nargs="?", help="Name of HLM inside YAML. Optional")
 graphics_subparser.add_argument('--out-dir', help='Specify output directory. Default CWD.', type=str)
 graphics_subparser.add_argument('--out-name', help="Output file base name.", type=str)
+graphics_subparser.add_argument('--xmin', help="Minimum of X-axis. Ignored if xmax is not set", type=float)
+graphics_subparser.add_argument('--xmax', help="Maximum of X-axis. Ignored if xmin is not set", type=float)
+graphics_subparser.add_argument('--ymin', help="Minimum of Y-axis. Ignored if ymax is not set", type=float)
+graphics_subparser.add_argument('--ymax', help="Maximum of Y-axis. Ignored if ymin is not set", type=float)
 
 print_subparser = subparsers.add_parser('print', help="Print the names of the blocks in YAML file")
 print_subparser.add_argument('yaml_file', help="Path to YAML file")
@@ -1306,6 +1320,10 @@ if __name__ == "__main__":
             kwargs["file_base_name"] = args.out_name
         if args.out_dir:
             kwargs["output_directory"] = args.out_dir
+        if args.xmin and args.xmax:
+            kwargs["xlim"] = (args.xmin, args.xmax)
+        if args.ymin and args.ymax:
+            kwargs["ylim"] = (args.ymin, args.ymax)
         create_graphics(EQUILI_D, HLM_D, **kwargs)
         sys.exit()
 

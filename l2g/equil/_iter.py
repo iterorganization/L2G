@@ -282,12 +282,12 @@ class EquilibriumIterator(object):
         n_equilibriums = len(self._equilibriums)
 
         ok = True
-        if (isinstance(r_shift, list) and len(r_shift) != n_equilibriums) or n_equilibriums > 1:
+        if (isinstance(r_shift, list) and len(r_shift) != n_equilibriums) or (not isinstance(r_shift, list) and n_equilibriums > 1):
             ok = False
             log.error('You have not provided enough r shift values for all' +
                       ' instances of plasma! ')
 
-        if (isinstance(z_shift, list) and len(z_shift) != n_equilibriums) or n_equilibriums > 1:
+        if (isinstance(z_shift, list) and len(z_shift) != n_equilibriums) or (not isinstance(z_shift, list) and n_equilibriums > 1):
             ok = False
             log.error('You have not provided enough z shift values for all' +
                       ' instances of plasma!')
