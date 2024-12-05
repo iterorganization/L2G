@@ -85,7 +85,49 @@ class EquilibriumIterator(object):
             self._times.append(i)
 
     def loadIMASEquilibriums(self, d: dict = {}) -> None:
-        """Loads equilibriums from IMAS.
+        """Loads equilibriums from IMAS. The dictionary arguments required::
+
+         * user
+         * device
+         * version
+
+        And for specifying the times we need either:
+
+         * times
+
+        or a defined time interval with:
+         * time_start
+         * time_end
+
+        Optionally you can control the total number of steps with
+
+         * time_samples
+
+        which takes this many time steps from the set of times from previous
+        two options (taking into account the ending and starting element).
+
+        Example:
+
+        .. code-block:: python
+
+           d = {
+             "user": "user_name", # Default public
+             "device": "device_name", # Default iter
+             "version": "data_version", # Default 3
+             # For time steps the priority goes as following
+             # First directly a list of time steps. Order is not required
+             # time steps can appear multiple times
+             "times" : [0.0, 0.1, 0.02, 0.02] # No default value
+             # Or specifying the start and the end intervals of time to extract
+             "time_start": 0 # Starting time, no default
+             "time_end": 1 # End time, no default
+             # And you can control the number of extracted steps, for both
+             # cases by specifying time_samples
+             "time_samples": 10 # Integer. No default value
+           }
+
+        Arguments:
+            d (dict): Dictionary containing the IMAS parameters.
         """
         import numpy as np
         from l2g.equil import getEquilibriumFromIMAS
@@ -108,12 +150,6 @@ class EquilibriumIterator(object):
         else:
             version = d['version']
 
-        # if 'times' in d:
-        #     time_slices = d['times']
-        # else:
-        #     n_steps = int((d['time_end'] - d['time_start']) / d['time_step']) + 1
-        #     time_slices = np.linspace(d['time_start'], d['time_end'], n_steps)
-
         # Ignore times, time_step and focus on time_start and time_end
         time_start = None
         if "time_start" in d:
@@ -135,23 +171,6 @@ class EquilibriumIterator(object):
         if "time_samples" in d:
             time_samples = d["time_samples"]
 
-
-        # OLD API
-        # self._ids = imas.ids(shot, run)
-        # self._ids.open_env(user, device, version)
-
-        # self._ids_wall = self._ids.wall
-        # self._ids_wall.get()
-
-        # self._ids_summary = self._ids.summary
-        # self._ids_summary.get()
-
-        # self._ids_equilibrium = self._ids.equilibrium
-
-        # Trouble in some cases
-        # interpolation = imas.imasdef.INTERPOLATION
-        # Closest interpolation.
-        # interpolation = imas.imasdef.CLOSEST_SAMPLE
         import imas
         interpolation = imas.imasdef.CLOSEST_INTERP
 
@@ -172,7 +191,8 @@ class EquilibriumIterator(object):
 
         self._ids_summary = self._ids.get("summary")
 
-        # Get times.
+        # Get times. If times were not specifically defined, use the time_start
+        # and time_end limits to extract the times.
         if times is None:
 
             times_indexes = np.where(np.logical_and(
@@ -180,7 +200,7 @@ class EquilibriumIterator(object):
                 self._ids_summary.time <= time_end))[0]
             times = self._ids_summary.time[times_indexes]
 
-        # Sample the number of times
+        # Extract only time_samples number of time steps. If it is defined.
         if time_samples and time_samples < len(times):
             idx = np.round(np.linspace(0, len(times) - 1, time_samples)).astype(int)
             times = times[idx]
@@ -230,22 +250,52 @@ class EquilibriumIterator(object):
     def __getitem__(self, i):
         return i, self._times[i], self._equilibriums[i]
 
-    def applyWallSilhouetteShift(self, r_shift: float, z_shift: float):
+    def applyWallSilhouetteShift(self, r_shift: float, z_shift: float) -> None:
+        """Applies a singular shift to all of the wall silhouettes stored
+        inside.
+
+        Arguments:
+            r_shift (float): Radial shift. In meters
+            z_shift (float): Vertical shift. In meters
+        """
         for equilibrium in self._equilibriums:
             # Modify the wall silhouette points
             equilibrium.wall_contour_r = [_ + r_shift for _ in equilibrium.wall_contour_r]
             equilibrium.wall_contour_z = [_ + z_shift for _ in equilibrium.wall_contour_z]
 
-    def applyPlasmaShift(self, r_shift: float | list[float], z_shift: float | list[float]):
+    def applyPlasmaShift(self, r_shift: float | list[float], z_shift: float | list[float]) -> bool:
+        """Applies a single or set of shifts (radial and/or vertical) to the
+        plasma equilibrium. The number of shift should be the same as the
+        number of equilibriums inside the iterator object.
+
+        Arguments:
+            r_shift (float): Radial shift. In meters
+            z_shift (float): Vertical shift. In meters
+
+        Returns:
+            status(bool): True if it is appled okay, false otherwise.
+
+        """
 
         log.info("Applying shift to input plasma equilibrium data")
 
-        if isinstance(r_shift, list):
-            if not len(r_shift) == len(self):
-                log.error('You have not provided enough shift values for all' +
-                          ' instances of plasma!')
-                return
+        n_equilibriums = len(self._equilibriums)
 
+        ok = True
+        if (isinstance(r_shift, list) and len(r_shift) != n_equilibriums) or n_equilibriums > 1:
+            ok = False
+            log.error('You have not provided enough r shift values for all' +
+                      ' instances of plasma! ')
+
+        if (isinstance(z_shift, list) and len(z_shift) != n_equilibriums) or n_equilibriums > 1:
+            ok = False
+            log.error('You have not provided enough z shift values for all' +
+                      ' instances of plasma!')
+        if not ok:
+            return False
+
+
+        if isinstance(r_shift, list):
             for i,equilibrium in enumerate(self._equilibriums):
                 log.info(f"Applying shift_r={r_shift[i]}m")
                 equilibrium.mag_axis_r += r_shift[i]
@@ -258,14 +308,7 @@ class EquilibriumIterator(object):
                 equilibrium.mag_axis_r += r_shift
                 equilibrium.grid_r += r_shift
 
-
-
         if isinstance(z_shift, list):
-            if not len(z_shift) == len(self):
-                log.error('You have not provided enough shift values for all' +
-                          ' instances of plasma!')
-                return
-
             for i,equilibrium in enumerate(self._equilibriums):
                 log.info(f"Applying shift_z={z_shift[i]}m")
                 equilibrium.mag_axis_z += z_shift[i]
@@ -276,3 +319,4 @@ class EquilibriumIterator(object):
                 # Apply shift to the equilibrium
                 equilibrium.mag_axis_z += z_shift
                 equilibrium.grid_z += z_shift
+        return True

@@ -187,16 +187,12 @@ def check_yaml(path_to_yaml_file: str):
                             ["abs_error", float, d_params, True],
                             ["max_fieldline_length", (float, int), d_params, True],
                             ["num_of_threads", int, d_params, True],
-                            ["plasma_r_displ", float, d_params, True],
-                            ["plasma_z_displ", float, d_params, True],
                             ["self_intersection_avoidance_length", float, d_params, True],
                             ["shadow_dim_mul", float, d_params, True],
                             ["side", str, d_params, True],
                             ["target_dim_mul", float, d_params, True],
                             ["time_end", float, d_params, True],
                             ["time_step", float, d_params, True],
-                            ["wall_silh_r_disp", float, d_params, True],
-                            ["wall_silh_z_disp", float, d_params, True],
                         ]
                     t = check_if_var_exists("longwave_misalignment", dict, d,
                         True)
@@ -241,8 +237,13 @@ def check_yaml(path_to_yaml_file: str):
                         case "_":
                             epprint(f"ERROR: In equilibrium document at {line_number}")
                             epprint(f"ERROR: Wrong 'equilibrium_type' entry: {eq_type}")
-
-                    test_list += [["correct_helicity", bool, d, isOptional]]
+                    test_list += [
+                        ["correct_helicity", bool, d, isOptional],
+                        ["plasma_r_displ", (float, list), d, isOptional],
+                        ["plasma_z_displ", (float, list), d, isOptional],
+                        ["wall_silh_r_shift", (float, list), d, isOptional],
+                        ["wall_silh_r_shift", (float, list), d, isOptional],
+                    ]
                 case "hlm":
                     check_if_var_exists("hlm_type", str, d)
 
@@ -481,9 +482,13 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
     # See if there is a plasma shift applied
     plasma_r_displ = getVal(eqid, "plasma_r_displ", 0.0)
     plasma_z_displ = getVal(eqid, "plasma_z_displ", 0.0)
+    pprint(f"plasma_r_displ: {plasma_r_displ}")
+    pprint(f"plasma_z_displ: {plasma_z_displ}")
     equil_obj.applyPlasmaShift(plasma_r_displ, plasma_z_displ)
     wall_silh_r_shift = getVal(eqid, "wall_silh_r_shift", 0.0)
     wall_silh_z_shift = getVal(eqid, "wall_silh_z_shift", 0.0)
+    pprint(f"wall_silh_r_shift: {wall_silh_r_shift}")
+    pprint(f"wall_silh_z_shift: {wall_silh_z_shift}")
     equil_obj.applyWallSilhouetteShift(wall_silh_r_shift, wall_silh_z_shift)
 
 
@@ -550,8 +555,8 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
                     run_flt = True
                     break
 
-        pprint(f"INFO: Need to obtain FLT data?: {run_flt}")
 
+    pprint(f"INFO: Need to obtain FLT data?: {run_flt}")
     pprint(f"INFO: Name set for the case: {case_name}")
     pprint(f"INFO: Output directory set: {output_directory}")
     pprint(f"INFO: Name of result FLT MED file: {result_file_path}")
@@ -575,10 +580,12 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
 
         if "exclude_meshes" in geod:
             mesh_to_remove = []
+            pprint("Excluding meshes")
             for f in shadow_mesh_files:
                 if f in geod["exclude_meshes"]:
                     mesh_to_remove.append(f)
             for m in mesh_to_remove:
+                pprint(f"Excluding {m}")
                 shadow_mesh_files.remove(m)
 
         geom_ids = []
@@ -640,11 +647,11 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
         # to load the results from the result_file.
 
     # First let's see if there is actually nothing to do...
+    pprint(f"INFO: Do we need to get FLT data? {run_flt}")
+    pprint(f"INFO: Do we have an HLM to apply? {apply_heat_loads}")
+    pprint(f"INFO: Do we have to get FLs? {get_fls}")
     if not (run_flt or apply_heat_loads or get_fls):
         pprint("INFO: Actually... there is nothing to do?")
-        pprint(f"INFO: Do we need to get FLT data? {run_flt}")
-        pprint(f"INFO: Do we have an HLM to apply? {apply_heat_loads}")
-        pprint(f"INFO: Do we have to get FLs? {get_fls}")
         pprint("INFO: Stopping...")
         return
 
@@ -688,6 +695,7 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
             if index == 0:
                 # Save only once the baryCent and normals. That is stationary
                 # data
+                iprint("INFO: Saving normals for the first time")
                 result_file.addField(array_name="normals",
                                      array=flt_obj.normals,
                                      info_on_components=['x', 'y', 'z'])
@@ -869,6 +877,19 @@ def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
         case _:
             epprint("ERROR: Wrong eq_type.")
             sys.exit(2)
+
+    # See if there is a plasma shift applied
+    plasma_r_displ = getVal(eqid, "plasma_r_displ", 0.0)
+    plasma_z_displ = getVal(eqid, "plasma_z_displ", 0.0)
+    ok = equil_obj.applyPlasmaShift(plasma_r_displ, plasma_z_displ)
+    if not ok:
+        epprint("ERROR: Could not apply plasma shift!")
+        sys.exit(2)
+
+    wall_silh_r_shift = getVal(eqid, "wall_silh_r_shift", 0.0)
+    wall_silh_z_shift = getVal(eqid, "wall_silh_z_shift", 0.0)
+    equil_obj.applyWallSilhouetteShift(wall_silh_r_shift, wall_silh_z_shift)
+
     # Additional arrays if they are needed
     time_array = []
     # Create a simple X-axis drsep array for plotting Q_parallels.
@@ -1138,6 +1159,10 @@ def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
             ax.set_yscale("log")
             figure.savefig(f"{name}_qpar.png")
             figure.savefig(f"{name}_qpar.pdf")
+            array = np.zeros((drsep.size, 2))
+            array[:, 0] = drsep
+            array[:, 1] = qpar
+            np.savetxt(f"{name}_qpar.txt", array, header="drsep[m], qpar [W/m^2]")
             plt.close(figure)
             del figure
 
