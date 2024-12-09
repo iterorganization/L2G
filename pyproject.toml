@@ -1,26 +1,26 @@
-# [project]
-# name = "l2g"
-# description = "A FLT (Field Line Tracing) suite"
-# readme = "README"
-# version = "2024dev"
-# authors = [
-#     {name="Gregor Simič", email="gregor.simic@iter.org"}
-# ]
-# maintainers = [
-#     {name="Gregor Simič", email="gregor.simic@iter.org"}
-# ]
-# keywords = ["flt"]
-# classifiers = [
-#     "Development Status :: 3 - Alpha",
-#     "Intended Audience :: Developers",
-#     "Intended Audience :: Science/Research",
-#     "Topic :: Software Development",
-#     "Topic :: Scientific/Engineering",
-#     "Programming Language :: Python",
-#     "Programming Language :: Python :: 3",
-#     "Programming Language :: Cython"
-# ]
-# requires-python = ">=3.10"
+[project]
+name = "l2g"
+description = "A FLT (Field Line Tracing) suite"
+readme = "README"
+version = "2024dev"
+authors = [
+    {name="Gregor Simič", email="gregor.simic@iter.org"}
+]
+maintainers = [
+    {name="Gregor Simič", email="gregor.simic@iter.org"}
+]
+keywords = ["flt"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Topic :: Software Development",
+    "Topic :: Scientific/Engineering",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Cython"
+]
+requires-python = ">=3.10"
 
 [project.optional-dependencies]
 tmp = [

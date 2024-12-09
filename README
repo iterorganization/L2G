@@ -16,10 +16,9 @@ equilibrium data.
 To build the module run the following command in a linux system:
 
 ```shell
-EMBREE_ROOT_DIR=/path/to/embree L2G_CPP_ROOT_DIR=/path/to/L2G_cpp \
+EMBREE_ROOT_DIR=/path/to/embree L2G_CPP_ROOT_DIR=/path/to/L2G_cpp EMBREE_VERSION=3 \
 python -m pip install . --no-deps
 ```
-
 or if the Embree3 and L2G_CPP are EasyBuild modules simply load the modules and
 call
 
@@ -27,18 +26,18 @@ call
 python -m pip install . --no-deps
 ```
 
-The python package builds on system packages of CentOS 8.x and Debian 11.x.
-
 The development packages of the C++ kernel and Embree are required for
-successful compilation.
+successful compilation. The C++ kernel is compatible with Embree4, you must 
+simply define EMBREE_VERION=4. If the EMBREE_VERSION is created by an 
+environment software and is in fact a semver, the setup.py will only take the
+leading digit, as only the major version value is required.
 
 ## Third party C++ Dependencies
 
-Third party C++ dependencies are:
+Third party C++ (non python) dependencies are:
 
  - L2G_cpp C++ kernel (https://git.iter.org/projects/TRAJ/repos/yaflt)
  - Embree (https://github.com/RenderKit/embree)
-
 
 Every other dependency is run-time dependency and not required for building the
 package (and it's Cython extension).

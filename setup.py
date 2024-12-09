@@ -3,50 +3,43 @@ from setuptools.extension import Extension
 import sys
 import os
 
-from typing import List
 from pathlib import Path
 
 try:
     from Cython.Build import cythonize
 except ImportError:
-    sys.exit("Cython not found. Cython is needed to build the extension "
+    sys.exit("Cython not found. Cython is needed to build the extension " +
              "modules.")
 
 try:
     import numpy as np
 except ImportError:
-    sys.exit("Numpy not found. Numpy is needed to build the extension "
+    sys.exit("Numpy not found. Numpy is needed to build the extension " +
              "modules.")
 
 # Find L2G_CPP_ROOTDIR
+L2G_CPP_ROOTDIR: str
+EMBREE_VERSION: str
+EMBREE_ROOTDIR: str
 
-L2G_CPP_ROOTDIR=None
-if "L2G_CPP_ROOT_DIR" in os.environ:
-    L2G_CPP_ROOTDIR = os.environ["L2G_CPP_ROOT_DIR"]
-elif "EBROOTL2G_CPP" in os.environ:
-    L2G_CPP_ROOTDIR = os.environ["EBROOTL2G_CPP"]
-
-
-if L2G_CPP_ROOTDIR is None:
+if (L2G_CPP_ROOTDIR := os.environ.get("L2G_CPP_ROOT_DIR") or os.environ.get("EBROOTL2G_CPP")) is None:
     sys.exit("L2G_CPP_ROOT_DIR or EBROOTL2G_CPP are not set! L2G_cpp is required!")
 
-EMBREE_ROOTDIR=None
-if "EMBREE_ROOT_DIR" in os.environ:
-    EMBREE_ROOTDIR = os.environ["EMBREE_ROOT_DIR"]
-elif "EBROOTEMBREE" in os.environ:
-    EMBREE_ROOTDIR = os.environ["EBROOTEMBREE"]
-
-if EMBREE_ROOTDIR is None:
+if (EMBREE_ROOTDIR := os.environ.get("EMBREE_ROOT_DIR") or os.environ.get("EBROOTEMBREE")) is None:
     sys.exit("EMBREE_ROOT_DIR or EBROOTEMBREE are not set! Embree is required!")
+
+if not (EMBREE_VERSION:=os.environ.get("EMBREE_VERSION")):
+    sys.exit("EMBREE_VERSION is not set in the envrionment!")
+
+if len(EMBREE_VERSION) > 1:
+    EMBREE_VERSION = EMBREE_VERSION[0]
 
 useOpenMP = True
 
-def get_include_directories():
-    """Required include directories:
-        FLT
-        embree3
+def get_include_directories() -> list[str]:
+    """Get the include directories of the C++ code and Embree.
     """
-    out = []
+    out: list[str] = []
 
     out.append(os.path.join(L2G_CPP_ROOTDIR, 'include', 'flt'))
     out.append(os.path.join(EMBREE_ROOTDIR, 'include'))
@@ -54,18 +47,19 @@ def get_include_directories():
 
     return out
 
-def get_libraries():
-    """Required libraries to link:
-        flt
+def get_libraries() -> list[str]:
+    """Get libraries required for linking against flt.so
     """
-    out = []
+    out: list[str] = []
     out.append("flt")
     if sys.platform == "win32":
         out.append("embree3")
     return out
 
-def get_library_dirs():
-    out = []
+def get_library_dirs() -> list[str]:
+    """Get paths to library dirs.
+    """
+    out: list[str] = []
 
     out.append(os.path.join(L2G_CPP_ROOTDIR, 'lib'))
     if sys.platform == "win32":
@@ -73,24 +67,34 @@ def get_library_dirs():
 
     return out
 
-def get_extra_compile_args():
-    out = []
+def get_extra_compile_args() -> list[str]:
+    """Specify extra compilation arguments. Use maximum optimization but avoid
+    using march=native as it shown that on some CPUs it can generate segfaulty
+    code.
+    """
+    out: list[str] = []
 
     if sys.platform == "win32":
         out.append("/O3")
         if useOpenMP:
             out.append("/openmp")
-
+        # The C++ code is compatible with Embree 3/4
+        out.append(f"/DEMBREE_VERSION={EMBREE_VERSION}")
     else:
         out.append("-O3")
         # out.append("-march=native")
         out.append("-Wall")
         if useOpenMP:
             out.append("-fopenmp")
+        # The C++ code is compatible with Embree 3/4
+        out.append(f"-DEMBREE_VERSION={EMBREE_VERSION}")
     return out
 
-def get_extra_link_args():
-    out = []
+def get_extra_link_args() -> list[str]:
+    """Extra link flags. For OpenMP or parts of the code in cython that might
+    use openmp.
+    """
+    out: list[str] = []
 
     if useOpenMP:
         if sys.platform == "win32":
@@ -99,8 +103,13 @@ def get_extra_link_args():
             out.append("-fopenmp")
     return out
 
-def getDataFiles():
-    out = []
+def getDataFiles() -> list[str]:
+    """Get a list of data files to package inside the wheel. This is important
+    on Microsoft sstems where the dll files should be bundled next to the 
+    cythonized dll files.
+
+    """
+    out: list[str] = []
 
     if sys.platform == "win32":
         # Gather the required DLLs
@@ -110,14 +119,16 @@ def getDataFiles():
 
     return out
 
-def getLongDescription():
+def getLongDescription() -> str:
     if os.path.exists("README"):
         return open("README", "r").read()
     return ""
 
-def get_pyx_files(path: Path) -> list:
+def get_pyx_files(path: Path) -> list[str]:
+    """Collect all the pyx files
+    """
     dir_exclusion = ["__pycache__"]
-    pyx_files = []
+    pyx_files: list[str] = []
 
     for p in path.glob("*"):
         if p.is_dir():
@@ -128,8 +139,12 @@ def get_pyx_files(path: Path) -> list:
             pyx_files.append(p)
     return pyx_files
 
-def prepare_cython_extensions(pyx_files: List[Path], root_path):
-    extensions = []
+def prepare_cython_extensions(pyx_files: list[Path], root_path: Path) -> list[Extension]:
+    """Automatically setup the list of extensions. Basically every pyx file in
+    the package path directory get's properly defined as an Extension and then
+    cythonized.
+    """
+    extensions: list[Extension] = []
     for p in pyx_files:
         rel_path = p.relative_to(root_path)
         source_file_path = str(rel_path)
@@ -165,25 +180,11 @@ pyx_files = get_pyx_files(package_path)
 extensions = prepare_cython_extensions(pyx_files, setup_path)
 
 setup(
-    name="l2g",
-    version="1.0.0",
-    description="Python module for running FLT",
-    long_description=getLongDescription(),
-    long_description_content_type="text/markdown",
     ext_modules=extensions,
-    author="Gregor Simic",
-    author_email="simic.gregor@gmail.com",
-    classifiers=[
-        "Programming Language :: Python :: 3",
-        "Operating System :: OS Independent",
-        "Programming Language :: Cython",
-        "Programming Language :: C++",
-    ],
     packages = ["l2g", "l2g.comp", "l2g.equil", "l2g.hlm", "l2g.plot",
                 "l2g.settings", "l2g.mesh",
                 "l2g.external"],
     data_files = [('', getDataFiles())],
-    python_requires=">=3.6",
     scripts = ['bin/flat', 'bin/submitFLAT', 'bin/FLAT.sbatch',
                'bin/imas2eqdsk', 'bin/mkEqdskMovie', 'bin/mkImasMovie',
                'bin/mkImasMovieFromPsi',
