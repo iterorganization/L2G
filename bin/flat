@@ -695,7 +695,7 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
             if index == 0:
                 # Save only once the baryCent and normals. That is stationary
                 # data
-                iprint("INFO: Saving normals for the first time")
+                ipprint("INFO: Saving normals for the first time")
                 result_file.addField(array_name="normals",
                                      array=flt_obj.normals,
                                      info_on_components=['x', 'y', 'z'])
