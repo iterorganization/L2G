@@ -1063,6 +1063,7 @@ cdef class FieldLineTracer:
                 points=self.hlm_params.points,
                 profile=self.hlm_params.additional_profiles[1])
 
+            self.hlm_results.additional_arrays = []
             self.hlm_results.additional_arrays.append(elm)
             self.hlm_results.additional_arrays.append(interELM)
             self.hlm_results.additional_arrays.append(self.applyShadowMask(Te))
