@@ -103,7 +103,6 @@ args = parser.parse_args()
 
 import imas
 import numpy as np
-from math import isclose
 
 ids = imas.DBEntry(backend_id=imas.imasdef.MDSPLUS_BACKEND,
     user_name=args.user, db_name=args.device, shot=args.shot, run=args.run,
@@ -135,6 +134,13 @@ marching_obj = Marching()
 ALL_CONTOUR_PATHS = []
 TIMES = []
 
+mask = np.logical_and(summary_ids.time >= args.time_start, summary_ids.time <= args.time_end)
+times = summary_ids.time[mask]
+if args.number_of_samples != -1:
+    idx = np.round(np.linspace(0, len(times)-1, args.number_of_samples)).astype(int)
+    times = times[idx]
+
+print(f"Time interval: [{times[0]}, {times[1]}] with {len(times)} steps.")
 for time in times:
     print(f"Processing time {time}")
     TIMES.append(f"t={time:12.4f}s")
