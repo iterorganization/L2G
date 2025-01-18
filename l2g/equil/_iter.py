@@ -53,7 +53,7 @@ class EquilibriumIterator(object):
         self._correct_helicity = True
 
         #: Number of digits of time to write into identifiers
-        self.truncate_digits = 3
+        self.truncate_digits = 6
 
     def correctHelicity(self, val):
         self._correct_helicity = val
