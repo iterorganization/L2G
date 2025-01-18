@@ -441,6 +441,10 @@ cdef class EQA:
 
             double flux, dummy
 
+        if self.evaluated:
+            log.debug("Already evaluated. No need to evaluate the equilibrium.")
+            return
+
         log.debug("Starting equilibrium evaluation.")
 
         # Initializing flux and dummy to squash warnings
@@ -464,9 +468,6 @@ cdef class EQA:
         contact_flux = 0.0
 
 
-        if self.evaluated:
-            log.debug("Already evaluated.")
-            return
         if self.equilibrium is None:
             log.error("No equilibrium")
 
