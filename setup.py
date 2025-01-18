@@ -190,5 +190,6 @@ setup(
                'bin/mkImasMovieFromPsi',
                'bin/med2mat', 'bin/mat2med', 'bin/plotMFlux', "bin/plotIP",
                "bin/get_disruption_profile_from_imas",
-               "bin/torbeam_mapper", "bin/torbeam_plotter"]
+               "bin/torbeam_mapper", "bin/torbeam_plotter",
+               "bin/get_disruption_profile_from_imas"]
 )
