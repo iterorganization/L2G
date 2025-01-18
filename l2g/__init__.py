@@ -1,6 +1,41 @@
 import logging
+import sys
+import os
 
 log = logging.getLogger(__name__)
+log.addHandler(logging.NullHandler())
+
+old_factory = logging.getLogRecordFactory()
+
+def custom_log_record_factory(*args, **kwargs):
+    record = old_factory(*args, **kwargs)
+    module_name = record.name
+
+    # Check if the module is a Cython module
+    module = sys.modules.get(module_name)
+    if module:
+        # If the module has a `__file__` attribute, use it to resolve the filename
+        if hasattr(module, '__file__'):
+            file_name: str = module.__file__
+
+            if file_name.endswith("so"):
+                # Extract the name of the pyx file by
+                basename = os.path.basename(file_name)
+                split_basename = basename.split(".")
+                if len(split_basename) <= 1:
+                    pass
+                else:
+                    file_name = split_basename[0]
+            record.filename = file_name
+        else:
+            # Fallback for Cython modules without `__file__`. The name of the
+            # *.so files contains cpython and other identifiers so only include
+            # the string up to the first '.'
+            record.filename = module_name + ".pyx"
+    return record
+
+logging.setLogRecordFactory(custom_log_record_factory)
+
 _file_handler = None
 _stream_handler = None
 
