@@ -282,12 +282,12 @@ class EquilibriumIterator(object):
         n_equilibriums = len(self._equilibriums)
 
         ok = True
-        if (isinstance(r_shift, list) and len(r_shift) != n_equilibriums) or (not isinstance(r_shift, list) and n_equilibriums > 1):
+        if (isinstance(r_shift, list) and len(r_shift) != n_equilibriums) or (not isinstance(r_shift, list) and n_equilibriums > 1 and r_shift != 0.0):
             ok = False
             log.error('You have not provided enough r shift values for all' +
                       ' instances of plasma! ')
 
-        if (isinstance(z_shift, list) and len(z_shift) != n_equilibriums) or (not isinstance(z_shift, list) and n_equilibriums > 1):
+        if (isinstance(z_shift, list) and len(z_shift) != n_equilibriums) or (not isinstance(z_shift, list) and n_equilibriums > 1 and z_shift != 0.0):
             ok = False
             log.error('You have not provided enough z shift values for all' +
                       ' instances of plasma!')
@@ -301,8 +301,8 @@ class EquilibriumIterator(object):
                 equilibrium.mag_axis_r += r_shift[i]
                 equilibrium.grid_r += r_shift[i]
             # It must be float
-        else:
-            log.info(f"Applying shift_r={r_shift}m")
+        elif r_shift != 0.0:
+            log.info(f"Applying shift_r={r_shift} m")
             for equilibrium in self._equilibriums:
                 # Apply shift to the equilibrium
                 equilibrium.mag_axis_r += r_shift
@@ -313,8 +313,8 @@ class EquilibriumIterator(object):
                 log.info(f"Applying shift_z={z_shift[i]}m")
                 equilibrium.mag_axis_z += z_shift[i]
                 equilibrium.grid_z += z_shift[i]
-        else:
-            log.info(f"Applying shift_z={z_shift}m")
+        elif z_shift != 0.0:
+            log.info(f"Applying shift_z={z_shift} m")
             for equilibrium in self._equilibriums:
                 # Apply shift to the equilibrium
                 equilibrium.mag_axis_z += z_shift

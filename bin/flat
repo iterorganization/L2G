@@ -482,7 +482,7 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
     # See if there is a plasma shift applied
     plasma_r_displ = getVal(eqid, "plasma_r_displ", 0.0)
     plasma_z_displ = getVal(eqid, "plasma_z_displ", 0.0)
-    if plasma_r_displ != 0.0 and plasma_z_displ != 0.0:
+    if plasma_r_displ != 0.0 or plasma_z_displ != 0.0:
         pprint(f"plasma_r_displ: {plasma_r_displ}")
         pprint(f"plasma_z_displ: {plasma_z_displ}")
         equil_obj.applyPlasmaShift(plasma_r_displ, plasma_z_displ)
