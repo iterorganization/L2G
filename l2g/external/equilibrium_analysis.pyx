@@ -111,7 +111,6 @@ cdef class EQA:
 
         if not equilibrium is None:
             self.setEquilibrium(equilibrium)
-        self.lcfs_points = []
 
     def resetValues(self):
         self.evaluated = False
@@ -140,6 +139,7 @@ cdef class EQA:
 
         # Direction of the gradient of psi
         self.psi_grad_sign = 0.0
+        self.lcfs_points = []
 
     def setEquilibrium(self, obj: 'Equilibrium'):
         """Sets the equilibrium objects and propagates the
@@ -400,6 +400,7 @@ cdef class EQA:
         i = 0
         prev_distance = 0
         log.debug("Tracking magnetic surface.")
+        self.lcfs_points = []
         while i < 100000:
             flag = self.c_rkf45.r8_rkf45(y, yp,  &time, new_time, &relerr, abserr, flag)
             if flag != 2:
