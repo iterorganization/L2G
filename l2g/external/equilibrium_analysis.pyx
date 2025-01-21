@@ -381,7 +381,7 @@ cdef class EQA:
         abserr = 1e-4
 
         # Do one loop around the tokamak.
-        time_step = 0.01
+        time_step = 0.001
 
         y[0] = contact_r[0]
         y[1] = contact_z[0]
@@ -399,7 +399,7 @@ cdef class EQA:
 
         i = 0
         prev_distance = 0
-        log.debug("Tracking mgnetic surface.")
+        log.debug("Tracking magnetic surface.")
         while i < 100000:
             flag = self.c_rkf45.r8_rkf45(y, yp,  &time, new_time, &relerr, abserr, flag)
             if flag != 2:
