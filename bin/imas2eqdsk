@@ -1,8 +1,8 @@
-#!/usr/bin/env python3
+#!/home/ITER/simicg/venvs/sflt/bin/python
 
 import imas
 import l2g.equil
-
+import numpy as np
 
 import argparse
 
@@ -44,11 +44,14 @@ parser.add_argument('-r', '--run',
                     help='argument for run. Required',
                         required=True)
 parser.add_argument('-ts', '--time_start',
-                    type=float, metavar='time start',
+                    type=float, metavar='time start', default=0.0,
                     help='Start of time interval.')
 parser.add_argument('-te', '--time_end',
-                    type=float, metavar='time end',
+                    type=float, metavar='time end', default=float('inf'),
                     help='End of time interval.')
+parser.add_argument("-t", "--times",  metavar="times",
+                    nargs="*", default=[], type=float)
+
 args = parser.parse_args()
 
 user = args.user
@@ -56,31 +59,41 @@ device = args.device
 shot = args.shot
 run = args.run
 version = args.version
+times = args.times
 # t_s = 399.927598 # time slice
 DINA_SCENARIO_NAME="DT-DINA2020-04"
 
-imas_obj = imas.ids(shot, run)
-imas_obj.open_env(user, device, version)
+# imas_obj = imas.ids(shot, run)
+# imas_obj.open_env(user, device, version)
 
-ids_equilibrium = imas_obj.equilibrium
+# ids_equilibrium = imas_obj.equilibrium
 
-# time_slices = args.time_slices[:]
+# # time_slices = args.time_slices[:]
 
-ids_wall = imas_obj.wall
-ids_wall.get()
+# ids_wall = imas_obj.wall
+# ids_wall.get()
 
-imas_obj.summary.get()
-ids_times = imas_obj.summary.time
+# imas_obj.summary.get()
 
+imas_obj = imas.DBEntry(shot=shot, run=run, user_name=user, db_name=device,
+                        backend_id=imas.imasdef.MDSPLUS_BACKEND)
+imas_obj.open()
 
-for ts in ids_times:
-    if ts < args.time_start or ts > args.time_end:
-        continue
-    ids_equilibrium.getSlice(ts, imas.imasdef.CLOSEST_SAMPLE)
+ids_wall = imas_obj.get("wall")
+ids_summary = imas_obj.get("summary")
 
-    # Actual time depends on what is the closest sample, do NOT trust linear
-    # interpolation!!
+if len(times) == 0:
+    # Extract the times using time_start time_end
+    times = ids_summary.time[np.logical_and(
+        ids_summary.time >= args.time_start,
+        ids_summary.time <= args.time_end)]
 
+# print(ids_times, )
+print(f"Generating EQDSK files from {shot}/{run}")
+for ts in times:
+    ids_equilibrium = imas_obj.get_slice("equilibrium", ts, imas.imasdef.CLOSEST_SAMPLE)
+    print(f"Processing time {ts}. Actual time stored in time_slice[:].time: {ids_equilibrium.time_slice[0].time}")
+    # ids_equilibrium.getSlice(ts, imas.imasdef.CLOSEST_SAMPLE)
 
     slice = ids_equilibrium.time_slice[0]
     time = slice.time
@@ -88,8 +101,6 @@ for ts in ids_times:
     HEADER_COMMENT=f"IDS shot={shot} run={run} t={time:.3f}s"
     eqObj = l2g.equil.createEqdskFromSlice(slice,
                                            HEADER_COMMENT)
-    ids_wall = imas_obj.wall
-    ids_wall.get()
     l2g.equil.addWallDescriptionToEqdsk(eqObj, ids_wall)
 
     # SuccessfullRead is needed to set to 1 as we manually populate the data
