@@ -79,6 +79,9 @@ class EquilibriumIterator(object):
         for i, file in enumerate(eqdsk_files):
             log.info(f"Loading {os.path.basename(file)}")
             eqdsk = EQDSKIO(file)
+            if not eqdsk.successfullRead:
+                log.error(f"Failed reading {os.path.basename(file)}")
+                raise Exception
             equilibrium = getEquilibriumFromEQDSKG(eqdsk,
                 correct_helicity=self._correct_helicity)
             self._equilibriums.append(equilibrium)

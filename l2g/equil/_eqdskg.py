@@ -2,7 +2,11 @@ import os
 import re
 
 import logging
+
 log = logging.getLogger(__name__)
+
+class NanValuesInEqdskFile(Exception):
+    pass
 
 class EQDSKIO(object):
     """EQDSK interface implementation
@@ -333,6 +337,10 @@ class EQDSKIO(object):
                 self.RLIM.append(P2[_I])
                 self.ZLIM.append(P2[_I + 1])
                 _I += 2
+        except NanValuesInEqdskFile as e:
+            log.error("NaN values in EQDSK file!")
+            self.successfullRead = False
+            return False
         except Exception as e:
             log.error("Failed to read EQDSK")
             self.successfullRead = False
@@ -385,6 +393,10 @@ class EQDSKIO(object):
         # between.
         part_2 = []
 
+        # Pattern for NaN check
+        nanPattern = r'(?i)\bnan\b'
+        nanPatt = re.compile(nanPattern)
+
         # Pattern for reading integer values separated with spaces
         integerPattern = r'(?:^|(?<=\s))-?[0-9]+(?:$|(?=\s))'
         intPatt = re.compile('.*' + integerPattern + '.*')
@@ -398,6 +410,12 @@ class EQDSKIO(object):
         for line in LINES:
             if SWITCH and intPatt.match(line):
                 SWITCH = 0
+
+            nan_check = nanPatt.findall(line)
+            print(nan_check)
+            if len(nan_check) > 0:
+                raise NanValuesInEqdskFile
+
             result = genPatt.findall(line)
             if SWITCH:
                 part_1 += [float(el) for el in result]
