@@ -412,7 +412,6 @@ class EQDSKIO(object):
                 SWITCH = 0
 
             nan_check = nanPatt.findall(line)
-            print(nan_check)
             if len(nan_check) > 0:
                 raise NanValuesInEqdskFile
 
