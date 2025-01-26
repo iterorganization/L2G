@@ -77,6 +77,10 @@ class EquilibriumIterator(object):
                 eqdsk_files.append(file)
 
         for i, file in enumerate(eqdsk_files):
+            if not os.path.exists(file):
+                log.error(f"File {file} does not exist.")
+                raise Exception
+
             log.info(f"Loading {os.path.basename(file)}")
             eqdsk = EQDSKIO(file)
             if not eqdsk.successfullRead:
