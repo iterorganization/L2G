@@ -1276,8 +1276,8 @@ if __name__ == "__main__":
 
     import l2g
 
+    l2g.addStreamHandler()
     if args.debug:
-        l2g.addStreamHandler()
         l2g.enableDebugging()
 
     if command == "check":
