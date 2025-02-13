@@ -411,6 +411,7 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
     import numpy as np
     import l2g.comp
     import l2g.equil
+    import time
 
     pprint("INFO: Running FLT")
 
@@ -659,7 +660,7 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
 
     N = len(equil_obj)
     for index, associated_time, equilibrium in equil_obj:
-        pprint(f"INFO: Processing {index+1} of {N} equilibriums. Time={associated_time}")
+        ipprint(f"INFO: Processing {index+1} of {N} equilibriums. Time={associated_time}")
 
         result_file.setIndex(index)
         result_file.setTime(associated_time)
@@ -690,8 +691,9 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
 
         if run_flt:
             ipprint("INFO: Running FLT!")
+            start = time.perf_counter()
             flt_obj.runFLT()
-            opprint("INFO: FLT done!")
+            opprint(f"INFO: FLT done in {time.perf_counter() - start} seconds!")
             flt_obj.calculateDrsep()
 
             if index == 0:
@@ -1185,7 +1187,7 @@ def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
 intro = """
                             FFFFFFF L        A     TTTTTTTTTTTT
                            F       L        A A         T
-Running Gregor Simič's    FFFFf   L        A   A        T
+Running Gregor Simič's    FFFFF   L        A   A        T
                          F       L        AAAAAAA       T
                         F       L        A       A      T
                        F       LLLLLLL  A         A     T
@@ -1376,5 +1378,22 @@ if __name__ == "__main__":
         for set_of_kwargs in kwargs_of_cases:
             run_case(TARGET_D, EQUILI_D, HLM_D, **set_of_kwargs)
 
-    opprint(f"Done running flat. Elapsed time {time.time() - start}")
+    elapsed_time = time.time() - start
+
+    hours = elapsed_time // 3600
+    minutes = (elapsed_time % 3600) // 60
+    seconds = elapsed_time % 60
+
+
+    time_args = []
+    if hours > 0:
+        time_args.append(f"{hours:.0f} hours")
+    if minutes > 0:
+        time_args.append(f"{minutes:.0f} minutes")
+    if seconds > 0:
+        time_args.append(f"{seconds:.2f} seconds")
+
+    time_str = " ".join(time_args)
+
+    opprint(f"Done running flat. Elapsed time: {time_str}.")
     sys.exit(0)
