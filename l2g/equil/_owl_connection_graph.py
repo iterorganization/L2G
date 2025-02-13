@@ -143,7 +143,11 @@ class Polygon(object):
         return out
 
 def getOwlConlensGraph(eq: 'EQA'):
-    """Use this function that obtains the OWL connection length of the input
+    """Use this function that obtains the OWL connection length at the outer
+    midplane.
+
+    It takes the l2g.external.equilibrium_analysis.EQA object which contains
+    the information about the equilibrium.
 
     Arguments:
         eq (l2g.externals.equilibrium_analysis.EQA): EQA object containing an
@@ -171,7 +175,7 @@ def getOwlConlensGraph(eq: 'EQA'):
     # Get the R points on the midplane. Up to the wall.
     polygon = Polygon(equilibrium.wall_contour_r, equilibrium.wall_contour_z)
     r_end = polygon.horizontalRayIntersection(Rb, Zc)
-    r_points = np.linspace(Rb, polygon.horizontalRayIntersection(Rb, Zc), 200)
+    r_points = np.linspace(Rb, r_end, 200)
 
     bicubic = PyBicubic(equilibrium.grid_r, equilibrium.grid_z,
                         equilibrium.psi)
@@ -186,8 +190,8 @@ def getOwlConlensGraph(eq: 'EQA'):
         sr = r_points[i]
         sz = Zc
         sth = 0.0
-        drsep = sr - Rb
 
+        # Follow the fieldline up to 500 meters in the toroidal direction
         while length <= 500.0:
             nr, nz, nth = rkf45_obj.run_step(sr, sz, sth, 0.005)
             if not polygon.checkIfIn(nr, nz, False):
@@ -241,8 +245,7 @@ if __name__ == "__main__":
         print(f"ERROR: File {file} does not exist!")
         sys.exit(1)
 
-    equilibrium = l2g.equil.getEquilibriumFromEQFile("g900003_00230_ITER_15MA_eqdsk16HR.txt")
-    import l2g.external.bfgs_2d
+    equilibrium = l2g.equil.getEquilibriumFromEQFile(file)
     l2g.enableDebugging()
     l2g.addStreamHandler()
     import logging

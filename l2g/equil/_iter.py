@@ -29,6 +29,25 @@ def getBackUpIMASWallIds(shot=116000, run=4, db_name="ITER_MD",
 
 class EquilibriumIterator(object):
     """Iterator object that has equilibriums and acts as a iterator over them.
+
+
+    An example of loading equilibrium data to the object and using it:
+
+
+    .. code-block::
+
+       import l2g.equil
+
+       eqit = l2g.equil.EquilibriumIterator()
+
+       eqit.loadEqdskEquilibriums(list_of_eqdsk_file_paths)
+       # or
+       eqit.loadIMASEquilibriums(dict_of_imas_params)
+
+       for index, time, equilibrium in eqit:
+           # Do work here
+           pass
+
     """
 
     def __init__(self) -> None:
@@ -59,7 +78,7 @@ class EquilibriumIterator(object):
         self._correct_helicity = val
 
     def loadEqdskEquilibriums(self, l: list =[]) -> None:
-        """Loads EQDSK G files as equilibriums.
+        """Creates Equilibrium objects from  EQDSK G files and stores them.
 
         Arguments:
             l (list): List of EQDSK G files. Can contain * for globbing
@@ -92,7 +111,10 @@ class EquilibriumIterator(object):
             self._times.append(i)
 
     def loadIMASEquilibriums(self, d: dict = {}) -> None:
-        """Loads equilibriums from IMAS. The dictionary arguments required::
+        """Generate Equilibrium objects from IMAS.
+
+        The dictionary arguments
+        required::
 
          * user
          * device
@@ -254,7 +276,7 @@ class EquilibriumIterator(object):
     def __len__(self) -> int:
         return len(self._equilibriums)
 
-    def __getitem__(self, i):
+    def __getitem__(self, i) -> tuple[int, float, "Equilibrium"]:
         return i, self._times[i], self._equilibriums[i]
 
     def applyWallSilhouetteShift(self, r_shift: float, z_shift: float) -> None:
@@ -270,7 +292,8 @@ class EquilibriumIterator(object):
             equilibrium.wall_contour_r = [_ + r_shift for _ in equilibrium.wall_contour_r]
             equilibrium.wall_contour_z = [_ + z_shift for _ in equilibrium.wall_contour_z]
 
-    def applyPlasmaShift(self, r_shift: float | list[float], z_shift: float | list[float]) -> bool:
+    def applyPlasmaShift(self, r_shift: float | list[float],
+                         z_shift: float | list[float]) -> bool:
         """Applies a single or set of shifts (radial and/or vertical) to the
         plasma equilibrium. The number of shift should be the same as the
         number of equilibriums inside the iterator object.

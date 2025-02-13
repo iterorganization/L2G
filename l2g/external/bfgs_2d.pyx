@@ -16,7 +16,6 @@ cdef class PyBfgs2d:
         pass
 
     def __init__(self):
-        # This crashes under -O3 with a segfault. Not with -O0. No idea why.
         # Set the default bounds to something extremely large
         self.bx1 = -1000000.0
         self.bx2 = 2000000.0
