@@ -216,6 +216,9 @@ def check_yaml(path_to_yaml_file: str):
                     match eq_type:
                         case "eqdsk_files":
                             check_list_of_paths("eqdsk_files", d)
+                            test_list = [
+                                ["time_step_labels", (list, float), d, isOptional],
+                            ]
                         case "imas":
                             check_if_var_exists("imas", dict, d)
 
@@ -263,6 +266,8 @@ def check_yaml(path_to_yaml_file: str):
                                 ["lambda_q_main", (float, list), d, isOptional],
                             ]
                         case "ramp-down" | "ramp_down" | "ramp down":
+                            pass
+                        case "disruption":
                             pass
                         case "single":
                             test_list = [
@@ -464,6 +469,17 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
     match eqid["equilibrium_type"]:
         case "eqdsk_files":
             equil_obj.loadEqdskEquilibriums(eqid["eqdsk_files"])
+
+            try:
+                if (time_step_labels:= eqid.get("time_step_labels")):
+                    time_step_labels = [float(_) for _ in time_step_labels]
+
+                    if len(time_step_labels) == len(equil_obj._times):
+                        equil_obj._times = time_step_labels
+                        pprint("INFO: Setting custom time step labels for EQDSK files")
+            except Exception as e:
+                ipprint("INFO: Tried to set the time step labels for equilibrium but failed... using indexes...")
+                pass
         case "imas":
             equil_obj.loadIMASEquilibriums(eqid["imas"])
         case _:
@@ -807,6 +823,11 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
                 obj.calculate_heat_load_profile(**d)
 
                 flt_obj.hlm_params.profile = obj.qpar
+            if hlm_type == "disruption":
+                # Obtain the disruption profile. For that we require the IMAS
+                # access, or that the source of the equilibrium is the IMAS
+                # database.
+                pass
             if hlm_type == "custom":
                 # Load the data
                 _file = hlmd["profile_files"][index]
