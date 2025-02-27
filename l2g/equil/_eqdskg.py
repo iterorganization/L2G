@@ -42,7 +42,7 @@ class EQDSKIO(object):
 
     They are all accessible with the following example
 
-    ``` python
+    .. code-block:: python
 
        import l2g.equil
        x = l2g.equil.EQDSKIO()
@@ -67,7 +67,7 @@ class EQDSKIO(object):
        # geometry of the limiter
        x.RLIM
        x.ZLIM
-    ```
+
     """
 
     def __init__(self, file=''):

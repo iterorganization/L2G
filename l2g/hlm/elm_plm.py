@@ -103,7 +103,8 @@ class ELM_PLM(object):
 
     Usage
 
-    ``` python
+    .. code-block:: python
+
        drsep = ... # Array of X-points for the Outer Wall connection length
        conlen = ... # Array of the connection lengths for the outer-midplane
                     # outer divertor target.
@@ -129,7 +130,7 @@ class ELM_PLM(object):
        plt.show()
        f, axs = obj.create_elm_plm_graphs()
        plt.show()
-    ```
+
     """
     def __init__(self, drsep, conlen):
         self.drsep = drsep

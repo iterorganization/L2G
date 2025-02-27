@@ -15,7 +15,7 @@ def supportedFileExts() -> List[str]:
 def rotatePointsAroundAxis(points: np.ndarray, p1: np.ndarray, p2: np.ndarray,
     theta: float):
     """Rotate the argument points around the axis :math:`|p2 - p1|` for the
-    angle     theta.
+    angle theta.
 
     Arguments:
         points (npt.ndarray): Array of points with the shape ((N_points, 3)).
@@ -81,7 +81,7 @@ class Mesh():
     MED format (MED-file, MEDCoupling) but it is intended to be an easy to use
     interface with different I/O backends behind.
 
-    ``` python
+    .. code-block:: python
 
        import l2g.mesh
        m = l2g.mesh.Mesh("/path/to/file.med")
@@ -125,8 +125,6 @@ class Mesh():
 
        # Finally write the fields.
        m.writeFields()
-    ```
-
 
     """
     def __init__(self, file_path: str=""):

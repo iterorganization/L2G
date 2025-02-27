@@ -12,16 +12,11 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-import os
-import sys
-
-path = "/home/ITER/simicg/venvs/sflt/lib/python3.10/site-packages" # Correct this path.
-sys.path.insert(0, path)
 
 # -- Project information -----------------------------------------------------
 
 project = 'L2G_py'
-copyright = '2024, Gregor Simic'
+copyright = '2025, Gregor Simic'
 author = 'Gregor Simic'
 
 # The short X.Y version

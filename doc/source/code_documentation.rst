@@ -31,6 +31,24 @@ equilibrium.
    :undoc-members:
    :private-members:
 
+The :py:class:`l2g.plot.Marching` class is used to obtain contour points of 2D
+quantities. It is a implementation of the marching squares algorithm.
+
+.. autoclass:: l2g.plot.Marching
+   :members:
+   :undoc-members:
+   :private-members:
+
+The :py:class:`l2g.plot.Polygon` class is used for testing if a point is inside
+or outside the polygon or finally lying on the edge. It implements the
+horizontal ray casting algorithm.
+
+.. autoclass:: l2g.plot.Polygon
+   :members:
+   :undoc-members:
+   :private-members:
+
+
 *************************************
 Plasma equilibrium handling submodule
 *************************************
@@ -111,6 +129,7 @@ specific fieldline we want to plot.
 
 The :py:class:`l2g.comp.L2GResultsHLM` is the class for containing data
 related to the heat load mapping.
+
 .. automodule:: l2g.comp.L2GResultsHLM
    :members:
    :undoc-members:

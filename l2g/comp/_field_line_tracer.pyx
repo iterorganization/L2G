@@ -101,43 +101,42 @@ cdef class FieldLineTracer:
 
     Example usage:
 
-    ``` py
-    import l2g.comp
+    .. code-block:: py
 
-    flt = l2g.comp.FieldLineTracer()
+       import l2g.comp
 
-    # Set the parameters, options and hlm settings
+       flt = l2g.comp.FieldLineTracer()
 
-    flt.parameters
-    flt.options
-    flt.hlm_params
+       # Set the parameters, options and hlm settings
 
-    # Set mesh data in the form of vertices and triangles
-    flt.setTargetData(v, t)
-    # Or just on points
-    flt.setTargetData(v)
+       flt.parameters
+       flt.options
+       flt.hlm_params
 
-    # Set the equilibrium data
-    flt.setEquilibrium(equilibrium)
+       # Set mesh data in the form of vertices and triangles
+       flt.setTargetData(v, t)
+       # Or just on points
+       flt.setTargetData(v)
 
-    flt.applyParameters()
-    flt.loadEq()
-    flt.processMagneticData()
+       # Set the equilibrium data
+       flt.setEquilibrium(equilibrium)
 
-    # Run the FLT
-    flt.runFLT()
+       flt.applyParameters()
+       flt.loadEq()
+       flt.processMagneticData()
 
-    # Process the data
-    flt.results
-    flt.hlm_results
+       # Run the FLT
+       flt.runFLT()
 
-    # Get specific field lines
-    flt.fl_ids = [1,2,3,...]
+       # Process the data
 
-    flt.getFL()
+       flt.results
+       flt.hlm_results
 
+       # Get specific field lines
+       flt.fl_ids = [1,2,3,...]
+       flt.getFL()
 
-    ```
     """
     cdef FLT *c_FLT
     cdef vector[double] c_points # In Cylindrical Coordinate system. (R [m], Z [m], Phi [rad])

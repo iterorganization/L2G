@@ -69,19 +69,17 @@ class Marching(object):
         Direction of segments point so that the vertex with the higher value is
         always on the right.
 
-
-
-                         e1
-                     1       2
-                     o-------o
-          -          |       |
-          j       e4 |       | e2
-          v          |       |
-                     o-------o
-                     4       3
-                         e3
-
-                        |i>
+        |                  e1
+        |              1       2
+        |              o-------o
+        |   -          |       |
+        |   j       e4 |       | e2
+        |   v          |       |
+        |              o-------o
+        |              4       3
+        |                  e3
+        |
+        |                 |i>
 
         For reconstructing segments into a continuous polyline, all cells will
         determine the next neighboring segment the same way. A positive
