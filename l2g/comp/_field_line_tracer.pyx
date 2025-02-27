@@ -780,12 +780,6 @@ cdef class FieldLineTracer:
         vertical already applied, this is already taken into account since the
         LCFS points are following the shift, therefore the underlying C++ code
         will receive the full correct displacement.
-
-        !!! todo
-
-            Find a good algorithm to obtain LCFS contour points with a good
-            resolution. But this has to be done in EQ class.
-
         """
         log.info("Checking whether the input geometry is aligned with the" +
                  " contact point of the data")
@@ -798,12 +792,48 @@ cdef class FieldLineTracer:
             log.error("No FLT data.")
             return
 
+        self.eq.evaluate()
+
+        if not self.eq.getType() == "lim":
+            log.error("The plasma type is not limiter! Stopping...")
+            return
+
         # Calculate the initial drsep.
         log.info("Initial check for drsep.")
+
+        # Using the drsep or the distance from the bounadry on the midplane via
+        # poloidal flux can be tricky when you have small plasma and a large
+        # encompassing geometry, where parts of the geometry that are far away
+        # suddenly have poloidal flux values that shows that that part is
+        # "close" to the plasma. Or even inside.
+
+        # Therefore this can be used, but we should have a second criteria
+        # where we assume that the 2d wall silhouette geometry differs from the
+        # used 3d geometry by only a few or up to one meter.
+
         self.calculateDrsep()
 
+        # Create a mask where we filter out the areas of the input geometry
+        # that are too far away from the contact point.
+
+        log.info("Copying R,Z points from c_points to a numpy array")
+
+        # Comparing dist squares as it is faster than performing sqrt and
+        # doing comparison
+        (cp_r, cp_z) = self.eq.getContactPoint()
+        lcfs_max_align_dist = self.parameters.lcfs_max_align_dist ** 2
+        rz_dist_points = np.empty(self.drsep.shape, dtype=bool)
+        for i in range(rz_dist_points.size):
+            dist = (self.c_points[3*i] - cp_r) ** 2 + \
+                   (self.c_points[3*i+1] - cp_z) ** 2
+            rz_dist_points[i] = True
+            if dist > lcfs_max_align_dist:
+                rz_dist_points[i] = False
+
+        masked_array = np.ma.MaskedArray(self.drsep, rz_dist_points)
+
         # Get the element that is closest.
-        el_min = np.argmin(self.results.drsep)
+        el_min = np.ma.argmin(masked_array)
         dr_min = self.results.drsep[el_min]
         elr_min = self.c_points[3 * el_min]
         elz_min = self.c_points[3 * el_min + 1]

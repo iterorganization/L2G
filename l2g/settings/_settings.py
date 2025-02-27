@@ -5,17 +5,31 @@ log = logging.getLogger(__name__)
 class BaseClassOptions:
     __slots__ = []
     def dump(self) -> dict:
+        """Dumps a dictionary of the attributes defined in __slots__.
+
+        Returns:
+            out (dict): Dictionary of all the attributes and the their values
+                defined in __slots__.
+        """
         out = {}
         for slot in self.__slots__:
             out[slot] = self.__getattribute__(slot)
         return out
 
-    def load(self, options: dict) -> bool:
+    def load(self, options: dict) -> None:
+        """Loads values from input dictionary to __slots__.
+
+        Argument:
+            options (dict): Dictionary of attributes and their values. If an
+                attribute is not defined
+
+        """
         for option in options:
             if option in self.__slots__:
                 self.__setattr__(option, options[option])
-
-        return True
+            else:
+                log.warning(f"Option {option} not defined in {self.__class__.__name__}. Skipping")
+        return
 
 class Options(BaseClassOptions):
     """Options on how to run FLT. These settings are implemention wise, meaning
@@ -44,12 +58,9 @@ class Parameters(BaseClassOptions):
                "time_step", "max_fieldline_length",
                "self_intersection_avoidance_length", "abs_error", "rel_error",
                "target_to_m", "shadow_to_m", "num_of_threads",
-               "side", #"P_sol", "F_split", "q_parallel", "lambda_q_main",
-               # "lambda_q_near", "R_q",
-               "rd_ip_transition",
-               "cutoff_conlen",
-               "r_break",
-               "artificial_fl_catcher_geom_id"]
+               "side", "cutoff_conlen", "r_break",
+               "artificial_fl_catcher_geom_id",
+               "lcfs_max_align_dist"]
     def __init__(self):
 
         #: The plasma_*_displ parameters displaces the plasma in either R or Z
@@ -102,29 +113,13 @@ class Parameters(BaseClassOptions):
         #: For use with HLM. Either "iwl" or "owl"
         self.side = "iwl"
 
-        # #: Power @SOL parameter for use with HLM
-        # self.P_sol = 1.0
-
-        # #: Split parameter F for use with HLM.
-        # self.F_split = 0.5
-
-        # #: Parallel value of heat load at midplane for use with HLM
-        # self.q_parallel = None
-
-        # #: Main decay length parameter for use with HLM
-        # self.lambda_q_main = 0.012
-
-        # #: Near decay length parameter for use with HLM.
-        # self.lambda_q_near = 0.005
-
-        # #: Double exponential parameter ratio Rq
-        # self.R_q = 1
+        #: Advanced parameter for aligning LCFS to input 3D geometry. This is
+        #: used when large encompassing 3d geometries are used with small
+        #: limiter plasmas. In meters.
+        self.lcfs_max_align_dist = 1
 
         #: Double exponential parameter breakpoint r_break. In meters
         self.r_break = 0.025
-
-        #: Ramp down transition
-        self.rd_ip_transition = 10e6
 
         #: Parameter cutoff_conlen specifies the length at which we consider
         #: that a field line wetts target area. In meters.
