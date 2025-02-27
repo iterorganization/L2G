@@ -28,7 +28,8 @@ if (L2G_CPP_ROOTDIR := os.environ.get("L2G_CPP_ROOT_DIR") or os.environ.get("EBR
 if (EMBREE_ROOTDIR := os.environ.get("EMBREE_ROOT_DIR") or os.environ.get("EBROOTEMBREE")) is None:
     sys.exit("EMBREE_ROOT_DIR or EBROOTEMBREE are not set! Embree is required!")
 
-if not (EMBREE_VERSION:=os.environ.get("EMBREE_VERSION")):
+if (EMBREE_VERSION:=os.environ.get("EMBREE_VERSION") or os.environ.get("EBVERSIONEMBREE")) is None:
+    # Try to get it from EBVERSIONEMBREE
     sys.exit("EMBREE_VERSION is not set in the envrionment!")
 
 if len(EMBREE_VERSION) > 1:
@@ -41,7 +42,7 @@ def get_include_directories() -> list[str]:
     """
     out: list[str] = []
 
-    out.append(os.path.join(L2G_CPP_ROOTDIR, 'include', 'flt'))
+    out.append(os.path.join(L2G_CPP_ROOTDIR, 'include'))
     out.append(os.path.join(EMBREE_ROOTDIR, 'include'))
     out.append(np.get_include())
 
