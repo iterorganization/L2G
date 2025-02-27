@@ -822,7 +822,7 @@ cdef class FieldLineTracer:
         # doing comparison
         (cp_r, cp_z) = self.eq.getContactPoint()
         lcfs_max_align_dist = self.parameters.lcfs_max_align_dist ** 2
-        rz_dist_points = np.empty(self.drsep.shape, dtype=bool)
+        rz_dist_points = np.empty(self.drsep.shape, dtype="bool")
         for i in range(rz_dist_points.size):
             dist = (self.c_points[3*i] - cp_r) ** 2 + \
                    (self.c_points[3*i+1] - cp_z) ** 2
