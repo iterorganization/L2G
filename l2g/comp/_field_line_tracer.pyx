@@ -821,16 +821,16 @@ cdef class FieldLineTracer:
         # Comparing dist squares as it is faster than performing sqrt and
         # doing comparison
         (cp_r, cp_z) = self.eq.getContactPoint()
-        lcfs_max_align_dist = self.parameters.lcfs_max_align_dist ** 2
-        rz_dist_points = np.empty(self.drsep.shape, dtype="bool")
+        lcfs_max_align_dist_sq = self.parameters.lcfs_max_align_dist ** 2
+        rz_dist_points = np.empty(self.results.drsep.shape, dtype="bool")
         for i in range(rz_dist_points.size):
             dist = (self.c_points[3*i] - cp_r) ** 2 + \
                    (self.c_points[3*i+1] - cp_z) ** 2
             rz_dist_points[i] = True
-            if dist > lcfs_max_align_dist:
+            # Distance should be smaller for MaskedArray filtering!
+            if dist <= lcfs_max_align_dist_sq:
                 rz_dist_points[i] = False
-
-        masked_array = np.ma.MaskedArray(self.drsep, rz_dist_points)
+        masked_array = np.ma.MaskedArray(self.results.drsep, rz_dist_points)
 
         # Get the element that is closest.
         el_min = np.ma.argmin(masked_array)
