@@ -1,12 +1,22 @@
+"""Using BFGS to find the minimum of the magnetic poloidal flux.
+
+This example shows (and tests) the BFGS by using different starting position
+and showing how the method progresses.
+
+Run, for exapmles, as python3 example_bfgs.py
+"""
+
 import l2g.equil
 
-equilibrium = l2g.equil.getEquilibriumFromEQFile("../shot_135011_run_7_t_399.927598s.eqdsk")
+eqdsk_file_path = "../shot_135011_run_7_t_399.927598s.eqdsk"
+
+# Get equilibrium
+equilibrium = l2g.equil.getEquilibriumFromEQFile(eqdsk_file_path)
 
 from l2g.external.bicubic import PyBicubic
 
 bicubic = PyBicubic(equilibrium.grid_r, equilibrium.grid_z, equilibrium.psi)
 
-print(bicubic.getValues(4.0, 4.0))
 from l2g.external.bfgs_2d import PyBfgs2d
 
 min_obj = PyBfgs2d()
@@ -19,21 +29,46 @@ min_z = min(equilibrium.grid_z)
 max_z = max(equilibrium.grid_z)
 min_obj.setBounds(min_r, max_r, min_z, max_z)
 
-x = []
-# x.append(min_obj.findMinimum(6.3,0.5, 2))
-# print("asd")
-x.append(min_obj.findMinimum(5.0,-3.4, 10))
-x.append(min_obj.findMinimum(equilibrium.mag_axis_r,equilibrium.mag_axis_z, 10))
+half_r = (min_r + max_r) * 0.5
+half_z = (min_z + max_z) * 0.5
 
-minR = min(equilibrium.grid_r)
-maxR = max(equilibrium.grid_r)
-minZ = min(equilibrium.grid_z)
-maxZ = max(equilibrium.grid_z)
-lower_z = minZ + 0.15 * (maxZ - minZ)
-print((minR+maxR)*0.5, minZ + 0.15 * (maxZ - minZ))
-x.append(min_obj.findMinimum((minR+maxR)*0.5, minZ + 0.15 * (maxZ - minZ), 2))
+low_half_r = (min_r + half_r) * 0.5
+low_half_z = (min_z + half_z) * 0.5
 
-print(x)
-for _ in x:
-    print(min_obj.secondDerivativeTest(_[0], _[1]))
-    print(f"{_=}")
+upp_half_r = (half_r + max_r) * 0.5
+upp_half_z = (half_z + max_z) * 0.5
+
+points = [
+    (half_r, half_z), (low_half_r, low_half_z), (upp_half_r, upp_half_z)
+]
+
+import matplotlib.pyplot as plt
+
+
+f = plt.figure()
+ax = f.add_subplot()
+
+cnt = ax.contourf(equilibrium.grid_r, equilibrium.grid_z, equilibrium.psi, 30, cmap="jet")
+plt.colorbar(cnt, orientation='vertical')
+
+minimum_points = []
+
+# Plot the solution of the algorithm and all the intermediate points.
+for (r, z) in points:
+    out_of_bounds, *p = min_obj.findMinimum(r, z, 100)
+    if out_of_bounds:
+        raise Exception()
+    minimum_points.append(p)
+    points = min_obj.getPoints()
+    points_x = [_[0] for _ in points]
+    points_y = [_[1] for _ in points]
+    ax.plot(points_x[0], points_y[0], 'ro', ms=10)
+    ax.plot(points_x, points_y, 'o-')
+
+print(minimum_points)
+
+ax.set_xlabel("R [m]")
+ax.set_ylabel("R [m]")
+ax.axis("equal")
+plt.show()
+
