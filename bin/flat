@@ -231,7 +231,7 @@ def check_yaml(path_to_yaml_file: str):
                                 ["time_samples", int, d["imas"], True],
                             ]
                             # Now check for times
-                            times_in = check_if_var_exists("times", (list, int, float), d["imas"], optional=True)
+                            times_in = check_if_var_exists("times", (list, int, float), d["imas"], isOptional)
                             if not times_in:
                                 # We check now for start time and end time
                                 check_if_var_exists("time_start", (int, float), d["imas"])
@@ -265,6 +265,28 @@ def check_yaml(path_to_yaml_file: str):
                                 ["lambda_q_near", (float, list), d, isOptional],
                                 ["lambda_q_main", (float, list), d, isOptional],
                             ]
+                            loss_parameters_in = check_if_var_exists("loss_parameters", dict, d, isOptional)
+                            if loss_parameters_in:
+                                test_list += [
+                                    ["v_elm" , (float), d['loss_parameters'], isOptional],
+                                    ["n0" , (float), d['loss_parameters'], isOptional ],
+                                    ["Te0" , (float), d['loss_parameters'], isOptional ],
+                                    ["Ti0" , (float), d['loss_parameters'], isOptional],
+                                    ["Aion" , (float), d['loss_parameters'], isOptional ],
+                                    ["Z" , (int), d['loss_parameters'], isOptional],
+                                ]
+                            elm_parameters_in = check_if_var_exists("elm_parameters", dict, d, isOptional)
+                            if elm_parameters_in:
+                                test_list += [
+                                    ["E_total", (float), d['elm_parameters'], isOptional],
+                                    ["nfil", (int, float), d['elm_parameters'], isOptional],
+                                    ["sigmar", (float), d['elm_parameters'], isOptional],
+                                    ["sigmaz", (float), d['elm_parameters'], isOptional],
+                                    ["v_elm", (float), d['elm_parameters'], isOptional],
+                                    ["fELM", (float), d['elm_parameters'], isOptional],
+                                    ["rg2f", (float), d['elm_parameters'], isOptional],
+                                ]
+
                         case "ramp-down" | "ramp_down" | "ramp down":
                             pass
                         case "disruption":
@@ -490,8 +512,8 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
     CUSTOM_WALL_LIMITER = False
     if "custom_wall_limiter" in eqid:
         CUSTOM_WALL_LIMITER=True
-        CUSTOM_WALL_LIMITER_R = eqid["custom_wall_limiter"]
-        CUSTOM_WALL_LIMITER_Z = eqid["custom_wall_limiter"]
+        CUSTOM_WALL_LIMITER_R = eqid["custom_wall_limiter_r"]
+        CUSTOM_WALL_LIMITER_Z = eqid["custom_wall_limiter_z"]
     else:
         CUSTOM_WALL_LIMITER_R = []
         CUSTOM_WALL_LIMITER_Z = []

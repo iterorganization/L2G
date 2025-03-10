@@ -58,8 +58,7 @@ class Parameters(BaseClassOptions):
                "time_step", "max_fieldline_length",
                "self_intersection_avoidance_length", "abs_error", "rel_error",
                "target_to_m", "shadow_to_m", "num_of_threads",
-               "side", "cutoff_conlen", "r_break",
-               "artificial_fl_catcher_geom_id",
+               "side", "cutoff_conlen", "artificial_fl_catcher_geom_id",
                "lcfs_max_align_dist"]
     def __init__(self):
 
@@ -117,9 +116,6 @@ class Parameters(BaseClassOptions):
         #: used when large encompassing 3d geometries are used with small
         #: limiter plasmas. In meters.
         self.lcfs_max_align_dist = 1
-
-        #: Double exponential parameter breakpoint r_break. In meters
-        self.r_break = 0.025
 
         #: Parameter cutoff_conlen specifies the length at which we consider
         #: that a field line wetts target area. In meters.

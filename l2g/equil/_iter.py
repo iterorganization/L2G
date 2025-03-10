@@ -140,6 +140,8 @@ class EquilibriumIterator(object):
         .. code-block:: python
 
            d = {
+             "shot": 135011, # Must be specifieds. Int
+             "run": 7, # Must be specified. Int
              "user": "user_name", # Default public
              "device": "device_name", # Default iter
              "version": "data_version", # Default 3
