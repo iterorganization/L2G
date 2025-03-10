@@ -1235,8 +1235,6 @@ import argparse
 
 parser = argparse.ArgumentParser(description=description)
 
-# parser.add_argument("yaml_file", nargs="?", help="Path to YAML file.")
-
 # Add argument subgroups.
 command_description = """Tell the binary what to do. Available commands:
  - run: Run a FLT case with (Default)
@@ -1262,8 +1260,6 @@ run_subparser.add_argument('--longwave-misalignment',
          ' case with the longwave misalignment.', action='store_true',
          default=False)
 
-parser.add_argument('--debug', help='Activate debug prints',
-                    action='store_true', default=False)
 check_subparser = subparsers.add_parser('check', help='Check case descriptions')
 check_subparser.add_argument('yaml_file', help='Path to YAML file')
 check_subparser.add_argument('--print-content', help='Print the contents of the YAML file',
@@ -1283,6 +1279,10 @@ graphics_subparser.add_argument('--ymax', help="Maximum of Y-axis. Ignored if ym
 print_subparser = subparsers.add_parser('print', help="Print the names of the blocks in YAML file")
 print_subparser.add_argument('yaml_file', help="Path to YAML file")
 
+# Propagate debug flag to all parsers.
+for _ in [parser, run_subparser, graphics_subparser, print_subparser, check_subparser]:
+    _.add_argument('--debug', help='Activate debug prints',
+                   action='store_true', default=False)
 
 if __name__ == "__main__":
     # Put this code here in case it is imported. For instance, sphinx-argparse
