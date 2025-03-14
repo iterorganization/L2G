@@ -1186,8 +1186,8 @@ def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
 
                     qpar += inter_elm
 
-                case "l_mod":
-                    title += " L-mod (inter-ELM)"
+                case "L-mode":
+                    title += " L-mode (inter-ELM)"
                     # Add the inter-ELM
                     qpar = l2g.hlm.steady_state.inter_ELM(drsep, Rb, Btotal,
                         Bpm, hlm_params.p_sol, hlm_params.r_break,

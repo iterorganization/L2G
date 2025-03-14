@@ -1097,7 +1097,7 @@ cdef class FieldLineTracer:
             self.hlm_results.additional_arrays.append(interELM)
             self.hlm_results.additional_arrays.append(self.applyShadowMask(Te))
             self.hlm_results.additional_arrays.append(self.applyShadowMask(Ti))
-        elif self.hlm_params.hlm_type == "l_mod":
+        elif self.hlm_params.hlm_type == "L-mode":
             q_par = l2g.hlm.steady_state.inter_ELM(drsep=drsep,
                 R_bdry=Rb, B_total=Btotal, B_pol=Bpm,
                 Rb=self.hlm_params.r_break, P_sol=self.hlm_params.p_sol,
