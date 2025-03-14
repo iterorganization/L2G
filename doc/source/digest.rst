@@ -119,14 +119,10 @@ MEDCOUPLING to write/read numpy arrays. From experience MEDCOUPLING is more
 intuitive to use with better performance than VTK.
 
 FLT Kernel
-==========
+----------
 
 The kernel of the code (where field line tracing, :term:`FLT`, is performed) is
-written in C++. Parallelization is performed in the Cython wrapping. In order
-to achieve thread safety in the kernel, each thread has it's local data and
-objects stored in vectors or containers. Each thread uses it's OpenMP ID as
-address for accessing and storing data.
-
+written in C++. Parallelization is achieved in the C++ code using OpenMP.
 
 Embree
 ------
@@ -134,26 +130,16 @@ Embree
 For :term:`FLT` we require Finite Ray-Tracing, since we do not have infinite
 rays, but segmented rays (field-lines) for which we would like to see if during
 the tracing it hits any of the shadow geometry. Embree is a Ray-Tracing
-library, with an impressive performance and simple API to use in code.
+library, written to be used on CPUs. It has a easy to use interface for
+performing ray intersection tests.
 
-.. todo::
-
-   Benchmark Embree performance in order to justify the word impressive
-   performance.
 
 RKF45
 -----
 
 An implementation of the method RKF45 (Runge-Kutta-Fehlberg 45) is used for
-solving the field-line equations. The reason bpehind is its performance and
-accuracy and the feature of it's step-adaptivity. Since in :term:`FLT` curves
-are being traced, depending on the input data, user should have the power to
-set the resolution, e.g., the distance between each point being traced on a
-field-line. Using RKF45, we can specify at which parametric time steps (in this
-case the toroidal angle) we wish to obtain the next point on the field-line
-trajectory. How many steps the method might actually need to go from the
-current parametric time to the next one is handled by the algorithm, but in the
-results we will obtain consistent field-line points.
+solving the field-line equations. It is a robust and stable algorithm for
+solving non-stiff problems and it is shown to be perfect.
 
 .. _why_openmp:
 
@@ -161,18 +147,8 @@ Why OpenMP
 ==========
 
 OpenMP is used for parallelization of the C++ code. The calls for OpenMP is
-performed on Cython side and not in the C++ code. With this the C++ code can be
-a simple, yet smart enough implementation that can be called from OpenMP
-threads. With identifying which data is required locally by each thread, we can
-create vectors in which each thread uses it's own designated thread ID as
-location for reading and writing data.
+performed on C++ code and via Cython we can control the number of threads to
+run on.
 
-As would be in C++ the way to activate parallel blocks in the code is simple in
-C++. This is also one of the reasons for using OpenMP instead of relying on
-OpenMPI. Even if with OpenMP we sacrifice the option of having multiple compute
-nodes running one case, since FLT is an embarrassingly parallel problem, this
-can be easily solved by partitioning the input target geometry and running a
-case as a multi-part case on separate compute nodes. Of course this comes with
-the drawbacks of multiple loading of the same geometry, again this can be
-mitigated with either having a background service waiting for order or
-different implementation of the workflow.
+The implementation is done as efficient as possible to achieve, at least,
+decent scalability on a single compute node.

@@ -62,3 +62,9 @@ computation of the FLT it introduces an additional offset that zeros the
 limiter plasma directly to the geometry. You can still manually shift the
 plasma vertically and radially, what this option does is then finally clips the
 plasma to the closest part of the geometry.
+
+.. noted::
+
+   With the advanced parameter ``lcfs_max_align_dist`` you tell the program
+   that the LCFS can be aligned only if the alignment distance is smaller than
+   the value of the parameter.
