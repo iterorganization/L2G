@@ -444,6 +444,8 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
 
     pprint(f"INFO: Dumping geometry dictionary: {geod}")
     pprint(f"INFO: Dumping equilibrium dictionary: {eqid}")
+    if hlmd:
+        pprint(f"INFO: Dumping hlm dictionary: {hlmd}")
 
     ### Main objects
     flt_obj = l2g.comp.FieldLineTracer()
