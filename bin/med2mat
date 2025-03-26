@@ -14,14 +14,18 @@ if med_file == '':
     sys.exit(1)
 
 # Get all fields
-fieldNames = mc.GetAllFieldNames(med_file)
+fieldNames = set(mc.GetAllFieldNames(med_file))
+fields_to_ignore = ["vtkGhostType"]
+for f in fields_to_ignore:
+    if f in fieldNames:
+        fieldNames.remove(f)
 
 if not fieldNames:
     print(f"No fields in MED file {med_file}")
     sys.exit(1)
 
 # Expect that each field has data at the same indexes
-indexes = [(_[0], _[1]) for _ in mc.GetAllFieldIterations(med_file, fieldNames[0])]
+indexes = [(_[0], _[1]) for _ in mc.GetAllFieldIterations(med_file, next(iter(fieldNames)))]
 
 
 for i in range(len(indexes)):
