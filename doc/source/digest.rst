@@ -18,7 +18,7 @@ libraries, which brings functionality and relatively high productivity.
 For high performance and compatibility with python, C++ is used for the kernel,
 e.g., the heart of the FLT computation and Cython is used to glue together
 externally used C++ code with python. Parallelization is performed on
-Python/Cython side with the use of OpenMP. Reason for using OpenMP is discussed
+C++ side with the use of OpenMP. Reason for using OpenMP is discussed
 in :ref:`why_openmp`.
 
 .. graphviz::
