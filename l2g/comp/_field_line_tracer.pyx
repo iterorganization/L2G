@@ -67,7 +67,7 @@ cdef void getBaryCenterInCyln(vector[double] points, float mul, vector[double] &
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
-cdef void getTriangleNormal(vector[double] points, vector[double] &out) nogil:
+cdef void getTriangleNormal(vector[double] points, vector[double] &out) noexcept nogil:
     """Get normal of triangle. Orientation of the points must be positive!
 
     Therefor the points list must be:
