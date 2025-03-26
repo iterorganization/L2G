@@ -83,6 +83,11 @@ def get_extra_compile_args() -> list[str]:
         out.append(f"/DEMBREE_VERSION={EMBREE_VERSION}")
     else:
         out.append("-O3")
+        # Do not use -march=native due to segfaults happening.
+        # Theory: Due to use of aligned structs and Cython not having alignment
+        # insurance, code segfaults when compiling with -march=native as it
+        # uses instructions that expects aligned code, which is in fact not
+        # enforced in the generated Cpp code.
         # out.append("-march=native")
         out.append("-Wall")
         if useOpenMP:
