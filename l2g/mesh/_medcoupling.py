@@ -160,11 +160,13 @@ def getMeshData(file_path: str) -> Tuple[np.ndarray, np.ndarray]:
     n_triangles = med.getNumberOfCellsWithType(mc.NORM_TRI3)
     triangles= np.empty((n_triangles, 3), np.uint32)
     c = 0
-    for i in range(n_triangles):
+    for i in range(med.getNumberOfCells()):
         if med.getTypeOfCell(i) != mc.NORM_TRI3:
             continue
         triangles[c][:] = med.getNodeIdsOfCell(i)
         c += 1
+        if c == n_triangles:
+            break
     return vertices, triangles
 
 def writeMesh(file_path, vertices, triangles, mesh_name: str="mesh"):
