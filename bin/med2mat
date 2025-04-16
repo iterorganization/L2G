@@ -2,6 +2,8 @@
 # Converts fields of a MED file to MATLAB format.
 
 import medcoupling as mc
+import numpy as np
+import os
 from scipy.io import savemat
 
 import sys
@@ -13,30 +15,89 @@ if med_file == '':
     print("No MED file specified!")
     sys.exit(1)
 
+if not os.path.exists(med_file):
+    print(f"File {med_file} does not exist!")
+    sys.exit(1)
+
+file_name = os.path.basename(med_file)
+if file_name.lower().endswith(".med"):
+    file_name = file_name[:-4]
+
 # Get all fields
 fieldNames = set(mc.GetAllFieldNames(med_file))
-fields_to_ignore = ["vtkGhostType"]
+fields_to_ignore = ["vtkGhostType", "normals"]
 for f in fields_to_ignore:
     if f in fieldNames:
         fieldNames.remove(f)
 
 if not fieldNames:
     print(f"No fields in MED file {med_file}")
-    sys.exit(1)
 
-# Expect that each field has data at the same indexes
-indexes = [(_[0], _[1]) for _ in mc.GetAllFieldIterations(med_file, next(iter(fieldNames)))]
+else:
+    # Expect that each field has data at the same indexes
+    indexes = [(_[0], _[1]) for _ in mc.GetAllFieldIterations(med_file, next(iter(fieldNames)))]
+
+    for i in range(len(indexes)):
+        mat_file = f"{file_name}_{i}_matlab.mat"
+        out = {}
+
+        for fieldName in fieldNames:
+            field = mc.ReadField(med_file, fieldName, *indexes[i])
+            array = field.getArray()
+            out[fieldName] = array.toNumPyArray()
+
+        # Save to matlab file
+        savemat(mat_file, out)
+
+# Save the mesh data
+medfile = mc.MEDFileUMesh(med_file)
+medmesh = medfile.getMeshAtLevel(0)
+
+coords = medmesh.getCoords().toNumPyArray()
+
+n_triangles = medmesh.getNumberOfCellsWithType(mc.NORM_TRI3)
+triangles = np.empty((n_triangles, 3), np.uint32)
+
+c = 0
+for i in range(medmesh.getNumberOfCells()):
+    if medmesh.getTypeOfCell(i) != mc.NORM_TRI3:
+        continue
+    triangles[c, :] = medmesh.getNodeIdsOfCell(i)
+    c += 1
+    if c == n_triangles:
+        break
 
 
-for i in range(len(indexes)):
-    mat_file = f"{med_file.split('.')[0]}_{i}_matlab.mat"
-    out = {}
+# Calculate the bary center
+barycenter = np.empty((n_triangles , 3), np.float64)
+barycenter_cyln = np.empty((n_triangles , 3), np.float64)
 
-    for fieldName in fieldNames:
-        field = mc.ReadField(med_file, fieldName, *indexes[i])
-        array = field.getArray()
-        out[fieldName] = array.toNumPyArray()
+for i in range(n_triangles):
+    p1 = coords[triangles[i][0]]
+    p2 = coords[triangles[i][1]]
+    p3 = coords[triangles[i][2]]
+    barycenter[i, :] = (p1 + p2 + p3) / 3.0
 
-    # Save to matlab file
-    savemat(mat_file, out)
+    # Convert to cyln
+    r = np.sqrt(barycenter[i, 0] ** 2 + barycenter[i, 1] ** 2)
+    theta = np.arctan2(barycenter[i, 1], barycenter[i, 0])
+    z = barycenter[i, 2]
+
+    barycenter_cyln[i][0] = r
+    barycenter_cyln[i][1] = z
+    barycenter_cyln[i][2] = theta
+
+out = {}
+out["coords"] = coords
+out["triangles"] = triangles
+out["barycenter"] = barycenter
+out["barycenter_cyln"] = barycenter_cyln
+
+if "normals" in fieldNames:
+    field = mc.ReadField(med_file, "normals", (0, -1))
+    array = field.getArray()
+    out["normals"] = array.toNumPyArray()
+
+
+savemat(f"{file_name}_mesh_data.mat", out)
 
