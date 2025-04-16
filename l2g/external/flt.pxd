@@ -10,12 +10,8 @@ cdef extern from "flt.hpp" nogil:
     cdef cppclass FLT:
         FLT() except +
 
-        void setNDIM(Py_ssize_t NDIMR, Py_ssize_t NDIMZ)
-        void setRARR(vector[double] r)
-        void setZARR(vector[double] z)
-        void setPSI(vector[double] psi)
-        void setFARR(vector[double] psi) # FPOL domain
-        void setFPOL(vector[double] fpol)
+        void setPoloidalMagneticFlux(vector[double] r, vector[double] z,
+                                     vector[double] psi)
         void setVacuumFPOL(double vacuum_fpol)
         void setShift(double rmove, double zmove)
 

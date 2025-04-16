@@ -44,6 +44,5 @@ flt.setEmbreeObj(embree_obj)
 
 # Finally, to commit changes
 case.applyParameters() # Propagates parameters to the C++ code
-case.loadEq() # Loads the equilibrium data to the FLT kernel
 
 flt.runFltOnMesh()

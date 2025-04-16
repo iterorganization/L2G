@@ -209,7 +209,6 @@ case.parameters.shadow_to_m = 1
 
 # Finally, to commit changes
 case.applyParameters() # Propagates parameters
-case.loadEq() # Loads the equilibrium data to the FLT kernel
 
 # Run FLT
 case.runFltOnMesh()

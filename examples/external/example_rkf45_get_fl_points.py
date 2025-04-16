@@ -42,6 +42,8 @@ while sth <= 100*2*np.pi:
     sth = nth
 print(length)
 
+import matplotlib
+matplotlib.use('TkAgg')
 
 import matplotlib.pyplot as plt
 plt.plot(R, Z)

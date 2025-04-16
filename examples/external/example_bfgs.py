@@ -42,6 +42,9 @@ points = [
     (half_r, half_z), (low_half_r, low_half_z), (upp_half_r, upp_half_z)
 ]
 
+import matplotlib
+matplotlib.use('TkAgg')
+
 import matplotlib.pyplot as plt
 
 

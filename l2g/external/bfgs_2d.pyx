@@ -437,12 +437,22 @@ cdef class PyBfgs2d:
     def findMinimum(self, double guess_x, double guess_y, int max_it):
         """This is a gradient-descent minimizer function that  tries to find a
         point in the function domain space where the gradient is close to
-        zero (the function also gets trapped into saddle points and instead of
-        looping infinitely it returns the point as a extrema point).
+        zero.
 
         The main use of the function is finding the minimum of the function,
         hence the name remained, although it can get trapped and returns the
         position of a extrema point (saddle point).
+
+        Arguments:
+            guess_x (double): Starting X position
+            gouss_y (double): Starting Y position
+            max_it (int): Maximum number of iterations
+
+        Returns:
+            out_of_bounds (bool): True if the method went out of bounds. Is
+                False when successful.
+            x (double): X position of the solution.
+            y (double): Y position of the solution.
         """
         cdef:
             double x, y
@@ -497,19 +507,23 @@ cdef class PyBfgs2d:
         fdx = self.c_BI_DATA.valdx
         fdy = self.c_BI_DATA.valdy
 
-        # Initial Hessian
+        # Initial Hessian matrix
         h11 = 1.0
         h12 = 0.0
         h21 = 0.0
         h22 = 1.0
 
+        # Norm of the gradien
         gradnorm = fdx*fdx + fdy*fdy
+        # Number of iterations
         it = 0
 
         x = guess_x
         y = guess_y
 
         log.debug(f"Starting the minimization method from point {x},{y}")
+
+        # Beginning of the BFGS method.
         while gradnorm > 1e-10:
             if it> max_it:
                 log.debug("Exceeded maximum iterations")
@@ -600,6 +614,13 @@ cdef class PyBfgs2d:
             Saddle point
         If D == 0:
             Unknown
+
+        Arguments:
+            x (double): X position
+            y (double): Y position
+        Returns:
+            D (double): Value of the second derivative test.
+
         """
 
         cdef:

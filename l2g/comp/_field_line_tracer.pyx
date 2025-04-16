@@ -122,7 +122,6 @@ cdef class FieldLineTracer:
        flt.setEquilibrium(equilibrium)
 
        flt.applyParameters()
-       flt.loadEq()
        flt.processMagneticData()
 
        # Run the FLT
@@ -161,6 +160,9 @@ cdef class FieldLineTracer:
     cdef public object fl_ids
     cdef public object hlm_results
 
+    # Booleans to see if functions were called
+    cdef object equilibrium_loaded
+
     def __init__(self):
         self.name = "SFLT_case-1"
         import l2g.settings
@@ -191,6 +193,7 @@ cdef class FieldLineTracer:
 
         # HLM results
         self.hlm_results: l2g.comp.L2GResultsHLM = l2g.comp.L2GResultsHLM()
+        self.equilibrium_loaded: bool = False
 
     def __cinit__(self):
         self.c_FLT = new FLT()
@@ -374,7 +377,13 @@ cdef class FieldLineTracer:
         self.eq.setEquilibrium(equilibrium)
         self.parameters.plasma_r_displ = 0.0
         self.parameters.plasma_z_displ = 0.0
+        self.c_FLT.setPoloidalMagneticFlux(self.equilibrium.grid_r,
+                                           self.equilibrium.grid_z,
+                                           self.equilibrium.psi.flatten())
+        self.c_FLT.setVacuumFPOL(self.equilibrium.fpol_vacuum)
+
         self.recalculate_magnetic_data = True
+        self.equilibrium_loaded = True
 
     def applyParameters(self) -> None:
         """Propagates the parameters to the external FLT C++ code. Run this
@@ -404,26 +413,14 @@ cdef class FieldLineTracer:
         self.c_FLT.setSelfIntersectionAvoidanceLength(
             self.parameters.self_intersection_avoidance_length)
 
-    def loadEq(self) -> None:
-        """Loads the equilibrium data to the external FLT C++ code. Data is
-        used for FL equations. Run this before running any FLT run functions.
-        """
-        log.info("Dumping equilibrium data to FLT object.")
-        self.c_FLT.setNDIM(self.equilibrium.grid_dim_r,
-                             self.equilibrium.grid_dim_z)
-        self.c_FLT.setRARR(self.equilibrium.grid_r)
-        self.c_FLT.setZARR(self.equilibrium.grid_z)
-        self.c_FLT.setPSI(self.equilibrium.psi.flatten())
-        self.c_FLT.setVacuumFPOL(self.equilibrium.fpol_vacuum)
-        self.c_FLT.setFARR(self.equilibrium.fpol_flux)
-        self.c_FLT.setFPOL(self.equilibrium.fpol)
-
-        self.c_FLT.prepareInterpolation() # Prepares the interpolators
-
     def evaluateEq(self) -> None:
         """Tries to automatically determine the type of the equilibrium
         """
         log.info("Evaluating equilibrium")
+        if not self.equilibrium_loaded:
+            log.error("No equilibrium is loaded to evaluate")
+            return
+
         self.eq.evaluate()
         log.info(f"Type: {self.eq.getType()}, LCFS flux: {self.eq.getBoundaryFluxValue()} Webb/rad")
 
@@ -447,6 +444,16 @@ cdef class FieldLineTracer:
 
         if not len(self.target_vertices):
             log.error("No target points loaded! Stopping")
+            return
+
+        if not self.recalculate_magnetic_data:
+            log.info("Data was already calculated.")
+            return
+        self.recalculate_magnetic_data = False
+
+        if not self.equilibrium_loaded:
+            log.error("No equilibrium loaded! Stopping")
+            return
 
         log.info("Processing magnetic data...")
         start = perf_counter()
@@ -456,10 +463,6 @@ cdef class FieldLineTracer:
             Py_ssize_t n_points = self.c_points.size() // 3
 
         n_points = self.c_points.size() // 3
-        if not self.recalculate_magnetic_data:
-            log.info("Data was already calculated.")
-            return
-        self.recalculate_magnetic_data = False
 
         # # Allocate the arrays
         log.info("Allocating arrays")
@@ -556,6 +559,10 @@ cdef class FieldLineTracer:
             log.error("No target points to trace FL from. Stopping")
             return
 
+        if not self.equilibrium_loaded:
+            log.error("No equilibrium is loaded. Stopping!")
+            return
+
         self.processMagneticData()
 
         # Just to be sure, convert the fl ids to numpy unsigned int 32
@@ -629,6 +636,10 @@ cdef class FieldLineTracer:
             log.error("No target vertices loaded! Stopping")
             return
 
+        if not self.equilibrium_loaded:
+            log.error("No equilibrium loaded! Stopping")
+            return
+
         if self.target_triangles is None:
             log.info("Starting FLT on points...")
         else:
@@ -669,97 +680,6 @@ cdef class FieldLineTracer:
                 np.ones(self.results.conlen.shape))
 
         log.info(f"Finished. It took {perf_counter() - start} seconds.")
-
-    def obtainOuterWallConnectionGraph(self) -> None:
-        """Obtains the outer wall connection length graph. Basically following
-        FLs on the midplane.
-        """
-
-        radial_points = 500
-        toroidal_points = 360
-
-        points = self.createMidplanePoints(radialPoints=radial_points,
-                                           toroidalSegments=toroidal_points)
-
-        cdef:
-            int i, size, fl_direction
-            vector[double] c_points
-            vector[int] c_direction
-            double[:] m_conlen
-
-        # First direction is down, so set the value accordingly!
-        fl_direction = -1
-        if self.c_FLT.getVacuumFPOL() < 0:
-            fl_direction = 1
-
-        size = len(points)
-        c_points.resize(size)
-        c_direction.resize(size, fl_direction)
-        conlen = np.empty(size, np.float64)
-        m_conlen = conlen # memoryview
-        for i in range(size):
-            c_points[i] = points[i]
-
-        R_points = points[:3*radial_points:3]
-        out = np.empty((radial_points, 4), np.float64)
-
-        log.info("Obtaining OWL connection length graph")
-        ## Getting the outer wall midplane profile.
-        # First we obtain the outer wall - divertor fieldlines. This is what
-        # is actually used by the ELM PLM.
-        num_threads = os.cpu_count()
-        if self.parameters.num_of_threads <= 0:
-            user_num_threads = num_threads
-        else:
-            user_num_threads = min(self.parameters.num_of_threads, num_threads)
-        self.c_FLT.setNumberOfThreads(user_num_threads)
-        # Set the points from which FLs are tracked
-        self.c_FLT.setPoints(c_points)
-        # Set the starting direction of the points.
-        self.c_FLT.setStartingFLDirection(c_direction)
-
-        self.c_FLT.runFLT()
-
-        # Copy the connection lengths values and flip the values of the
-        # direction for connection lengths up.
-        for i in range(size):
-            # Connection length Down
-            m_conlen[i] = self.c_FLT.m_out_fieldline_lengths[i]
-            c_direction[i] = -c_direction[i]
-
-        # Reshape them
-        conlen_down = conlen.reshape((toroidal_points, radial_points))
-        # Get the mean
-        conlen_down_mean = np.mean(conlen_down, 0)
-        # Store it
-        out[:, 3] = conlen_down_mean
-
-        # Fieldlines up!
-        self.c_FLT.setStartingFLDirection(c_direction)
-        self.c_FLT.runFLT()
-        for i in range(size):
-            # Connection length Up
-            m_conlen[i] = self.c_FLT.m_out_fieldline_lengths[i]
-
-        # Reshape them
-        conlen_up = conlen.reshape((toroidal_points, radial_points))
-        # Get the mean
-        conlen_up_mean = np.mean(conlen_up, 0)
-        # Store it
-        out[:, 2] = conlen_up_mean
-
-        psiLcfs = self.eq.getBoundaryFluxValue()
-        Rb, _, _, Bpm = self.eq.getOWL_midplane()
-        flux = self.point_results.flux[:radial_points]
-        # Calculate drsep
-        drsep = np.abs((flux - psiLcfs) / (Rb * Bpm))
-
-        # Actual drsep. take from R_points
-        drsep_r = R_points - R_points[0]
-
-        out[:, 0] = drsep
-        out[:, 1] = drsep_r
-        self.owl_conlen_data = out
 
     def alignGeometryWithLCFS(self) -> None:
         """In most cases the wall silhouette used in generating the equilibrium
@@ -870,7 +790,6 @@ cdef class FieldLineTracer:
         # equilibrium data then the LCFS changes again and we are in a cycle of
         # never aligning the mesh.
         self.eq.setDisplacement(prev_r_displ, prev_z_displ)
-        self.loadEq()
         # Force recalculation of data!
         self.recalculate_magnetic_data = True
         self.processMagneticData()
@@ -879,6 +798,10 @@ cdef class FieldLineTracer:
         """From the evaluated Flux data and the equilibrium data evaluate the
         radial distance along the midplane for the input target mesh data.
         """
+        if self.results.empty:
+            log.error("No FLT data.")
+            return
+
         log.info("Calculating distance from the boundary on midplane for each mesh element.")
 
         # Evaluate the equilibrium
@@ -913,101 +836,6 @@ cdef class FieldLineTracer:
                 self.results.drsep2 = drsep2
             else:
                 self.results.drsep2 = np.zeros(drsep.shape)
-
-    @cython.boundscheck(False)
-    @cython.wraparound(False)
-    @cython.cdivision(True)
-    def createMidplanePoints(self, which:str='owl', length:float=0.3,
-            _radialPoints:int=2000, toroidalSegments:int=360,
-            angularStep:float=1) -> np.ndarray:
-        """Based on the Equilibrium data, create points placed on the midplane
-        plane, just outside the boundary contour (only first point should
-        generally have connection lengths going to infinity, or free path on
-        the boundary magnetic surface).
-
-        Arguments:
-            which (str): On which side, iwl = inner wall, owl = outer wall
-                we wish to obtain the points
-            length (float): Length in the major radius direction. That is,
-                effectively to which drsep we wish to populate points. In
-                meters.
-            radialPoints (int): How many points in radial direction we wish to
-                have.
-            toroidalSegments (int): How many segments or lines of points do we
-                wish to have in poloidal direction. The number of segments
-                times the angularStep should at maximum be 360 degrees.
-            angularStep (float): Angular distance between the segments. In
-                degrees.
-
-        Returns:
-            points (array): 1D array of points: (R1, Z1, Phi1, R2, Z2, Phi2,...)
-        """
-        log.info("Creating points on the midplane")
-        # First we need to obtain the R, Z point of the midplane, which sits
-        # on the boundary magnetic surface.
-        if self.eq is None:
-            log.error("No EQ instance loaded! Stopping.")
-            return
-
-        self.eq.evaluate()
-
-        # Obtain the R, Z point
-        # Rb, Z, Btotal, Bpm = self.eq.get_midplane_info(which=which)
-        _Rb, _Z, _, _ = self.eq.getMidplaneInfo()
-        cdef:
-            double Rb = _Rb
-            double Z = _Z
-            int radialPoints = _radialPoints
-        log.info(f"Midplane height [m]: {Z}")
-        log.info(f"Radial start [m]: {Rb}")
-        log.info(f"Radial span [m]: {length}")
-        log.info(f"Number of radial points per segment: {radialPoints}")
-        log.info(f"Toroidal segments: {toroidalSegments}")
-        log.info(f"Angular step: {angularStep}")
-        log.info(f"Total angle: {angularStep * toroidalSegments}")
-
-        cdef:
-            int radial_dir, total_num_of_points, i, j, offset
-            double radial_step, phi
-
-        if which == 'owl':
-            # Points go in +R direction away from owl midplane
-            radial_dir = 1
-        else:
-            # Points go in -R direction away from iwl midplane
-            radial_dir = -1
-
-        # Now let's start creating the points.
-
-        total_num_of_points = radialPoints * toroidalSegments * 3
-
-        # Note: for post-processing, re-shaping will come in handy, so think of
-        # segments as rows and radial points as columns
-        # points.reshape((toroidalSegments, radialPoints * 3))
-
-        points = np.empty(total_num_of_points, np.float32)
-        cdef:
-            float [:] m_points = points
-        radial_step = length / (radialPoints - 1)
-        phi = 0
-        angularStep = np.deg2rad(angularStep) # Convert to radians
-        # To ensure that the poloidal segments are rows
-        for i in range(toroidalSegments):
-            # Now to ensure radial points would be columns
-
-            for j in range(radialPoints):
-                r_point = Rb + radial_dir * j * radial_step
-
-                # x = r_point * np.cos(phi)
-                # y = r_point * np.sin(phi)
-                offset = (i * radialPoints + j) * 3
-                m_points[offset] = r_point
-                m_points[offset + 1] = Z
-                m_points[offset + 2] = phi
-
-            phi += angularStep
-
-        return points
 
     def applyHLM(self) -> None:
         """Applies an exponential plasma profile. Either single or double,

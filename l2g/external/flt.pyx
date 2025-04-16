@@ -22,98 +22,33 @@ cdef class PyFLT:
     def __init__(self):
         pass
 
-    def setNDIM(self, Py_ssize_t NDIMR, Py_ssize_t NDIMZ):
-        """Set the dimensions of the R,Z grid.
+    def setPoloidalMagneticFlux(self, double [:] r, double [:] z, double [:] psi):
+        """Sets the poloidal magnetic data.
 
+        The arrays r and z of size NDIMR, NDIMZ defines the [R, Z] domain.
+
+        The psi array is provided as 1D, row oriented and the size must be
+        equal to NDIMR * NDIMZ.
         Arguments:
-            NDIMR (Py_ssize_t): Number of radial points
-            NDIMZ (Py_ssize_t): Number of vertical points
-        """
-        # Py_ssize_t  corresponds to np.intp
-        self.c_flt.setNDIM(NDIMR, NDIMZ)
-
-    def setRARR(self, double[:] r):
-        """Set the radial points array.
-
-        Arguments:
-            r (double[:]): 1D array, containing NDIMR points. In meters.
+            r (double[:]): 1D vector of radial points. [m]
+            z (double[:]): 1D vector of vertical points. [m]
+            psi (double[:]): 1D vector of poloidal flux values.
+                             [Webb/rad]
         """
 
-        # Since the C++ class requires vectors, the data is copied. But since
-        # the size is not so big, i.e., < 1000, this shouldn't cause
-        # performance issues.
-        cdef vector[double] _a
+        cdef:
+            vector [double] v_r, v_z, v_psi
+
         for i in range(len(r)):
-            _a.push_back(r[i])
-        self.c_flt.setRARR(_a)
+            v_r.push_back(r[i])
 
-    def setZARR(self, double[:] z):
-        """Set the vertical points array.
-
-        Arguments:
-            z (double[:]): 1D array, containing NDIMZ points. In meters.
-        """
-        # Since the C++ class requires vectors, the data is copied. But since
-        # the size is not so big, i.e., < 1000, this shouldn't cause
-        # performance issues.
-        cdef vector[double] _a
         for i in range(len(z)):
-            _a.push_back(z[i])
-        self.c_flt.setZARR(_a)
+            v_z.push_back(z[i])
 
-    def setPSI(self, double[:] psi):
-        """Sets the flux array. The array is provided as 1D, row oriented and
-        the size must be equal to NDIMR * NDIMZ.
-
-        Arguments:
-            psi (double[:]): 1D array of poloidal magnetic flux values. In
-                             Webb/rad.
-        """
-
-        # Since the C++ class requires vectors, the data is copied. But since
-        # the size is not so big, i.e., < 10000, this shouldn't cause
-        # performance issues.
-        cdef vector[double] _a
         for i in range(len(psi)):
-            _a.push_back(psi[i])
-        self.c_flt.setPSI(_a)
+            v_psi.push_back(psi[i])
 
-    def setFARR(self, double[:] farr):
-        """Sets the flux points, used for interpolating the FPol (poloidal
-        current function) inside the plasma center. For FLT properties, only
-        the FPol value in vacuum is required. So this function is not needed.
-
-        Arguments:
-            farr (double[:]): 1D array of flux points at which the FPol values
-                              are defined. In Webb/rad.
-        """
-
-        # Since the C++ class requires vectors, the data is copied. But since
-        # the size is not so big, i.e., < 1000, this shouldn't cause
-        # performance issues.
-        cdef vector[double] _a
-        for i in range(len(farr)):
-            _a.push_back(farr[i])
-        self.c_flt.setFARR(_a)
-
-    def setFPOL(self, double[:] fpol):
-        """Sets the poloidal current function or FPol values defined over a
-        series of flux points, set with above function. Again, same as with
-        above function we do not require it, as this data is defined inside the
-        plasma.
-
-        Arguments:
-            fpol (double[:]): 1D array of FPol values, defined over a series
-                             of flux points. In m T.
-        """
-
-        # Since the C++ class requires vectors, the data is copied. But since
-        # the size is not so big, i.e., < 1000, this shouldn't cause
-        # performance issues.
-        cdef vector[double] _a
-        for i in range(len(fpol)):
-            _a.push_back(fpol[i])
-        self.c_flt.setFPOL(_a)
+        self.c_flt.setPoloidalMagneticFlux(v_r, v_z, v_psi)
 
     def setVacuumFPOL(self, double fpol):
         """Sets the poloidal current function or FPol=Bt * R value in the
@@ -187,13 +122,6 @@ cdef class PyFLT:
                             ignored. In meters.
         """
         self.c_flt.setSelfIntersectionAvoidanceLength(value)
-
-    def prepare(self):
-        """Calls the prepareInterpolation function of the FLT class.
-        """
-        cdef bool f
-        f = self.c_flt.prepareInterpolation()
-        return f
 
     def runFLT(self):
         """Calls the runFLT function which starts the FLT.

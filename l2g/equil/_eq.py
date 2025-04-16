@@ -468,7 +468,7 @@ class EQ:
         bz = fluxdR / r
         return np.array([br * np.cos(phi) - bphi * np.sin(phi),
                 br * np.sin(phi) + bphi * np.cos(phi),
-                bz], dtype=np.float)
+                bz], dtype=np.float64)
 
     def alignLcfsToPoint(self, point: np.ndarray) -> np.ndarray:
         """Finds the shortest displacement required to put the limiter LCFS

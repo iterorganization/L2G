@@ -718,7 +718,6 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
             flt_obj.evaluateEq()
 
             flt_obj.applyParameters()
-            flt_obj.loadEq()
             pprint(f"INFO: Eq type: {flt_obj.eq.getType()}. Boundary {flt_obj.eq.getBoundaryFluxValue()}")
             # Process the data on the data
             flt_obj.processMagneticData()

@@ -149,7 +149,3 @@ cdef class PyBicubic:
         self.c_bicubic.getSecondDerivativeValues(&self.c_BI_DATA)
 
         return self.c_BI_DATA.val, self.c_BI_DATA.valdx, self.c_BI_DATA.valdy
-    # def getSecondDerivatives(self, double x, double y):
-    #     cdef:
-    #         double valdxdx, valdydy
-    #     self.c_bicubic.getSecondDerivatives(x, y, valdxdx, valdydy)
