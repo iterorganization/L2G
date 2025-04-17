@@ -76,9 +76,13 @@ def get_extra_compile_args() -> list[str]:
     out: list[str] = []
 
     if sys.platform == "win32":
-        out.append("/O3")
+        out.append("/O2")
         if useOpenMP:
             out.append("/openmp")
+        # Conversion warning
+        out.append("/wd4244")
+        # dll-interface warning
+        out.append("/wd4251")
         # The C++ code is compatible with Embree 3/4
         out.append(f"/DEMBREE_VERSION={EMBREE_VERSION}")
     else:
@@ -104,7 +108,8 @@ def get_extra_link_args() -> list[str]:
 
     if useOpenMP:
         if sys.platform == "win32":
-           out.append("/openmp")
+           # out.append("/openmp")
+           pass
         else:
             out.append("-fopenmp")
     return out
@@ -117,11 +122,11 @@ def getDataFiles() -> list[str]:
     """
     out: list[str] = []
 
-    if sys.platform == "win32":
-        # Gather the required DLLs
-        out.append(os.path.join(L2G_CPP_ROOTDIR, 'bin', 'flt.dll'))
-        out.append(os.path.join(EMBREE_ROOTDIR, 'bin', 'embree3.dll'))
-        out.append(os.path.join(EMBREE_ROOTDIR, 'bin', 'tbb12.dll'))
+    # if sys.platform == "win32":
+    #     # Gather the required DLLs
+    #     out.append(os.path.join(L2G_CPP_ROOTDIR, 'bin', 'flt.dll'))
+    #     out.append(os.path.join(EMBREE_ROOTDIR, 'bin', 'embree3.dll'))
+    #     out.append(os.path.join(EMBREE_ROOTDIR, 'bin', 'tbb12.dll'))
 
     return out
 
