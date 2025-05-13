@@ -308,6 +308,7 @@ cdef class FieldLineTracer:
             # Only if there is a success with setting the point reset the
             # result object
             self.results.reset()
+            self.recalculate_magnetic_data = True
             return
 
         ## Mesh data! Some more steps to do
@@ -364,6 +365,7 @@ cdef class FieldLineTracer:
         # Only if there is a success with setting the point reset the
         # result object
         self.results.reset()
+        self.recalculate_magnetic_data = True
 
     def setEquilibrium(self, equilibrium: 'l2g.equil.Equilibrium') -> None:
         """Set the equilibrium data, which is propagated to the eq analyze
