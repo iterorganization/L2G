@@ -165,9 +165,3 @@ all in one script:
 
 .. literalinclude:: ../../examples/synthetic_case.py
    :language: python
-
-**************************
-Text based (YAML) workflow
-**************************
-
-There is a manual describing how to use the **flat** command.

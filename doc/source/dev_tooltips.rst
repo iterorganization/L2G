@@ -87,7 +87,3 @@ for example if they complement a submodule, we can add it into the submodule
 without the ``_`` prefix). Otherwise, we can create a new submodule, by simply
 creating the correct namespace or putting the python file in its place in the
 code structure.
-
-.. todo::
-
-   Improve tooltips
