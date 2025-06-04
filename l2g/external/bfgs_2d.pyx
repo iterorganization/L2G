@@ -12,6 +12,40 @@ import logging
 log = logging.getLogger(__name__)
 
 cdef class PyBfgs2d:
+    """Class that implements the BFGS (Broyden–Fletcher–Goldfarb–Shanno)
+    algorithm for solving unconstrained nonlinear optimization problems.
+    Particularly it uses the Bicubic interpolation algorithm of a 2D function
+    and finds the minimum/maximum of the function in the definition area of
+    the function.
+
+    .. code-block::
+
+       from l2g.external.bfgs_2d import PyBfgs2d
+       from l2g.external.bicubic import PyBicubic
+
+       int_obj = PyBicubic()
+
+       # Load the input data
+       ...
+
+       opt_obj = PyBfgs2d()
+       opt_obj.setInterpolator(int_obj)
+
+       # Find the minimum
+       guess_x: float
+       guess_y: float
+       max_iter: int
+
+
+       out_of_bounds: bool
+       x: float
+       y: float
+       out_of_bounds, x, y = obt_obj.findMinimum(guess_x, guess_y, max_iter)
+
+       if not out_of_bounds:
+           print("Success!")
+
+    """
     def __cinit__(self):
         pass
 
@@ -37,6 +71,14 @@ cdef class PyBfgs2d:
         self.c_bicubic.populateContext(&self.c_BI_DATA)
 
     def setBounds(self, double x1, double x2, double y1, double y2):
+        """Set the bounds of the search area.
+
+        Arguments:
+            x1 (float): Left border of X interval.
+            x2 (float): Right border of X interval.
+            y1 (float): Left border of Y interval.
+            y2 (float): Right border of Y interval.
+        """
         # Set the bounds for the search area.
         self.bx1 = x1
         self.bx2 = x2
@@ -639,5 +681,11 @@ cdef class PyBfgs2d:
 
         return valdxdx * valdydy - valdxdy * valdxdy
 
-    def getPoints(self):
+    def getPoints(self) -> list[list[int]]:
+        """Get the points that tracks the progression of the algorithm from
+        a starting point and to the solution.
+
+        Returns:
+            points (list): List of points of the form [[x1, y1], [x2, y2],...]
+        """
         return self._store

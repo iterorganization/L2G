@@ -10,6 +10,33 @@ from libcpp.vector cimport vector
 
 
 cdef class PyBicubic:
+    """Function that wraps an implementation of the Bicubic interpolation
+    algorithm for 2D functions defined on a rectilinear grid.
+
+
+    .. code-block:: python
+
+       import l2g.external.bicubic
+
+       # Setup input data arrays
+       x = ... # 1D array
+       y = ... # 1D array
+       f = ... # 2D array
+
+       obj = l2g.external.bicubic.PyBicubic(x, y, f)
+
+       # Query for values
+       xp: float
+       yp: float
+
+       v, vdx, vdy = obj.getValues(xp, yp)
+       v, vdx, vdy = obj(xp, yp)
+       av, avdx, avdx = obj([xp1, xp2, ...], [yp1, yp2, ...])
+
+       # Second derivative values
+       vdxdy,vdxdx, vdydy = obj.getSecondaryDerivatives(xp, yp)
+
+    """
     def __cinit__(self):
         self.c_bicubic = new BICUBIC_INTERP()
         # self.c_BI_DATA = BI_DATA()
