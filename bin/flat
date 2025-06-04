@@ -1323,6 +1323,7 @@ if __name__ == "__main__":
     import l2g
 
     l2g.addStreamHandler()
+    l2g.enableLogging()
     if args.debug:
         l2g.enableDebugging()
 
