@@ -14,11 +14,11 @@ from sympy.physics.units.quantities import Quantity
 
 def pprint(sol):
     x = str(sol)
-    x = x.replace("LAMBDA_NEAR", "ln")
-    x = x.replace("LAMBDA_MAIN", "lm")
+    x = x.replace("LAMBDA_NEAR", "lambda_n")
+    x = x.replace("LAMBDA_MAIN", "lambda_m")
     x = x.replace("R_BOUNDARY", "R_bdry")
     x = x.replace("R_WALL", "R_wall")
-    x = x.replace("R_BREAK", "R_b")
+    x = x.replace("R_BREAK", "Rb")
     x = x.replace("exp", "np.exp")
     print(x)
 R = Symbol('R')
