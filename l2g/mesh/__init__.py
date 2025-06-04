@@ -3,13 +3,13 @@
 import numpy as np
 import logging
 import os
+
 log = logging.getLogger(__name__)
-from typing import Dict, Optional, Tuple, Union, List, TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 if TYPE_CHECKING:
     from l2g.comp import L2GResults, L2GResultsHLM, L2GFLs
 
-
-def supportedFileExts() -> List[str]:
+def supportedFileExts() -> list[str]:
     return ["med", "vtk", "vtu"]
 
 def rotatePointsAroundAxis(points: np.ndarray, p1: np.ndarray, p2: np.ndarray,
@@ -75,6 +75,75 @@ class WrongFileExtensionException(Exception):
 class FileDoesNotExistException(Exception):
     pass
 
+class FieldNotInMesh(Exception):
+    pass
+
+class GroupNotInMesh(Exception):
+    pass
+
+class NoMeshDataLoaded(Exception):
+    pass
+
+def integrate_quantity(mesh: 'Mesh', field_name: str, area_density=True,
+                       opt_groups: list[str] | None = None) -> float | dict[str, float]:
+    """Integrate by time and return the value of a quantity on the provided
+    Mesh object. Additionally if a list of groups (sub-meshes) are provided,
+    then the output is a dictionary.
+
+    Arguments:
+        mesh (Mesh): Mesh object.
+        field_name (str): Quantity to integrate.
+        area_density (bool): If true, treat quantity as area density, or the
+            units are per unit of area.
+        opt_groups (list[str] | None): Optional name of subgroups.
+
+    Returns:
+        result (float | dict): Returns the integrated value or a dictionary if
+            a list of names is provided.
+    """
+
+    if field_name not in mesh.getAllFieldNames():
+        raise FieldNotInMesh(f"Field {field_name} not in mesh")
+    iterations = mesh.getAllFieldIterations(field_name)
+
+    if not opt_groups is None:
+        all_groups = mesh.getAllGroups()
+        for name in opt_groups:
+            if name not in all_groups:
+                raise GroupNotInMesh
+
+    if len(iterations) < 2:
+        return 0 if opt_groups is None else {_: 0 for _ in opt_groups}
+
+    # Integrate the quantity
+    mesh.setIndex(iterations[0][0])
+    pf = mesh.getField(field_name)
+    pt = iterations[0][1]
+
+    q = np.zeros(pf.shape, pf.dtype)
+
+    for i, t in iterations[1:]:
+        mesh.setIndex(i)
+        f = mesh.getField(field_name)
+
+        q += 0.5 * (pf + f) * (t - pt)
+
+        pf = f
+        pt = t
+
+    # Multiply by area if area density.
+    if area_density:
+        q *= mesh.getCellMeasurements()
+
+    if opt_groups is None:
+        return float(np.sum(q))
+
+    out = {}
+    for name in opt_groups:
+        array = mesh.getGroupArray(name)
+        out[name] = float(np.sum(q[array]))
+    return out
+
 class Mesh():
     """This is a convenient class for reading/writing 2D surface mesh made of
     triangles and with time-dependent data on it. Primarily it supports the
@@ -93,9 +162,6 @@ class Mesh():
 
        # See if the field exists in the file
        ok = m.doesItContainField("field_name")
-
-       # See if the field has an entry with the index n
-       ok = m.doesItContainFieldWithIndex("field_name", 0)
 
        # Get all field iterations available
        iterations = m.getAllFieldIterations("field_name")
@@ -139,11 +205,11 @@ class Mesh():
         self.number_of_time_steps = 1
 
         # Fields
-        self.arrays: Dict[str, Dict[int, np.ndarray]] = {}
+        self.arrays: dict[str, dict[int, np.ndarray]] = {}
 
         # Writing data
-        self.info_on_components: Dict[str, Dict[int, list]] = {}
-        self.times: Dict[str, Dict[int, float]] = {}
+        self.info_on_components: dict[str, dict[int, list]] = {}
+        self.times: dict[str, dict[int, float]] = {}
 
         # MODULE pointer
         self.backend = None
@@ -153,8 +219,6 @@ class Mesh():
             self.openFile(self.file_path)
         else:
             self.file_path = ""
-
-
 
     def openFile(self, file_path: str):
         """Open the file by creating the appropriate backend objects necessary
@@ -174,11 +238,11 @@ class Mesh():
             log.info(f"Supported exts: {' '.join(supportedFileExts())}")
             self.backend_name = None
             self.backend = None
-            raise WrongFileExtensionException()
+            raise WrongFileExtensionException(f"{ext} not supported.")
 
         if not os.path.exists(file_path):
             log.error(f"File {file_path} does not exist!")
-            raise FileDoesNotExistException()
+            raise FileDoesNotExistException(f"File {file_path} does not exist")
 
         self.file_path = file_path
 
@@ -194,7 +258,7 @@ class Mesh():
             self.backend_name = "UNKNOWN"
             self.backend = None
 
-    def getMeshData(self) -> Tuple[np.ndarray, np.ndarray]:
+    def getMeshData(self) -> tuple[np.ndarray, np.ndarray]:
         """Get the vertices and triangles of the mesh. Only the triangle cells
         are obtained as it is assumed that this class works with surface type
         meshes.
@@ -208,6 +272,9 @@ class Mesh():
         """
         if self.vertices.size == 0:
             self.readMeshData()
+
+        if self.backend is None:
+            raise NoMeshDataLoaded
 
         return self.vertices, self.triangles
 
@@ -225,24 +292,23 @@ class Mesh():
 
         """
         if self.backend is None:
-            return np.array([])
+            raise NoMeshDataLoaded
 
         return self.backend.getMeasurements(self.file_path)
-
 
     def readMeshData(self) -> None:
         """Function that calls the backends to fetch the mesh data of the file
         and storing it.
         """
         if self.backend is None:
-            return
+            raise NoMeshDataLoaded
 
         if self.vertices.size == 0:
             v, t = self.backend.getMeshData(self.file_path)
             self.vertices = v
             self.triangles = t
 
-    def setIndex(self, index: int):
+    def setIndex(self, index: int) -> None:
         """Sets the index for reading/writing fields. This value is used when
         writing functions with the :py:meth:`l2g.mesh.Mesh.writeFields` as it
         holds information at which index to write the fields.
@@ -252,7 +318,7 @@ class Mesh():
         """
         self.index = index
 
-    def setTime(self, time: int):
+    def setTime(self, time: int | float) -> None:
         """Sets the time information. This value is used only as description,
         as in, when you visualize the results in software like ParaView, this
         field will be describing the time of the time step (index) of the
@@ -298,34 +364,6 @@ class Mesh():
         else:
             return False
 
-    def doesItContainFieldWithIndex(self, field_name: str, index: int) -> bool:
-        """Checks if the mesh object contains the field with the index
-        provided. Warning! This function returns False if the mesh object
-        does not contain the field, therefore use also the method
-        :py:meth:`l2g.mesh.Mesh.doesItContainField` to know for sure what
-        is/isn't in the mesh object.
-
-        Returns:
-            ok (bool): True if mesh contains a field with the provided field
-                named and with the index.
-
-        """
-        if not self.doesItContainField(field_name):
-            return False
-
-        # With the doesItContainField we know if we have a backend available
-        # or not.
-        if self.backend_name == "MED":
-            # The getOrderValueOfField returns None if there is no field
-            # at this time step.
-            order = self.backend.getOrderValueOfField(self.file_path,
-                                                      field_name, index,
-                                                      -1)
-            if not order is None:
-                return True
-
-        return False
-
     def getAllFieldNames(self) -> list:
         """Get the name of all quantities in the mesh files.
         """
@@ -334,7 +372,7 @@ class Mesh():
             return self.backend.getAllFieldNames(self.file_path)
         return []
 
-    def getAllFieldIterations(self, field_name: str) -> List:
+    def getAllFieldIterations(self, field_name: str) -> list:
         """Returns all indexes and times of the field inside the file.
 
         Returns:
@@ -344,6 +382,9 @@ class Mesh():
 
         out = []
 
+        if self.backend is None:
+            return []
+
         if self.doesItContainField(field_name):
             out = self.backend.getAllFieldIterations(self.file_path, field_name)
             out = [[_[0], _[2]] for _ in out]
@@ -351,7 +392,7 @@ class Mesh():
         return out
 
     def getField(self, field_name: str,
-                 index: Optional[int]=None) -> Optional[np.ndarray]:
+                 index: None | int =None) -> np.ndarray:
         """Returns a field of the the opened file. Index is always provided,
         where it signifies the time step of the field.
 
@@ -365,17 +406,20 @@ class Mesh():
             if field is None:
                 msg = f"There is no {field_name} at index {index} in {self.file_path}"
                 log.error(msg)
+                raise FieldNotInMesh
             return field
+        else:
+            raise WrongFileExtensionException
 
     def doesItContainGroup(self, group_name: str) -> bool:
         if self.backend:
             return self.backend.doesItContainGroup(self.file_path, group_name)
         return False
 
-    def getGroupArray(self, group_name: str):
+    def getGroupArray(self, group_name: str) -> np.ndarray:
         if self.backend:
             return self.backend.getGroupArr(self.file_path, group_name)
-        return None
+        return np.array([])
 
     def getAllGroups(self) -> list[str]:
         """Returns a list of all defined groups inside the MED file.
@@ -406,7 +450,7 @@ class Mesh():
             # Try getting the data
             self.readMeshData()
             if not self.vertices.size:
-                return None
+                raise NoMeshDataLoaded()
 
         # Figure out the correct backend.
         ext = os.path.splitext(file_path)[-1].lower()
@@ -421,7 +465,7 @@ class Mesh():
             backend = _vtk
 
         if backend is None:
-            return None
+            raise NoMeshDataLoaded()
         backend.writeMesh(file_path, self.vertices, self.triangles,
                           self.mesh_name)
 
@@ -463,30 +507,35 @@ class Mesh():
         self.times[array_name][index] = self.time
 
     def writeFields(self):
-        """Write the fields added with the function
-        :py:meth:`l2g.mesh.Mesh.addField` to the file. After the operation it
-        clears all added fields so far, added with the
-        :py:meth:`l2g.mesh.Mesh.addField` function.
+        """Write the fields to the mesh file, which were added with the function
+        :py:meth:`l2g.mesh.Mesh.addField`.
         """
+
+        if self.backend is None:
+            log.error("No valid backed.")
+            return
+
         if self.backend_name == "MED":
+            from . import _medcoupling
             for array_name in self.arrays:
                 for index in self.arrays[array_name]:
-                    self.backend.writeField(self.file_path, array_name,
+                    _medcoupling.writeField(self.file_path, array_name,
                         self.arrays[array_name][index], index,
                         self.times[array_name][index],
                         self.info_on_components[array_name][index])
         elif self.backend_name == "VTK":
             # Haven't found a way to append array data to an XML Unstructured
             # Grid data, though if I wrote my own XML writer it would be
-            # easier. In this case we only the VTU, or the XML Unstructured
-            # Grid file is supported as it can actually contains all time steps
-            # in a single file. Other formats requires additional XML, or files
+            # easier. In this case the VTU, or the XML Unstructured Grid file
+            # is supported as it can actually contain multiple time steps in a
+            # single file. Other formats requires additional XML, or files
             # to be generated.
 
+            from . import _vtk
 
-            # Manually do the thing as it is quite compilicated.
-            writer = self.backend.getWriter(self.file_path)
-            vtk_orig_obj = self.backend.getVtkObj(self.file_path, self.vertices,
+            # Manually do the thing as it is quite complicated.
+            writer = _vtk.getWriter(self.file_path)
+            vtk_orig_obj = _vtk.getVtkObj(self.file_path, self.vertices,
                                                  self.triangles)
 
             if self.index == 0:
@@ -495,12 +544,12 @@ class Mesh():
                 writer.SetNumberOfTimeSteps(self.number_of_time_steps)
                 writer.Start()
 
-            vtk_obj = self.backend.copyVtkObj(vtk_orig_obj)
+            vtk_obj = _vtk.copyVtkObj(vtk_orig_obj)
 
             # The problematic code is following, where we have to dump the
             # arrays to the VTK object.
             for array_name in self.arrays:
-                self.backend.addArrayToVtkObj(vtk_obj, array_name,
+                _vtk.addArrayToVtkObj(vtk_obj, array_name,
                     self.arrays[array_name][self.index])
 
             # Now write
@@ -512,11 +561,11 @@ class Mesh():
 
         # Clear the data arrays.
         # Fields
-        self.arrays: Dict[str, Dict[int, np.ndarray]] = {}
+        self.arrays = {}
 
         # Writing data
-        self.info_on_components: Dict[str, Dict[int, list]] = {}
-        self.times: Dict[str, Dict[int, float]] = {}
+        self.info_on_components = {}
+        self.times = {}
 
         return True
 
@@ -540,7 +589,6 @@ class Mesh():
         rotation is not "free form", the rotational axis is set to the
         geometry's center of mass.
 
-
         It creates a new Mesh, since it creates a copy in any case and it
         is sometimes useful if we retain the original data.
 
@@ -555,7 +603,7 @@ class Mesh():
 
         if self.file_path is None:
             log.error("Could not read mesh data as no MED file is loaded")
-            return None
+            raise NoMeshDataLoaded()
 
         if self.vertices.size == 0:
             self.readMeshData()
@@ -572,8 +620,17 @@ class Mesh():
 def load_flt_results_from_mesh(mesh_results: 'L2GResults', mesh_object: Mesh):
     """Loads required fields from the Mesh objects to the mesh results.
 
-    It is necessary to set the index of the fields *before* calling this \
-    function.
+    It is necessary to set the index of the fields *before* calling this
+    function in order to get the correct data.
+
+    .. code-block:: python
+
+       mesh_object.setIndex(n)
+       l2g.mesh.load_flt_results_from_mesh(mesh_results, mesh_object)
+
+    Arguments:
+        mesh_results (L2GResults): Object which will have data loaded on
+        mesh_object (Mesh): Object from where to take the data
     """
     if mesh_object.backend is None:
         log.error("Mesh file is not open to load data from")
@@ -595,10 +652,21 @@ def load_flt_results_from_mesh(mesh_results: 'L2GResults', mesh_object: Mesh):
     mesh_results.empty = False
 
 def dump_flt_results_to_mesh(mesh_results: 'L2GResults', mesh_object: Mesh):
-    """Dumps flt_mesh results to mesh object.
+    """Save the results data in mesh_results to the mesh_object and write it to
+    a file.
 
-    mesh_results is L2GResults
+    It is necessary to set the index of the fields *before* calling this
+    function in order to write at the correct index and time step.
 
+    .. code-block:: python
+
+       mesh_object.setIndex(n)
+       mesh_object.setTime(time)
+       l2g.mesh.dump_flt_results_to_mesh(mesh_results, mesh_object)
+
+    Arguments:
+        mesh_results ('L2GResults'): Class object holding data
+        mesh_object (Mesh): Mesh object instance
     """
 
     for key in mesh_results.arrays_to_dump:
@@ -682,8 +750,8 @@ def save_fls_to_vtk(data, file_path):
 
     This should be used to save :class:`L2GFLs` to a VTK file.
     """
-    import vtk
-    writer = vtk.vtkGenericDataObjectWriter()
+    from vtkmodules.vtkIOLegacy import vtkGenericDataObjectWriter
+    writer = vtkGenericDataObjectWriter()
     writer.SetInputData(data)
     writer.SetFileName(file_path)
     writer.Write()
@@ -694,8 +762,8 @@ def save_mesh_to_vtk(data, file_path):
 
     This should be used to save :class:`L2GResults` to a VTK file.
     """
-    import vtk
-    writer = vtk.vtkXMLUnstructuredGridWriter()
+    from vtkmodules.vtkIOXML import vtkXMLUnstructuredGridWriter
+    writer = vtkXMLUnstructuredGridWriter()
     writer.SetInputData(data)
     writer.SetFileName(file_path)
     writer.Write()
@@ -712,9 +780,6 @@ def save_results_to_vtk(result_obj: Union['L2GFLs', 'L2GResults'],
 
     """
     from l2g.comp import L2GResults, L2GFLs
-
-    if not isinstance(result_obj, (L2GResults, L2GFLs)):
-        log.error("Wrong object provided to results")
 
     data = result_obj.generate_vtk_object()
 

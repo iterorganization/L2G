@@ -416,7 +416,8 @@ cdef class FieldLineTracer:
             self.parameters.self_intersection_avoidance_length)
 
     def evaluateEq(self) -> None:
-        """Tries to automatically determine the type of the equilibrium
+        """Runs the equilibrium evaluations functions and prints some basic
+        info.
         """
         log.info("Evaluating equilibrium")
         if not self.equilibrium_loaded:
@@ -424,7 +425,26 @@ cdef class FieldLineTracer:
             return
 
         self.eq.evaluate()
-        log.info(f"Type: {self.eq.getType()}, LCFS flux: {self.eq.getBoundaryFluxValue()} Webb/rad")
+        log.info("Equilibrium info:")
+        log.info(f"Type: {self.eq.getType()}")
+        if self.eq.getType() == "lim":
+            log.info(f"LCFS flux: {self.eq.getBoundaryFluxValue()} Webb/rad")
+
+        if self.eq.getType() == "div":
+            # See if we have both separatrixes
+            psi_x = self.eq.getBoundaryFluxValue()
+            log.info(f"1st sep flux: {psi_x} Webb/rad")
+
+            # See if we have second
+            psi_x2nd = self.eq.getSecondaryXFluxValue()
+
+            if psi_x2nd is None:
+                log.info("No second separatrix detected!")
+                return
+
+            log.info(f"2nd sep flux: {psi_x2nd} Webb/rad")
+            dist = self.eq.distanceBetweenPsiOnMidplane(psi_x, psi_x2nd)
+            log.info(f"Distance between seps on outer midplane: {dist} mm")
 
     @cython.boundscheck(False)
     def flipFieldLineDirections(self):

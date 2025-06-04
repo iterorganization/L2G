@@ -1,4 +1,3 @@
-from typing import Dict, List, Tuple
 import medcoupling as mc
 import numpy as np
 
@@ -113,8 +112,8 @@ def writeFieldToAlreadyExistingMesh(field: mc.MEDCouplingFieldDouble,
     fMEDFile.write(file_path,0)
     # mc.WriteFieldUsingAlreadyWrittenMesh(file_path, field)
 
-__med__: Dict[str, mc.MEDCouplingUMesh] = {}
-__file_med__: Dict[str, mc.MEDFileUMesh] = {}
+__med__: dict[str, mc.MEDCouplingUMesh] = {}
+__file_med__: dict[str, mc.MEDFileUMesh] = {}
 
 def openFile(file_path: str, **kwargs) -> None:
     """Opens a file and creates MEDCoupling File and Object handles.
@@ -148,7 +147,7 @@ def checkIfFieldExists(file_path: str, field_name: str) -> bool:
         return True
     return False
 
-def getMeshData(file_path: str) -> Tuple[np.ndarray, np.ndarray]:
+def getMeshData(file_path: str) -> tuple[np.ndarray, np.ndarray]:
     """Returns
     """
     global __med__, __file_med__
@@ -169,7 +168,7 @@ def getMeshData(file_path: str) -> Tuple[np.ndarray, np.ndarray]:
             break
     return vertices, triangles
 
-def writeMesh(file_path, vertices, triangles, mesh_name: str="mesh"):
+def writeMesh(file_path, vertices, triangles, mesh_name: str="mesh") -> None:
     """Saves an unstructured grid consisting of triangles to new file path.
     """
 
@@ -194,7 +193,7 @@ def writeMesh(file_path, vertices, triangles, mesh_name: str="mesh"):
     # Overwrite mesh at location.
     med_umesh_file.write(file_path, 0)
 
-def getNumberOfTimeSteps(file_path: str, *args):
+def getNumberOfTimeSteps(file_path: str, *args) -> int:
     if args:
         field_name = args[0]
     else:
@@ -204,13 +203,13 @@ def getNumberOfTimeSteps(file_path: str, *args):
     iterations = mc.GetAllFieldIterations(file_path, field_name)
     return len(iterations)
 
-def getAllFieldIterations(file_path: str, field_name: str) -> List:
+def getAllFieldIterations(file_path: str, field_name: str) -> list[tuple[int, int, float]]:
     return mc.GetAllFieldIterations(file_path, field_name)
 
-def getAllFieldNames(file_path: str) -> List:
+def getAllFieldNames(file_path: str) -> list[str]:
     return mc.GetAllFieldNames(file_path)
 
-def getOrderValueOfFieldAtIndex(file_path: str, field_name: str, index: int, order: int):
+def getOrderValueOfFieldAtIndex(file_path: str, field_name: str, index: int, order: int) -> int | None:
     """Checks if the field in the file_path has an entry of the index and order
     supplied. If not, then return the other order if there is only one entry
     of the field at this index.
@@ -237,19 +236,19 @@ def getOrderValueOfFieldAtIndex(file_path: str, field_name: str, index: int, ord
     else:
         return None
 
-def getField(file_path: str, field_name: str, index: int, order: int=-1):
+def getField(file_path: str, field_name: str, index: int, order: int=-1) -> np.ndarray:
     if checkIfFieldExists(file_path, field_name):
         # Additionally check if the order parameter is okay. Order parameter
         # is not understood yet completely.
-        order = getOrderValueOfFieldAtIndex(file_path, field_name, index, order)
-        if order is None:
-            return None
-        return fieldToNumpy(file_path, field_name, index, order)
+        val: int | None = getOrderValueOfFieldAtIndex(file_path, field_name, index, order)
+        if val is None:
+            return np.array([])
+        return fieldToNumpy(file_path, field_name, index, val)
     else:
-        return None
+        return np.array([])
 
 def writeField(file_path: str, array_name: str, array: np.ndarray, index: int,
-               time: float, info_on_component: list = []):
+               time: float, info_on_component: list = []) -> None:
 
     global __med__
 
@@ -290,7 +289,6 @@ def getGroupArr(file_path: str, group_name: str) -> np.ndarray:
     return umedf.getGroupArr(0, group_name).toNumPyArray()
 
 def getAllGroups(file_path: str) -> list[str]:
-    import medcoupling as mc
     mesh_name = mc.GetMeshNames(file_path)[0]
     groups: list = mc.GetMeshGroupsNames(file_path, mesh_name)
     return groups

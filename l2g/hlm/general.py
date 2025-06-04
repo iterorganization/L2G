@@ -15,9 +15,10 @@ def single_exponential_qpar(drsep: np.ndarray, lambda_q : float,
         lambda_q (float): The decay length. In meters.
         q_parallel (float): The amplitude of the heat load at the boundary.
 
-    $$
+    .. math::
+
        q = q_{\parallel} e^{\frac{-drsep}{\lambda_q}}
-    $$
+
     Returns:
         q (np.ndarray): 1D array of parallel heat loads.
 
@@ -32,12 +33,11 @@ def single_exponential_psol(drsep: np.ndarray, Bt: float, Bpm: float, Rb: float,
     The amplitude of the exponential function is calculated via the following
     question:
 
-    $$
+    .. math::
+
        q_{\parallel} = \frac{F P_{sol} B_t}{2 \pi \lambda_q B_{pm} R_{b}}
-    $$
-    $$
        q = q_{\parallel} e^{\frac{-drsep}{\lambda_q}}
-    $$
+
     .. note::
 
        Note that in the equation we are missing the B toroidal at midplane,
@@ -64,10 +64,10 @@ def double_exponential_psol(drsep: np.ndarray, Bt: float, Bpm: float, Rb: float,
     r"""The double exponential plasma profile. Not to be confused of the sum
     of two single exponentials.
 
-    $$
-        q_{\parallel} = \frac{F P_{sol} B_t}{2 \pi R_b B_{pm} (\lambda_{q, main} + R_q \lambda_{q, near})}
-    $$
-        q = q_{\parallel} (e^{\frac{-drsep}{\lambda{q, main}}} + R_q e^{\frac{-drsep}{\lambda{q, near}}})
+    .. math::
+
+       q_{\parallel} = \frac{F P_{sol} B_t}{2 \pi R_b B_{pm} (\lambda_{q, main} + R_q \lambda_{q, near})}
+       q = q_{\parallel} (e^{\frac{-drsep}{\lambda{q, main}}} + R_q e^{\frac{-drsep}{\lambda{q, near}}})
 
     """
 
@@ -83,10 +83,10 @@ def double_exponential_psol_longwave(drsep: np.ndarray, Bt: float, Bpm: float, R
     r"""When having a LW configuration during flat-top the q_parallel is
     modified, well the main and near features get a bit different constants.
 
-    $$
-        q_{\parallel} = \frac{F P_{sol} B_t}{2 \pi R_b B_{pm} (\lambda_{q, main} + R_q \lambda_{q, near})}
-        q = q_{\parallel} (e^{\frac{-drsep}{\lambda{q, main}}} + R_q e^{\frac{-drsep}{\lambda{q, near}}})
-    $$
+    .. math::
+
+       q_{\parallel} = \frac{F P_{sol} B_t}{2 \pi R_b B_{pm} (\lambda_{q, main} + R_q \lambda_{q, near})}
+       q = q_{\parallel} (e^{\frac{-drsep}{\lambda{q, main}}} + R_q e^{\frac{-drsep}{\lambda{q, near}}})
     """
 
 

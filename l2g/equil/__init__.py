@@ -26,14 +26,14 @@ def getEquilibriumFromEQDSKG(eqdsk_obj: EQDSKIO, correct_helicity=True) -> Equil
     obj.wall_contour_z = eqdsk_obj.getZLIM()
 
     # Write the magnetic axis position
-    obj.mag_axis_r = eqdsk_obj.getRMAXIS()
-    obj.mag_axis_z = eqdsk_obj.getZMAXIS()
+    obj.mag_axis_r = eqdsk_obj.RMAXIS
+    obj.mag_axis_z = eqdsk_obj.ZMAXIS
 
 
     # Write the R-Z grid
-    RLEFT, ZMID = eqdsk_obj.getRLEFT(), eqdsk_obj.getZMID()
-    RDIM, ZDIM = eqdsk_obj.getRDIM(), eqdsk_obj.getZDIM()
-    NW, NH = eqdsk_obj.getNW(), eqdsk_obj.getNH()
+    RLEFT, ZMID = eqdsk_obj.RLEFT, eqdsk_obj.ZMID
+    RDIM, ZDIM = eqdsk_obj.RDIM, eqdsk_obj.ZDIM
+    NW, NH = eqdsk_obj.NW, eqdsk_obj.NH
     ZMIN = ZMID - 0.5 * ZDIM
     ZMAX = ZMID + 0.5 * ZDIM
 
@@ -44,17 +44,17 @@ def getEquilibriumFromEQDSKG(eqdsk_obj: EQDSKIO, correct_helicity=True) -> Equil
     obj.grid_dim_z = NH
 
     # Poloidal magnetic flux
-    obj.psi = np.asarray(eqdsk_obj.getPSIRZ())
-    obj.psi_boundary = eqdsk_obj.getSIBRY()
-    obj.psi_axis = eqdsk_obj.getSIMAG()
-    obj.Ip = eqdsk_obj.getCURRENT()
+    obj.psi = np.asarray(eqdsk_obj.PSIRZ)
+    obj.psi_boundary = eqdsk_obj.SIBRY
+    obj.psi_axis = eqdsk_obj.SIMAG
+    obj.Ip = eqdsk_obj.CURRENT
 
     obj.psi_sign = np.sign(obj.psi_boundary - obj.psi_axis )
 
     # Write the Plasma current
     # Write the FPOL
-    obj.fpol = np.asarray(eqdsk_obj.getFPOL())
-    obj.fpol_flux = np.linspace(eqdsk_obj.getSIMAG(), eqdsk_obj.getSIBRY(), NW)
+    obj.fpol = np.asarray(eqdsk_obj.FPOL)
+    obj.fpol_flux = np.linspace(eqdsk_obj.SIMAG, eqdsk_obj.SIBRY, NW)
     # Write the FPOL in vacuum. Just take the last value
     obj.fpol_vacuum = obj.fpol[-1]
 
@@ -101,8 +101,6 @@ def getEquilibriumFromIMASSlice(shot: int, run: int, user: str = "public",
         equilibrium_ids.vacuum_toroidal_field,
         wall_ids, summary_ids, correct_helicty=correct_helicity)
     return equilibrium
-
-
 
 def getEquilibriumFromIMAS(equilibrium_ids_time_slice,
                            vacuum_toroidal_field_ids, wall_ids,
@@ -195,16 +193,16 @@ def createEqdskFromSlice(slice, HEADER="") -> EQDSKIO:
     Nw = R.shape[0]
     Nh = Z.shape[0]
 
-    eqObj.setNW(Nw)
-    eqObj.setNH(Nh)
+    eqObj.NW = Nw
+    eqObj.NH = Nh
 
     # Setting R,Z grid
-    eqObj.setRLEFT(R[0])
-    eqObj.setRDIM(R[-1] - R[0])
-    eqObj.setZMID((Z[0] + Z[-1]) / 2)
-    eqObj.setZDIM(Z[-1] - Z[0])
+    eqObj.RLEFT = R[0]
+    eqObj.RDIM = R[-1] - R[0]
+    eqObj.ZMID = 0.5 * (Z[0] + Z[-1])
+    eqObj.ZDIM = Z[-1] - Z[0]
     psi = profile2d.psi / (2*np.pi)
-    eqObj.setPSIRZ(psi.T)
+    eqObj.PSIRZ = psi.T
 
     profile1d = slice.profiles_1d
 
@@ -228,21 +226,20 @@ def createEqdskFromSlice(slice, HEADER="") -> EQDSKIO:
     #       profile1d.dpressure_dpsi.shape)
     FPOL = densify(profile1d.f,Nw)
 
-    eqObj.setFPOL(FPOL)
-    eqObj.setPRES(densify(profile1d.pressure, Nw))
-    eqObj.setPPRIME(densify(profile1d.dpressure_dpsi, Nw) / (2 * np.pi))
-    eqObj.setFFPRIM(densify(profile1d.f_df_dpsi, Nw) / (2 * np.pi))
-    eqObj.setQPSI(densify(profile1d.q, Nw)) # empty
+    eqObj.FPOL = FPOL
+    eqObj.PRES = densify(profile1d.dpressure_dpsi, Nw) / (2 * np.pi)
+    eqObj.FFPRIM = densify(profile1d.f_df_dpsi, Nw) / (2 * np.pi)
+    eqObj.QPSI = densify(profile1d.q, Nw)
 
     globQuant = slice.global_quantities
 
 
-    eqObj.setRMAXIS(globQuant.magnetic_axis.r)
-    eqObj.setZMAXIS(globQuant.magnetic_axis.z)
-    eqObj.setSIBRY(globQuant.psi_boundary / (2 * np.pi))
-    eqObj.setSIMAG(globQuant.psi_axis / (2 * np.pi))
-    eqObj.setCURRENT(globQuant.ip)
-    eqObj.setRCENTR(globQuant.magnetic_axis.r)
+    eqObj.RMAXIS = globQuant.magnetic_axis.r
+    eqObj.ZMAXIS = globQuant.magnetic_axis.z
+    eqObj.SIBRY = globQuant.psi_boundary / (2 * np.pi)
+    eqObj.SIMAG = globQuant.psi_axis / (2 * np.pi)
+    eqObj.CURRENT = globQuant.ip
+    eqObj.RCENTR = globQuant.magnetic_axis.r
     BCENTR = profile1d.f[0] / globQuant.magnetic_axis.r
     # print(f"B_t at centre: {BCENTR} T")
     current = np.abs(globQuant.ip)
@@ -254,13 +251,13 @@ def createEqdskFromSlice(slice, HEADER="") -> EQDSKIO:
         HEADER = f"{current}MA {HEADER} dsep={100 * drsep:.02f}cm - 3 {Nw} {Nh}"
     else:
         HEADER = f"{current}MA {HEADER} - 3 {Nw} {Nh}"
-    eqObj.setHEADER(HEADER)
-    eqObj.setBCENTR(BCENTR)
+    eqObj.HEADER = HEADER
+    eqObj.BCENTR = BCENTR
 
     boundary = slice.boundary
-    eqObj.setRBBBS(boundary.outline.r)
-    eqObj.setZBBBS(boundary.outline.z)
-    eqObj.setNBBBS(len(boundary.outline.r))
+    eqObj.RBBBS = boundary.outline.r
+    eqObj.ZBBBS = boundary.outline.z
+    eqObj.NBBBS = len(boundary.outline.r)
 
 
     return eqObj
@@ -270,14 +267,14 @@ def addWallDescriptionToEqdsk(eqObj, idsWall):
     EQDSKIO object.
     """
     if len(idsWall.description_2d) == 0:
-        eqObj.setRLIM([1])
-        eqObj.setZLIM([1])
-        eqObj.setLIMITR(1)
+        eqObj.RLIM = [1]
+        eqObj.ZLIM = [1]
+        eqObj.LIMITR = 1
     else:
         description2d = idsWall.description_2d[0]
-        eqObj.setRLIM(description2d.limiter.unit[0].outline.r)
-        eqObj.setZLIM(description2d.limiter.unit[0].outline.z)
-        eqObj.setLIMITR(len(description2d.limiter.unit[0].outline.r))
+        eqObj.RLIM = description2d.limiter.unit[0].outline.r
+        eqObj.ZLIM = description2d.limiter.unit[0].outline.z
+        eqObj.LIMITR = len(description2d.limiter.unit[0].outline.r)
 
 from ._iter import EquilibriumIterator
 
@@ -290,7 +287,7 @@ __all__ =[
     "getEquilibriumFromIMAS",
     "getEquilibriumFromEQDSKG",
     "getEquilibriumFromIMASSlice",
-    "getEquilibriumFromEQFiletEQ",
+    "getEquilibriumFromEQFile",
     "createEqdskFromSlice",
     "addWallDescriptionToEqdsk"
 ]

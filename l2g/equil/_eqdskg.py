@@ -8,6 +8,9 @@ log = logging.getLogger(__name__)
 class NanValuesInEqdskFile(Exception):
     pass
 
+class FileDoesNotExist(Exception):
+    pass
+
 class EQDSKIO(object):
     """EQDSK interface implementation
 
@@ -26,8 +29,8 @@ class EQDSKIO(object):
         NBBBS (int): Number of boundary points
         RBBBS (arr): R of boundary points in meter
         ZBBBS (arr): Z of boundary points in meter
-        RMAXIS (arr): R of magnetic axis in meter
-        ZMAXIS (arr): Z of magnetic axis in meter
+        RMAXIS (float): R of magnetic axis in meter
+        ZMAXIS (float): Z of magnetic axis in meter
         FPOL (arr): Poloidal current function in m-T, F=RB_T on flux grid
         PRES (arr): Plasma pressure in nt/m^2 on uniform flux grid
         FFPRIM (arr): FF'(Psi) in (mT)^2/(Weber/rad) on uniform flux grid
@@ -70,9 +73,23 @@ class EQDSKIO(object):
 
     """
 
+    # Patterns for regexing
+
+    # Search for Not A Number expressions.
+    nanPatt = re.compile(r'(?i)\bnan\b')
+
+    # Integer pattern for reading values separated with space
+    integerPattern = r'(?:^|(?<=\s))-?[0-9]+(?:$|(?=\s))'
+    intPatt = re.compile(f'.*{integerPattern}.*')
+
+    # Pattern for reading scientific numbers
+    scientificPattern = r'[+-]?[0-9]\.[0-9]{6,9}[eE][+-][0-9]{2}'
+
+    genPatt = re.compile(f'(?:{integerPattern}|{scientificPattern})')
+
+
     def __init__(self, file=''):
         self.name = ''
-        self.logMessage = ''
         self.resetValues()
 
         if file:
@@ -80,44 +97,44 @@ class EQDSKIO(object):
             if not ok:
                 log.error(f'Failed to load file: {file}')
 
-    def resetValues(self):
+    def resetValues(self) -> None:
         self.INPUT_EQDSK = ''
         self.HEADER = ''
 
         self.PSIRZ = [] # Plasma psi WEBER
 
-        self.CURRENT = None
+        self.CURRENT: float = 0
 
-        self.RDIM = None # Size dimension for R and Z
-        self.ZDIM = None
+        self.RDIM: float = 0 # Size dimension for R and Z
+        self.ZDIM: float = 0
 
-        self.NW = None  # Dimension of grid
-        self.NH = None
+        self.NW: int = 0  # Dimension of grid
+        self.NH: int = 0
 
-        self.LIMITR = None  # Number of limiter points
-        self.RLIM = []  # rlim
-        self.ZLIM = []  # zlim
+        self.LIMITR: int = 0  # Number of limiter points
+        self.RLIM: list = []  # rlim
+        self.ZLIM: list = []  # zlim
 
-        self.NBBBS = None  # Number of Boundary points
-        self.RBBBS = []  # rbbbs
-        self.ZBBBS = []  # zbbs
+        self.NBBBS: int = 0 # Number of Boundary points
+        self.RBBBS: list = []  # rbbbs
+        self.ZBBBS: list = []  # zbbs
 
-        self.RMAXIS = []  # Position of toroidal magnetic
-        self.ZMAXIS = []  # field
-        self.FPOL = []
-        self.PRES = []
-        self.FFPRIM = []
-        self.PPRIME = []
-        self.QPSI = []
+        self.RMAXIS: float = 0 # Position of toroidal magnetic
+        self.ZMAXIS: float = 0 # field
+        self.FPOL: list = []
+        self.PRES: list = []
+        self.FFPRIM: list = []
+        self.PPRIME: list = []
+        self.QPSI: list = []
 
-        self.SIMAG = None  # Flux value at magnetix axis
-        self.SIBRY = None  # Flux value on boundary
+        self.SIMAG: float = 0  # Flux value at magnetix axis
+        self.SIBRY: float = 0  # Flux value on boundary
 
-        self.RCENTR = None  # Reference value: position R, mag field B
-        self.BCENTR = None  # B value in RCENTR
+        self.RCENTR: float = 0  # Reference value: position R, mag field B
+        self.BCENTR: float = 0  # B value in RCENTR
 
-        self.RLEFT = None  # Minimum of rectangular computational box.
-        self.ZMID = None  # Vertical dimension of computational box
+        self.RLEFT: float = 0  # Minimum of rectangular computational box.
+        self.ZMID: float = 0  # Vertical dimension of computational box
         """
         Or in another case:
 
@@ -147,32 +164,21 @@ class EQDSKIO(object):
         """
         self.name = name
 
-    def openAndRead(self, filePath: str) -> bool:
-        if not os.access(filePath, os.F_OK | os.R_OK):
-            log.error(f'File {filePath} does not exist or lacking permission to read it!')
-            return False
+    def openAndRead(self, file_path: str) -> bool:
+        """Opens and reads the contents of file at file_path.
+
+        Arguments:
+            file_path (str): Path to EQDSK-G format file.
+        """
+        if not os.access(file_path, os.F_OK | os.R_OK):
+            raise FileDoesNotExist(f'File {file_path} does not exist or lacking permission to read it!')
 
         data = ''
-        with open(filePath, 'r') as f:
+        with open(file_path, 'r') as f:
             data = f.read()
         # Setting name
-        self.setName(os.path.basename(filePath))
+        self.setName(os.path.basename(file_path))
         return self.read(data)
-
-    def logValue(self, msg, value, t='f') -> None:
-        if t == 'd':
-            formatedMsg ='{0:>20} %d'.format(msg + ':') % value
-        else:
-            formatedMsg ='{0:>20} %f'.format(msg + ':') % value
-        self.logMessage += formatedMsg + '\n'
-
-    def log(self, msg: str) -> None:
-        """Function used to save the parsing information of the EQDSK file.
-        """
-        self.logMessage += msg + '\n'
-
-    def getLog(self) -> str:
-        return self.logMessage
 
     def read(self, eqdskString: str) -> bool:
         """Passing string instead of a filename, to avoid any troubles if this
@@ -183,7 +189,6 @@ class EQDSKIO(object):
         self.resetValues()
         self.eqdskString = eqdskString
         # Reset the log
-        self.logMessage = 'Reading eqdsk file %s\n' % self.name
 
         LINES = eqdskString.splitlines()
 
@@ -198,25 +203,21 @@ class EQDSKIO(object):
             nw, nh = result[0]
             self.NW = int(nw)
             self.NH = int(nh)
-            self.logValue('Width', self.NW, t='d')
-            self.logValue('Height', self.NH, t='d')
         else:
-            self.log("Couldn't read the dimensions from the 1st line.")
-            self.log("LINE:\n%s" % HEADER)
             return False
         # self.log('Done reading 1st line.')
         # self.log("Reading 2nd line of EQDSK")
         i = 1
         result = self.readOneLine(LINES[i])
 
-        if result == -1:
+        if not result:
             # self.log("[INFO] 2nd line must be a comment")
             while 1:
                 # self.log("[INFO] Filtering the comments.")
                 i += 1
 
                 result = self.readOneLine(LINES[i])
-                if result != -1:
+                if result:
                     break
 
                 # Precaution, if there are 100 wrong lines, just end the
@@ -230,13 +231,6 @@ class EQDSKIO(object):
             self.RLEFT = result[3]
             self.ZMID = result[4]
 
-            self.logValue('Dimension R', self.RDIM)
-            self.logValue('Dimension Z', self.ZDIM)
-            self.logValue('Center R', self.RCENTR)
-            self.logValue('Left R', self.RLEFT)
-            self.logValue('Middle Z', self.ZMID)
-            # self.log('Done reading 2nd line.')
-            # self.log("Reading 3rd line of EQDSK")
             i += 1
             result = self.readOneLine(LINES[i])
             self.RMAXIS = result[0]
@@ -245,20 +239,9 @@ class EQDSKIO(object):
             self.SIBRY = result[3]
             self.BCENTR = result[4]
 
-            self.logValue('Magnetic axis position R',
-                           self.RMAXIS)
-            self.logValue('Magnetic axis position Z',
-                           self.ZMAXIS)
-            self.logValue('Flux at magnetic axis', self.SIMAG)
-            self.logValue('Flux at boundary', self.SIBRY)
-            self.logValue('Center B', self.BCENTR)
-            # self.log("Done reading 3rd line.")
-
             i += 1
-            # self.log('Reading 4th line of EQDSK')
             result = self.readOneLine(LINES[i])
             self.CURRENT = result[0]
-            self.logValue('Current', self.CURRENT)
 
             msg = "The 2nd value on line 4 of the EQDSK is not equal to " \
                   "the flux at magnetic axis read from the 3rd line"
@@ -284,10 +267,7 @@ class EQDSKIO(object):
             # self.log("Done reading 5th line.")
 
             line_index = i + 1
-            self.log("Reading values from 5th line on...")
             P1, P2 = self.readValues(LINES[line_index:])
-            N_VALUES = len(P1) + len(P2)
-            TOTAL_VALUES = 5 * self.NW + self.NH * self.NW + 2
 
             _I = 0
             self.FPOL = P1[_I: _I + self.NW]
@@ -316,13 +296,6 @@ class EQDSKIO(object):
 
             self.LIMITR = int(P2[_I])
             _I += 1
-            self.logValue('N boundary', self.NBBBS, t='d')
-            self.logValue('N limiter', self.LIMITR, t='d')
-            self.log("Read %d values." % N_VALUES)
-
-            TOTAL_VALUES += (self.NBBBS + self.LIMITR) * 2
-            self.log('%d actual values required according to EQDSK G format.' %
-                     TOTAL_VALUES)
 
             self.RBBBS = []
             self.ZBBBS = []
@@ -349,18 +322,20 @@ class EQDSKIO(object):
         return True
 
     def readOneLine(self, line: str) -> list:
-        """Reads the float values from one line.
+        """Reads the float values from one line and returns a list of 5
+        elements. If the line does not have 5 elements, it is considered a
+        comment line and returns an empty list.
 
         Returns:
             out (Union[int, List[Float]]): Returns -1 if a line contains an
                 alpha at the beginning, else it returns a list of values.
         """
-        pattern = r'-?[0-9]{1}\.[0-9]{9}[eE][-+]?[0-9]{2}'
-
-        result = re.findall(pattern, line)
 
         if line.lstrip()[0].isalpha():
-            return -1
+            return []
+
+        pattern = r'-?[0-9]{1}\.[0-9]{9}[eE][-+]?[0-9]{2}'
+        result = re.findall(pattern, line)
 
         if len(result) == 5:
             # 5 float values on line.
@@ -379,9 +354,9 @@ class EQDSKIO(object):
                 return out
             else:
                 # Must be a comment line
-                return -1
+                return []
 
-    def readValues(self, LINES):
+    def readValues(self, LINES) -> tuple[list, list]:
         """Reads values from EQDSK lines.
         """
         # Part one consists of values before the section of limiter and
@@ -393,29 +368,17 @@ class EQDSKIO(object):
         # between.
         part_2 = []
 
-        # Pattern for NaN check
-        nanPattern = r'(?i)\bnan\b'
-        nanPatt = re.compile(nanPattern)
-
-        # Pattern for reading integer values separated with spaces
-        integerPattern = r'(?:^|(?<=\s))-?[0-9]+(?:$|(?=\s))'
-        intPatt = re.compile('.*' + integerPattern + '.*')
-        # Pattern for reading scientific numbers
-        scientificPattern = r'[+-]?[0-9]\.[0-9]{6,9}[eE][+-][0-9]{2}'
-
-        pattern = u'(?:%s|%s)' % (integerPattern, scientificPattern)
-        genPatt = re.compile(pattern)
         SWITCH = 1
 
         for line in LINES:
-            if SWITCH and intPatt.match(line):
+            if SWITCH and self.intPatt.match(line):
                 SWITCH = 0
 
-            nan_check = nanPatt.findall(line)
+            nan_check = self.nanPatt.findall(line)
             if len(nan_check) > 0:
                 raise NanValuesInEqdskFile
 
-            result = genPatt.findall(line)
+            result = self.genPatt.findall(line)
             if SWITCH:
                 part_1 += [float(el) for el in result]
             else:
@@ -683,149 +646,3 @@ class EQDSKIO(object):
         """Gets the Z points for wall silhouette.
         """
         return self.convertTo_m(self.ZLIM)
-
-    def getCURRENT(self):
-        """Returns plasma current in Ampere
-        """
-        return self.CURRENT
-
-    def getHEADER(self):
-        return self.HEADER
-
-    def getPSIRZ(self):
-        return self.PSIRZ
-
-    def getRDIM(self):
-        return self.RDIM
-
-    def getZDIM(self):
-        return self.ZDIM
-
-    def getNW(self):
-        return self.NW
-
-    def getNH(self):
-        return self.NH
-
-    def getLIMITR(self):
-        return self.LIMITR
-
-    def getNBBBS(self):
-        return self.NBBBS
-
-    def getRMAXIS(self):
-        return self.RMAXIS
-
-    def getZMAXIS(self):
-        return self.ZMAXIS
-
-    def getFPOL(self):
-        return self.FPOL
-
-    def getPRES(self):
-        return self.PRES
-
-    def getFFPRIM(self):
-        return self.FFPRIM
-
-    def getPPRIME(self):
-        return self.PPRIME
-
-    def getQPSI(self):
-        return self.QPSI
-
-    def getSIMAG(self):
-        return self.SIMAG
-
-    def getSIBRY(self):
-        return self.SIBRY
-
-    def getRCENTR(self):
-        return self.RCENTR
-
-    def getBCENTR(self):
-        return self.BCENTR
-
-    def getRLEFT(self):
-        return self.RLEFT
-
-    def getZMID(self):
-        return self.ZMID
-
-    def setHEADER(self, new):
-        self.HEADER = new
-
-    def setPSIRZ(self, new):
-        self.PSIRZ = new
-
-    def setCURRENT(self, new):
-        self.CURRENT = new
-
-    def setRDIM(self, new):
-        self.RDIM = new
-
-    def setZDIM(self, new):
-        self.ZDIM = new
-
-    def setNW(self, new):
-        self.NW = new
-
-    def setNH(self, new):
-        self.NH = new
-
-    def setLIMITR(self, new):
-        self.LIMITR = new
-
-    def setRLIM(self, new):
-        self.RLIM = new
-
-    def setZLIM(self, new):
-        self.ZLIM = new
-
-    def setNBBBS(self, new):
-        self.NBBBS = new
-
-    def setRBBBS(self, new):
-        self.RBBBS = new
-
-    def setZBBBS(self, new):
-        self.ZBBBS = new
-
-    def setRMAXIS(self, new):
-        self.RMAXIS = new
-
-    def setZMAXIS(self, new):
-        self.ZMAXIS = new
-
-    def setFPOL(self, new):
-        self.FPOL = new
-
-    def setPRES(self, new):
-        self.PRES = new
-
-    def setFFPRIM(self, new):
-        self.FFPRIM = new
-
-    def setPPRIME(self, new):
-        self.PPRIME = new
-
-    def setQPSI(self, new):
-        self.QPSI = new
-
-    def setSIMAG(self, new):
-        self.SIMAG = new
-
-    def setSIBRY(self, new):
-        self.SIBRY = new
-
-    def setRCENTR(self, new):
-        self.RCENTR = new
-
-    def setBCENTR(self, new):
-        self.BCENTR = new
-
-    def setRLEFT(self, new):
-        self.RLEFT = new
-
-    def setZMID(self, new):
-        self.ZMID = new

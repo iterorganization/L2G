@@ -81,8 +81,8 @@ class Equilibrium(object):
 
         self.Ip: float | None = -1.0
 
-        self.fpol: list = []
-        self.fpol_flux: list = []
+        self.fpol: np.ndarray = np.array([])
+        self.fpol_flux: np.ndarray = np.array([])
         self.fpol_vacuum: float= -1.0
 
         self.type: str = ''

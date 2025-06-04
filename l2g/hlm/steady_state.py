@@ -10,12 +10,12 @@ def conservative(drsep: np.ndarray) -> np.ndarray:
 
     Heat load parallels are hard-coded, so are decay lengths!
 
-    $$
+    .. math::
+
        q_{elm \parallel} & = 5 \frac{MW}{m^2} \\\\
        \lambda_{q, elm} & = 0.09 m \\\\
        q_{inter-elm \parallel} & = 3 \frac{MW}{m^2} \\\\
        \lambda_{q, inter-elm} & = 0.17 m
-    $$
     """
     q_elm = 5e6 * np.exp(-(drsep) / 0.09)
     q_inter = 3e6 * np.exp(-(drsep) / 0.17)
