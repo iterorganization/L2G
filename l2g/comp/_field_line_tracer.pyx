@@ -667,6 +667,10 @@ cdef class FieldLineTracer:
         else:
             log.info("Starting FLT on mesh...")
 
+        if self.recalculate_magnetic_data:
+            log.error("Magnetic data was not processed. Run flt_obj.processMagneticData()!")
+            return
+
         start = perf_counter()
         ## Setting the input data
         # Acquire the number of threads
