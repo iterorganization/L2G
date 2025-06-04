@@ -2,6 +2,9 @@ if __name__ != "__main__":
     import sys
     sys.exit(0)
 
+import matplotlib
+matplotlib.use('QtAgg')
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
@@ -120,6 +123,8 @@ def createShadow():
 
     return points_x_y_z, np.asarray(tri.simplices, np.uint32)
 tg_points, tg_tri = createTarget()
+
+tr = tg_tri[0]
 sh_points, sh_tri = createShadow()
 
 # f = plt.figure()
@@ -137,11 +142,13 @@ sh_points, sh_tri = createShadow()
 # ax.set_zlim(mid_z - max_range, mid_z + max_range)
 # plt.show()
 
-from l2g.comp.core import PyEmbreeAccell
+import l2g
+from l2g.external.embree import PyEmbreeAccell
 import l2g.comp
 import l2g.equil
-import l2g
+import l2g.mesh
 l2g.enableLogging()
+l2g.addStreamHandler()
 
 # Construct fake Equilibrium
 
@@ -163,7 +170,7 @@ equilibrium.fpol_vacuum = FPOL_vaccuum
 # Custom wall silhouette.
 # Spanning in radial direction from 1 - 5 units and heigh of -2 to 8
 equilibrium.wall_contour_r = [1.0, 1.0, 5.0, 5.0]
-equilibrium.wall_contour_z = [-2, 8, 8, -2]
+equilibrium.wall_contour_z = [-2.0, 8.0, 8.0, -2.0]
 
 # Boundary flux value
 equilibrium.psi_boundary = 1.0
@@ -172,11 +179,16 @@ equilibrium.psi_axis = 0.0
 # Position of magnetic axis
 equilibrium.mag_axis_r = 2
 equilibrium.mag_axis_z = 2
+# Direction of toroidal current
+equilibrium.psi_sign = 1
 
 case = l2g.comp.FieldLineTracer()
 case.name = "synthetic"
 
 # set target data
+# Target is already in meters!
+case.parameters.target_to_m = 1
+case.parameters.shadow_to_m = 1
 case.setTargetData(tg_points.flatten(), tg_tri.flatten())
 
 # Set equilibrium data
@@ -192,29 +204,26 @@ embreeObj.commitMesh(tg_points.flatten(), tg_tri.flatten())
 case.setEmbreeObj(embreeObj)
 
 case.parameters.time_step = 0.01 # toroidal angle resolution
-case.parameters.time_end = 2.5 # in radians, toroidally
+case.parameters.max_fieldline_length = 1.0 # in meters
 # Shadow dimension multiplier to be used when processing data
-case.parameters.num_of_threads = 4 # Number of OMP threads default
+case.parameters.num_of_threads = 8 # Number of OMP threads default
 # On which side do we take the LCFS parameters. Inner midplane or outer
-case.parameters.side = "iwl"
-case.hlm_params.hlm_type = "single_exp"
-case.hlm_params.p_sol = 7.5e6
-case.hlm_params.lambda_q = 0.012 # Main lambda, also default
 case.parameters.self_intersection_avoidance_length = 0.0005
-case.parameters.time_end = 30
 
-# Target is already in meters!
-case.parameters.target_to_m = 1
-case.parameters.shadow_to_m = 1
 
 # Finally, to commit changes
 case.applyParameters() # Propagates parameters
 
-# Run FLT
-case.runFltOnMesh()
+# Prepare the magnetic data
+case.processMagneticData()
 
-# Save results to vtk
-l2g.comp.save_results_to_vtk(case.mesh_results, f"{case.name}.vtu")
+# Run FLT
+case.runFLT()
+
+# Save results to vtk.
+case.results.vertices = tg_points.flatten()
+case.results.triangles = tg_tri.flatten()
+l2g.mesh.save_results_to_vtk(case.results, f"{case.name}.vtu")
 
 
 # FL ids
@@ -225,4 +234,4 @@ case.options.switch_getFL_with_FLT = False # This is the default setting
 # Same settings as before, nothing to change. Now let's get those Fls
 case.getFL()
 
-l2g.comp.save_results_to_vtk(case.fl_results, f"{case.name}_fls.vtk")
+l2g.mesh.save_results_to_vtk(case.fl_results, f"{case.name}_fls.vtk")

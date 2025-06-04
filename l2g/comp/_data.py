@@ -53,7 +53,9 @@ class L2GResults:
         "geom_hit_ids", # Provided by External C++
         "prim_hit_ids", # Provided by External C++
         "empty",
-        "recalculate" # Used by processMagneticData in FieldlineTracer.
+        "recalculate", # Used by processMagneticData in FieldlineTracer.
+        "triangles",
+        "vertices"
         ]
 
     arrays_to_dump = [
