@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+
+import argparse
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+import imas
+import imas.imasdef
+
+def overlapping_interval(x1, x2, y1, y2):
+    if max(x1,y1) > min(x2, y2):
+        return None
+
+    return max(x1, y1), min(x2, y2)
+
+description = """Plots the Psol and Ip of an IMAS scenario as well as showing
+diverted and limiter time intervals.
+"""
+
+parser = argparse.ArgumentParser(description=description)
+parser.add_argument('-s', '--shot', metavar='SHOT', type=int,
+                    help='Shot number',
+                    required=True)
+parser.add_argument('-r', '--run', metavar='RUN', type=int,
+                    help='Run number', required=True)
+parser.add_argument('-u', '--user', metavar='USER', type=str, default="public",
+                    help='Username')
+parser.add_argument('-d', '--device',
+                    metavar="DEVICE", type=str, default="ITER", help='Device')
+
+args = parser.parse_args()
+
+device = args.device
+shot = args.shot
+run = args.run
+user = args.user
+
+ids = imas.DBEntry(backend_id=imas.imasdef.MDSPLUS_BACKEND, user_name=user,
+    db_name=device, shot=shot, run=run, data_version="3")
+ids.open()
+summary = ids.get("summary")
+
+TITLE=f"s={shot} r={run}"
+
+
+# Quantities
+ip_vals = summary.global_quantities.ip.value
+Psol = summary.global_quantities.power_loss.value
+ip_vals = np.abs(np.asarray(ip_vals))
+psol_vals = np.asarray(Psol)
+time = summary.time
+
+# Find border from Limiter to Diverted
+plasma_type = summary.boundary.type.value # 0 - limiter, 1 - diverted
+
+# Regions for different plasma types.
+
+# Find the first border from limiter to diverted
+diff_plasma_type = np.diff(plasma_type)
+
+# Find first transition from 0 to 1
+ind_diff_plasma_type = np.where(diff_plasma_type != 0)[0].tolist() # Switching types
+# Also add the end
+ind_diff_plasma_type.append(summary.time.size-1)
+
+# Comment this if you do not want this or set the value 1.0 in the if statement
+# to a much lower value.
+to_prune = []
+# Now check if any time intervals are way too short
+for i in range(len(ind_diff_plasma_type)-1):
+    time_diff = time[ind_diff_plasma_type[i+1]] - time[ind_diff_plasma_type[i]]
+    # print("time_diff", time_diff)
+    if time_diff < 1.0: # Less than one second
+        to_prune.append(i)
+        to_prune.append(i+1)
+
+# Prune in reverse
+for i in to_prune[::-1]:
+    ind_diff_plasma_type.pop(i)
+
+
+# Now let's set the H/L mode thingies
+# Find the interval that is diverted mode
+diff_ip = np.diff(np.sign(np.abs(summary.global_quantities.ip.value) - 20e6))
+ind_diff_ip = [0] + np.where(diff_ip != 0)[0].tolist() + [summary.time.size-1]
+
+
+figure = plt.figure()
+ax = figure.add_subplot(111)
+ax.set_title(TITLE)
+ax.grid(True)
+
+ax.plot(time, ip_vals*1e-6, color='r', label=r'$I_p$')
+ax.plot(time, psol_vals*1e-6, color='g', label=r'$P_{sol}$')
+
+# Plot the plasma type limiter
+ylim =ax.get_ylim()
+y_length = ylim[1] - ylim[0]
+xlim = ax.get_xlim()
+x_length = xlim[1] - xlim[0]
+
+sta = 0
+for ind in ind_diff_plasma_type:
+
+    if plasma_type[sta+1] == 0:
+        # Limiter
+        label = "Limiter"
+        color = "r"
+    else:
+        # Diverted
+        label = "Diverted"
+        color = "b"
+
+        # for ip_ind in range(len(ind_diff_ip)-1):
+        #     overlap = overlapping_interval(ind_diff_ip[ip_ind], ind_diff_ip[ip_ind+1], sta, ind)
+        #     if overlap is None:
+        #         continue
+
+        #     if abs(summary.global_quantities.ip.value[overlap[0]+2]) < 20e6:
+        #         # ip_label = r"L-mod $[I_p < 10MA]$"
+        #         ip_label = r"L-mod"
+        #         ip_c = "y"
+        #     else:
+        #         ip_label = r"H-mod $[I_p >= 10MA]$"
+        #         ip_c = "g"
+        #     print(overlap)
+        #     region = ax.axvspan(xmin=time[overlap[0]], xmax=time[overlap[1]], ymin=0.6, ymax=0.8, color=ip_c, alpha=0.1)
+        #     (x0, y0), (x1, y1) = region.get_path().get_extents().get_points()
+        #     ax.text((x0 + x1) / 2, (y0 + y1) / 2 * y_length, ip_label, ha='center', va='center', rotation='horizontal', fontsize=10, color="crimson")
+        #     ax.text(x1, y_length*0.6, f"t={time[overlap[1]]:.2f}s", ha='center')
+    region = ax.axvspan(xmin=time[sta], xmax=time[ind], ymin=0.8, ymax=1, color=color, alpha=0.13)
+    # print(type(region), ax.get_ylim())
+    (x0, y0), (x1, y1) = region.get_path().get_extents().get_points()
+    ax.text((x0 + x1) / 2, (y0 + y1) / 2 * y_length, label, ha='center', va='center', rotation='horizontal', fontsize=12, color="crimson")
+
+    # Also specify the time value on the border
+    ax.text(x1, y_length*0.95, f"t={time[ind]:.2f}s", ha='center', rotation='vertical')
+    sta = ind + 1
+
+# FOR THE L-H mod transition line. Need to find other ways to determine the
+# transition!
+# ax.hlines(10, 0, time[-1])
+# ax.text(x_length*0.6, 12, f"L-H mod transition line [10MA]", ha="center", va="center")
+
+ax.set_ylabel('Ip [MA], Psol [MW]')
+ax.set_xlabel('Time [s]')
+ax.legend()
+
+
+
+plt.show()
