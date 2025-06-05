@@ -5,7 +5,7 @@ separatrixes.
 """
 
 
-parser = argparse.ArgumentParser(description='Create EQDSK from IDS time slice')
+parser = argparse.ArgumentParser(description=description)
 
 parser.add_argument('-s', '--shot', metavar='SHOT', type=int,
                     help='Shot number',

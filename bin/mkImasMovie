@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 import argparse
-description = """From an IMAS IDS create a move of the LCFS or
-separatrixes.
+description = """Create a GIF movie of the boundaries (either separatrixes or
+LCFS) from an IMAS Equilibrium IDS.
 """
 
-
-parser = argparse.ArgumentParser(description='Create EQDSK from IDS time slice')
+parser = argparse.ArgumentParser(description=description)
 
 parser.add_argument('-s', '--shot', metavar='SHOT', type=int,
                     help='Shot number',
