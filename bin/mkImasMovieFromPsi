@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import argparse
-description = """From an IMAS IDS create a move of the LCFS or
+description = """From an IMAS IDS create a movie of the LCFS or
 separatrixes.
 """
 
