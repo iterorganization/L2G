@@ -4,7 +4,7 @@
 
 L2G modules is a suit for running FLT (FieldLine Tracing). It is a library
 that gives functionality to prepare FLT cases, run it and post-process it. For
-it's kernel it uses the L2G_cpp C++ library, wrapped with Cython. L2G_cpp is a
+it's kernel it uses the YAFLT C++ library, wrapped with Cython. YAFLT is a
 C++ library that follows magnetic fieldlines in a tokamak. The library solves
 the FL equation in a cylindrical coordinate system and for FLT it uses the
 Embree3 RT kernel to test if FL intersect any loaded shadowing geometry. It is
@@ -16,10 +16,10 @@ equilibrium data.
 To build the module run the following command in a linux system:
 
 ```shell
-EMBREE_ROOT_DIR=/path/to/embree L2G_CPP_ROOT_DIR=/path/to/L2G_cpp EMBREE_VERSION=3 \
+EMBREE_ROOT_DIR=/path/to/embree L2G_CPP_ROOT_DIR=/path/to/yaflt EMBREE_VERSION=3 \
 python -m pip install . --no-deps
 ```
-or if the Embree3 and L2G_CPP are EasyBuild modules simply load the modules and
+or if the Embree3 and YAFLT are EasyBuild modules simply load the modules and
 call
 
 ```shell
@@ -28,7 +28,7 @@ python -m pip install . --no-deps
 
 The development packages of the C++ kernel and Embree are required for
 successful compilation. The C++ kernel is compatible with Embree4, you must 
-simply define EMBREE_VERION=4. If the EMBREE_VERSION is created by an 
+simply define EMBREE_VERSION=4. If the EMBREE_VERSION is created by an 
 environment software and is in fact a semver, the setup.py will only take the
 leading digit, as only the major version value is required.
 
@@ -36,11 +36,11 @@ leading digit, as only the major version value is required.
 
 Third party C++ (non python) dependencies are:
 
- - L2G_cpp C++ kernel (https://git.iter.org/projects/TRAJ/repos/yaflt)
+ - YAFLT C++ kernel (https://github.com/iterorganization/YAFLT)
  - Embree (https://github.com/RenderKit/embree)
 
 Every other dependency is run-time dependency and not required for building the
-package (and it's Cython extension).
+package (and its Cython extension).
 
 # Building documentation
 
