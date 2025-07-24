@@ -66,8 +66,8 @@ if [ "${REDIRECT_OUTPUT_TO_LOG_FILE}" = "1" ]; then
     echo "Log file: ${LOG_NAME}"
 fi
 
-# Defaults to gen10
-PARTITION_NAME=${PARTITION_NAME:-"gen10"}
+# Defaults to sun
+PARTITION_NAME=${PARTITION_NAME:-"sun"}
 
 # Just to be sure, when generating graphics on compute nodes, use Agg for
 # matplotlib backend. Otherwise an error "could not connect to display"
