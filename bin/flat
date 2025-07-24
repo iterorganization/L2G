@@ -742,6 +742,10 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
                 result_file.addField(array_name="normals",
                                      array=flt_obj.normals,
                                      info_on_components=['x', 'y', 'z'])
+                ipprint("INFO: Saving barycenter for the first time")
+                result_file.addField(array_name="barycenter",
+                                     array=np.array(flt_obj.debug_getCPoints()),
+                                     info_on_components=["R", "Z", "theta"])
 
             ipprint(f"INFO: Writing results to {result_file_name}")
             # The main FLT result field
