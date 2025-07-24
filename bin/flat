@@ -983,6 +983,7 @@ def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
 
     xlim = kwargs.get("xlim")
     ylim = kwargs.get("ylim")
+    side = getVal(kwargs, 'side', 'iwl')
 
     for index, associated_time, equilibrium in equil_obj:
 
@@ -1052,7 +1053,7 @@ def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
         obj.setData(equilibrium.grid_r, equilibrium.grid_z,
                     equilibrium.psi * eq.psi_grad_sign)
 
-        Rb, Zc, Btotal, Bpm = eq.getMidplaneInfo()
+        Rb, Zc, Btotal, Bpm = eq.getMidplaneInfo(which=side)
 
         if eq_type == "div":
             contourPaths = obj.getContourPath(psi_boundary)
@@ -1302,6 +1303,7 @@ graphics_subparser.add_argument('--xmin', help="Minimum of X-axis. Ignored if xm
 graphics_subparser.add_argument('--xmax', help="Maximum of X-axis. Ignored if xmin is not set", type=float)
 graphics_subparser.add_argument('--ymin', help="Minimum of Y-axis. Ignored if ymax is not set", type=float)
 graphics_subparser.add_argument('--ymax', help="Maximum of Y-axis. Ignored if ymin is not set", type=float)
+graphics_subparser.add_argument('--side', help="Midplane side selection for plotting heat load profiles. Either iwl or owl. Defaults to owl", type=str)
 
 print_subparser = subparsers.add_parser('print', help="Print the names of the blocks in YAML file")
 print_subparser.add_argument('yaml_file', help="Path to YAML file")
@@ -1376,6 +1378,8 @@ if __name__ == "__main__":
             kwargs["xlim"] = (args.xmin, args.xmax)
         if args.ymin and args.ymax:
             kwargs["ylim"] = (args.ymin, args.ymax)
+        if args.side:
+            kwargs["side"] = args.side
         create_graphics(EQUILI_D, HLM_D, **kwargs)
         sys.exit()
 
