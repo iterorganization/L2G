@@ -685,8 +685,8 @@ cdef class EQA:
             fl = self.c_BI_DATA.val
 
             if (pr_fl - flux) * (fl - flux) < 0.0:
-                b = a + i * da
-                a = b - da
+                b = st + i * da - self.r_displ
+                a = st + (i - 1) * da - self.r_displ
                 found_borders = True
                 break
 
