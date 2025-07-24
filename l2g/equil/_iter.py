@@ -281,6 +281,15 @@ class EquilibriumIterator(object):
     def __getitem__(self, i) -> tuple[int, float, "Equilibrium"]:
         return i, self._times[i], self._equilibriums[i]
 
+    def applyBtMultiplier(self, bt_multiplier: float) -> None:
+        """Applies a factor to the Bt (fpol_vacuum) value.
+
+        Arguments:
+            bt_multiplier (float): Float.
+        """
+        for equilibrium in self._equilibriums:
+            equilibrium.fpol_vacuum *= bt_multiplier
+
     def applyWallSilhouetteShift(self, r_shift: float, z_shift: float) -> None:
         """Applies a singular shift to all of the wall silhouettes stored
         inside.
@@ -305,7 +314,7 @@ class EquilibriumIterator(object):
             z_shift (float): Vertical shift. In meters
 
         Returns:
-            status(bool): True if it is appled okay, false otherwise.
+            status(bool): True if it is applied okay, false otherwise.
 
         """
 

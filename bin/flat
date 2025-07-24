@@ -246,6 +246,7 @@ def check_yaml(path_to_yaml_file: str):
                         ["plasma_z_displ", (float, list), d, isOptional],
                         ["wall_silh_r_shift", (float, list), d, isOptional],
                         ["wall_silh_r_shift", (float, list), d, isOptional],
+                        ["bt_multiplier", float, d, isOptional]
                     ]
                 case "hlm":
                     check_if_var_exists("hlm_type", str, d)
@@ -534,6 +535,9 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
         pprint(f"wall_silh_z_shift: {wall_silh_z_shift}")
         equil_obj.applyWallSilhouetteShift(wall_silh_r_shift, wall_silh_z_shift)
 
+    bt_multiplier = getVal(eqid, "bt_multiplier", 1.0)
+    if bt_multiplier != 1.0:
+        equil_obj.applyBtMultiplier(bt_multiplier)
 
     import l2g.mesh
     ## Preparing geometry
