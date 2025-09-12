@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 # Converts fields of a MED file to MATLAB format.
 
 from scipy.io import loadmat

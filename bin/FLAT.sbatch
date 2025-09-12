@@ -15,6 +15,11 @@ fi
 export PYTHONUNBUFFERED=1 # So that we continuously get python output
 # $1 is the json file
 
+# Just to be sure, when generating graphics on compute nodes, use Agg for
+# matplotlib backend. Otherwise an error "could not connect to display"
+# will crash the run
+export MPLBACKEND=Agg
+
 flat "$@"
 
 date

@@ -4,7 +4,7 @@ import argparse
 
 import matplotlib.pyplot as plt
 import numpy as np
-
+import sys
 import imas
 import imas.imasdef
 
@@ -28,6 +28,10 @@ parser.add_argument('-u', '--user', metavar='USER', type=str, default="public",
                     help='Username')
 parser.add_argument('-d', '--device',
                     metavar="DEVICE", type=str, default="ITER", help='Device')
+parser.add_argument('-v', '--version',
+                    metavar="VERSION", type=str, default="3", help="DD version")
+parser.add_argument('-b', '--backend',
+                    metavar="BACKEND", type=str, default="mdsplus", help="UAL backend. 'mdsplus', or 'hdf'")
 
 args = parser.parse_args()
 
@@ -35,9 +39,19 @@ device = args.device
 shot = args.shot
 run = args.run
 user = args.user
+version = args.version
 
-ids = imas.DBEntry(backend_id=imas.imasdef.MDSPLUS_BACKEND, user_name=user,
-    db_name=device, shot=shot, run=run, data_version="3")
+backend = imas.imasdef.MDSPLUS_BACKEND
+if not args.backend is None:
+    if args.backend == "mdsplus":
+        pass
+    elif args.backend == "hdf5":
+        backend = imas.imasdef.HDF5_BACKEND
+    else:
+        sys.exit("Wrong backend provided. Either hdf5 or mdsplus")
+
+ids = imas.DBEntry(backend_id=backend, user_name=user,
+    db_name=device, shot=shot, run=run, data_version=version)
 ids.open()
 summary = ids.get("summary")
 

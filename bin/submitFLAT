@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+# Let's first see if Flat exists
+if ! [ -x "$(command -v flat)" ]; then
+    echo "Error: flat is not installed"
+    exit 1
+fi
+
 declare -a flatopts
 flatopts=()
 
@@ -44,6 +50,13 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Let's first check the YAML file with flat
+flatcheckout=$(flat check ${CONF_FILE} 2>&1)
+if [ ! $? -eq 0 ]; then
+    echo "${flatcheckout}"
+    exit 1
+fi
+
 SCRIPTPATH="$( cd -- "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 
 JOB_NAME="${flatopts[2]}-${flatopts[3]}" # The second command relates to the geometry
@@ -68,11 +81,6 @@ fi
 
 # Defaults to sun
 PARTITION_NAME=${PARTITION_NAME:-"sun"}
-
-# Just to be sure, when generating graphics on compute nodes, use Agg for
-# matplotlib backend. Otherwise an error "could not connect to display"
-# will crash the run
-export MPLBACKEND=Agg
 
 #                                        Get CPU number string
 #                                                |                                  Remove alpha characters [28+ -> 28]

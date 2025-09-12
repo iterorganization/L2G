@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 description = """Script for obtaining the disruption profiles from the
 Disruption IDS in the IMAS IMAS_DISRUPTIONS database.
@@ -72,10 +72,15 @@ parser.add_argument('-te', '--time-end', help="End of the time interval",
                     metavar="TIME_END", default=float("inf"), type=float)
 parser.add_argument('-n', '--number-of-samples', help="Number of samples",
                     metavar="N_SAMPLES", default=-1, type=int)
+parser.add_argument('-v', '--version',
+                    metavar="VERSION", type=str, default="3", help="DD version")
+parser.add_argument('-b', '--backend',
+                    metavar="BACKEND", type=str, default="mdsplus", help="UAL backend. 'mdsplus', or 'hdf'")
 args = parser.parse_args()
 
 import os
 import sys
+import imas
 
 SHOT=args.shot
 RUN=args.run
@@ -84,20 +89,32 @@ DEVICE=args.device
 OUTPUT_DIRECTORY=os.path.abspath(os.path.expanduser(args.output_directory))
 TIME_START = args.time_start
 TIME_END = args.time_end
+VERSION = args.version
 
-import imas
+if args.backend == "mdsplus":
+    BACKEND=imas.imasdef.MDSPLUS_BACKEND
+elif args.backend == "hdf5":
+    BACKEND = imas.imasdef.HDF5_BACKEND
+else:
+    BACKEND = None
+
 import numpy as np
 
 entry = imas.DBEntry(shot=SHOT, run=RUN, user_name=USER, db_name=DEVICE,
-                     backend_id=imas.imasdef.MDSPLUS_BACKEND)
+                     backend_id=BACKEND, data_version=VERSION)
 code, _ = entry.open()
 
 if code != 0:
     sys.exit(code)
 
 # Get the times
+try:
+    wall = entry.get("wall")
+except:
+    print("Falling back in getting wall")
+    wall = l2g.getBackUpIMASWallIds()
+
 summary = entry.get("summary")
-wall = entry.get("wall")
 
 mask = np.logical_and(summary.time >= TIME_START, summary.time <= TIME_END)
 tsteps = summary.time[mask]

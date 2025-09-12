@@ -1,4 +1,4 @@
-#!/home/ITER/simicg/venvs/sflt/bin/python
+#!/usr/bin/env python3
 
 import imas
 import l2g.equil
