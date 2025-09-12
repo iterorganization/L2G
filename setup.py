@@ -191,6 +191,7 @@ setup(
                 "l2g.settings", "l2g.mesh",
                 "l2g.external"],
     data_files = [('', getDataFiles())],
+    package_data={"": ["*.pyi"]},
     scripts = ['bin/flat', 'bin/submitFLAT', 'bin/FLAT.sbatch',
                'bin/imas2eqdsk', 'bin/mkEqdskMovie', 'bin/mkImasMovie',
                'bin/mkImasMovieFromPsi',
