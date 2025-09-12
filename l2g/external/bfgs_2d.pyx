@@ -57,8 +57,11 @@ cdef class PyBfgs2d:
         self.by2 = 4000000.0
         self._store = []
 
-    def setInterpolator(self, PyBicubic obj):
+    def setInterpolator(self, obj: PyBicubic) -> None:
         """Sets the Bicubic interpolator.
+
+        Argument:
+            obj (l2g.external.bicubic.PyBicubic): 2D Bicubic object,
         """
         self.c_bicubic = obj.c_bicubic
         self.c_bicubic.populateContext(&self.c_BI_DATA)
@@ -70,7 +73,7 @@ cdef class PyBfgs2d:
         self.c_bicubic = interp
         self.c_bicubic.populateContext(&self.c_BI_DATA)
 
-    def setBounds(self, double x1, double x2, double y1, double y2):
+    def setBounds(self, x1: float, x2: float, y1: float, y2: float) -> None:
         """Set the bounds of the search area.
 
         Arguments:
@@ -476,7 +479,7 @@ cdef class PyBfgs2d:
             return 1.0
         return aout
 
-    def findMinimum(self, double guess_x, double guess_y, int max_it):
+    def findMinimum(self, guess_x: float, guess_y: float, max_it: int) -> tuple[int, float, float]:
         """This is a gradient-descent minimizer function that  tries to find a
         point in the function domain space where the gradient is close to
         zero.
@@ -643,7 +646,7 @@ cdef class PyBfgs2d:
         log.debug(f"Finished on {x} {y}")
         return out_of_bounds, x, y
 
-    def secondDerivativeTest(self, double x, double y) -> bool:
+    def secondDerivativeTest(self, x: float, y: float) -> bool:
         """Return the value of the second derivative test D.
 
         D = fxx fyy - fxy**2

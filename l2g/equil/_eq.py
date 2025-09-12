@@ -21,7 +21,7 @@ class SplineInterpolator(object):
           duplication everywhere with the displacement offsets.
     """
     def __init__(self):
-        self.Interp = None
+        self.Interp: RectBivariateSpline = None
         self.r_displ = 0.0
         self.z_displ = 0.0
 

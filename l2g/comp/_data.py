@@ -100,19 +100,19 @@ class L2GResults:
                 # Do nothing. Maybe we should at least zero the arrays.
                 pass
             else:
-                self.normals:       Optional[np.ndarray] = np.empty(3*N, dtype=np.float64)
-                self.flux:          Optional[np.ndarray] = np.empty(N, dtype=np.float64)
-                self.BVec:          Optional[np.ndarray] = np.empty(3*N, dtype=np.float64)
-                self.BVecCyln:      Optional[np.ndarray] = np.empty(2*N, dtype=np.float64)
-                self.Bdot:          Optional[np.ndarray] = np.empty(N, dtype=np.float64)
-                self.angle:         Optional[np.ndarray] = np.empty(N, dtype=np.float64)
-                self.mask:          Optional[np.ndarray] = np.empty(N, dtype=np.float64)
-                self.direction:     Optional[np.ndarray] = np.empty(N, dtype=np.int32)
-                self.conlen:        Optional[np.ndarray] = np.empty(N, dtype=np.float64)
-                self.drsep:         Optional[np.ndarray] = np.empty(N, dtype=np.float64)
-                self.drsep2:        Optional[np.ndarray] = np.empty(N, dtype=np.float64)
-                self.geom_hit_ids:  Optional[np.ndarray] = np.empty(N, dtype=np.int32)
-                self.prim_hit_ids:  Optional[np.ndarray] = np.empty(N, dtype=np.int32)
+                self.normals      = np.empty(3*N, dtype=np.float64)
+                self.flux         = np.empty(N, dtype=np.float64)
+                self.BVec         = np.empty(3*N, dtype=np.float64)
+                self.BVecCyln     = np.empty(2*N, dtype=np.float64)
+                self.Bdot         = np.empty(N, dtype=np.float64)
+                self.angle        = np.empty(N, dtype=np.float64)
+                self.mask         = np.empty(N, dtype=np.float64)
+                self.direction    = np.empty(N, dtype=np.int32)
+                self.conlen       = np.empty(N, dtype=np.float64)
+                self.drsep        = np.empty(N, dtype=np.float64)
+                self.drsep2       = np.empty(N, dtype=np.float64)
+                self.geom_hit_ids = np.empty(N, dtype=np.int32)
+                self.prim_hit_ids = np.empty(N, dtype=np.int32)
 
         self.empty = True
         self.recalculate = True
@@ -126,22 +126,26 @@ class L2GResults:
             return
 
         try:
-            import vtk
-            from vtk.util import numpy_support
+            from vtkmodules.vtkCommonCore import vtkPoints
+            from vtkmodules.vtkCommonDataModel import (vtkUnstructuredGrid,
+                                                       vtkCellArray,
+                                                       vtkTriangle)
+            from vtkmodules.util.vtkConstants import VTK_TRIANGLE
+            from vtkmodules.util import numpy_support
         except ImportError as e:
             log.error("VTK not available")
             return None
 
 
-        data = vtk.vtkUnstructuredGrid()
-        points = vtk.vtkPoints()
-        cells = vtk.vtkCellArray()
+        data = vtkUnstructuredGrid()
+        points = vtkPoints()
+        cells = vtkCellArray()
         N_vertices = len(self.vertices) // 3
         for i in range(N_vertices):
             points.InsertPoint(i, self.vertices[i*3:i*3+3])
         N_cells = len(self.triangles) // 3
         for i in range(N_cells):
-            triangle = vtk.vtkTriangle()
+            triangle = vtkTriangle()
             pointIds = triangle.GetPointIds()
 
             pointIds.SetId(0, self.triangles[3*i])
@@ -149,7 +153,7 @@ class L2GResults:
             pointIds.SetId(2, self.triangles[3*i+2])
             cells.InsertNextCell(triangle)
         data.SetPoints(points)
-        data.SetCells(vtk.VTK_TRIANGLE, cells)
+        data.SetCells(VTK_TRIANGLE, cells)
 
         cellData = data.GetCellData()
         for key in self.arrays_to_dump:
@@ -187,10 +191,10 @@ class L2GFLs:
     def __init__(self):
         # List of Ids
         self.points: Optional[np.ndarray] = None
-        self.target_to_m: Optional[int] = 1.0 # What inverse scale to use to
-                                                 # transform to the same
-                                                 # unit dimension as used
-                                                 # target.
+        self.target_to_m: Optional[float] = 1.0 # What inverse scale to use to
+                                                # transform to the same
+                                                # unit dimension as used
+                                                # target.
 
     def generate_vtk_object(self):
         if self.points is None:
@@ -198,17 +202,20 @@ class L2GFLs:
             return None
 
         try:
-            import vtk
-            from vtk.util import numpy_support
+            from vtkmodules.vtkCommonCore import vtkPoints
+            from vtkmodules.vtkCommonDataModel import (vtkCellArray,
+                                                       vtkPolyLine,
+                                                       vtkPolyData)
+            from vtkmodules.util import numpy_support
         except ImportError as e:
             log.error("VTK not available")
             return None
 
         N_points = np.sum([len(_) for _ in self.points]) // 3
 
-        data = vtk.vtkPolyData()
-        points = vtk.vtkPoints()
-        cells = vtk.vtkCellArray()
+        data = vtkPolyData()
+        points = vtkPoints()
+        cells = vtkCellArray()
         points.SetNumberOfPoints(N_points)
         id_offset = 0
 
@@ -230,7 +237,7 @@ class L2GFLs:
             y = r * np.sin(phi)
             nfl = len(r)
             lengths.append(getLineLength(x, y, z))
-            polyline = vtk.vtkPolyLine()
+            polyline = vtkPolyLine()
             polylineIds = polyline.GetPointIds()
             polylineIds.SetNumberOfIds(nfl)
             for i in range(nfl):
@@ -270,8 +277,8 @@ class L2GResultsHLM:
         self.reset()
 
     def reset(self):
-        self.q_inc: np.ndarray = None
-        self.q_par: np.ndarray = None
-        self.flux_expansion: np.ndarray = None
+        self.q_inc: np.ndarray = np.array([])
+        self.q_par: np.ndarray = np.array([])
+        self.flux_expansion: np.ndarray = np.array([])
         self.additional_arrays: List[np.ndarray] = []
         self.empty: bool = True

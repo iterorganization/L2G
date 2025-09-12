@@ -61,7 +61,7 @@ cdef class PyRKF45FLT:
         self.c_relerr = 1e-4
         self.c_abserr = 1e-4
 
-    def setInterpolator(self, PyBicubic obj):
+    def setInterpolator(self, PyBicubic obj) -> None:
         """Sets the interpolator object that contains the data for following
         contours.
 
@@ -71,7 +71,7 @@ cdef class PyRKF45FLT:
         """
         self.c_rkf45.set_interpolator(obj.c_bicubic)
 
-    def set_r_rmove(self, double r_move):
+    def set_r_rmove(self, r_move: float) -> None:
         """Sets the radial shift of the data.
 
         Arguments:
@@ -79,7 +79,7 @@ cdef class PyRKF45FLT:
         """
         self.c_rkf45.set_r_move(r_move)
 
-    def set_z_rmove(self, double z_move):
+    def set_z_rmove(self, z_move: float) -> None:
         """Sets the vertical shift of the data.
 
         Arguments:
@@ -87,7 +87,7 @@ cdef class PyRKF45FLT:
         """
         self.c_rkf45.set_z_move(z_move)
 
-    def set_vacuum_fpol(self, double vacuum_fpol):
+    def set_vacuum_fpol(self, vacuum_fpol: float) -> None:
         """Sets the constant F = B_t R, used for calculating the toroidal
         component of the magnetic field as B_t = F / R.
 
@@ -96,7 +96,7 @@ cdef class PyRKF45FLT:
         """
         self.c_rkf45.set_vacuum_fpol(vacuum_fpol)
 
-    def run_step(self, double r, double z, double th, double time_step):
+    def run_step(self, r: float, z: float, th: float, time_step: float) -> tuple[float, float, float]:
         """Perform one step of RKF4(5) from point (r, z, th) in the Cylindrical
         coordinate system.
 
@@ -107,9 +107,7 @@ cdef class PyRKF45FLT:
             time_step (float): Size of time_step
 
         Returns:
-            r (float): New radial position
-            z (float): Vertical position
-            th (float): New toroidal angle
+            out (tuple[float, float, float]): nr, nz, nth
         """
 
         cdef:
@@ -128,7 +126,7 @@ cdef class PyRKF45FLT:
         flag = self.c_rkf45.r8_rkf45(y, yp, &time, new_time, &relerr, abserr, flag)
         return  y[0], y[1], time
 
-    def run_n_steps(self, double r, double z, double th, double time_step, int n):
+    def run_n_steps(self, r: float, z: float, th: float, time_step: float, n: int) -> tuple[float, float, float]:
         """Perform n steps of RKF4(5) from point (r, z, th) in the Cylindrical
         coordinate system.
 
@@ -140,9 +138,7 @@ cdef class PyRKF45FLT:
             n (int): Number of steps of size time_step to perform
 
         Returns:
-            r (float): New radial position
-            z (float): Vertical position
-            th (float): New toroidal angle
+            out (tuple[float, float, float]): nr, nz, nth
         """
         cdef:
             double y[2]

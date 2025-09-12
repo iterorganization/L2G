@@ -41,9 +41,7 @@ cdef class PyBicubic:
         self.c_bicubic = new BICUBIC_INTERP()
         # self.c_BI_DATA = BI_DATA()
 
-    def __init__(self, x, y, f):
-        """Initialize the class. If we provide the three arrays then
-        """
+    def __init__(self, x: np.ndarray, y: np.ndarray, f: np.ndarray):
         self.prepared: bool = False
 
         if x is None or y is None or f is None:
@@ -110,7 +108,7 @@ cdef class PyBicubic:
         self.c_bicubic.setArrays(vx, vy, vf)
         self.c_bicubic.populateContext(&self.c_BI_DATA)
 
-    def __call__(self, x, y):
+    def __call__(self, x: float | list, y: float | list) -> tuple[float, float, float] | tuple[list[float], list[float], list[float]]:
         """Passed x,y can be an array.
         """
         nx = 1
@@ -140,7 +138,7 @@ cdef class PyBicubic:
     def isPrepared(self):
         return self.prepared
 
-    def getValues(self, double x, double y):
+    def getValues(self, x: float, y: float) -> tuple[float, float, float]:
         """Returns the interpolated value of the function at point (x, y)
 
         Arguments:
@@ -159,7 +157,7 @@ cdef class PyBicubic:
 
         return self.c_BI_DATA.val, self.c_BI_DATA.valdx, self.c_BI_DATA.valdy
 
-    def getSecondDerivativeValues(self, double x, double y):
+    def getSecondDerivativeValues(self, x: float, y: float) -> tuple[float, float, float]:
         """Returns the interpolated value of the function at point (x, y)
 
         Arguments:

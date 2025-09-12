@@ -8,6 +8,8 @@ from l2g.external.embree cimport PyEmbreeAccell
 from libcpp cimport bool
 from libcpp.vector cimport vector
 
+import numpy as np
+
 import logging
 log = logging.getLogger()
 
@@ -22,7 +24,8 @@ cdef class PyFLT:
     def __init__(self):
         pass
 
-    def setPoloidalMagneticFlux(self, double [:] r, double [:] z, double [:] psi):
+    def setPoloidalMagneticFlux(self, r: np.ndarray, z: np.ndarray,
+            psi: np.ndarray):
         """Sets the poloidal magnetic data.
 
         The arrays r and z of size NDIMR, NDIMZ defines the [R, Z] domain.
@@ -50,7 +53,7 @@ cdef class PyFLT:
 
         self.c_flt.setPoloidalMagneticFlux(v_r, v_z, v_psi)
 
-    def setVacuumFPOL(self, double fpol):
+    def setVacuumFPOL(self, fpol: float):
         """Sets the poloidal current function or FPol=Bt * R value in the
         vacuum. This value is used for calculating the toroidal component of
         the magnetic field.
@@ -68,7 +71,7 @@ cdef class PyFLT:
         """
         return self.c_flt.getVacuumFPOL()
 
-    def setShift(self, double rmove, double zmove):
+    def setShift(self, rmove: float, zmove: float):
         """Sets the radial and vertical shift of the plasma.
 
         Arguments:
@@ -77,7 +80,7 @@ cdef class PyFLT:
         """
         self.c_flt.setShift(rmove, zmove)
 
-    def setAbsError(self, double abserr):
+    def setAbsError(self, abserr: float):
         """Sets the absolute error. Less than 1. Default 1e-5
 
         Arguments:
@@ -85,7 +88,7 @@ cdef class PyFLT:
         """
         self.c_flt.setAbsError(abserr)
 
-    def setRelError(self, double relerr):
+    def setRelError(self, relerr: float):
         """Sets the relative error. Less than 1. Default 1e-5
 
         Arguments:
@@ -93,7 +96,7 @@ cdef class PyFLT:
         """
         self.c_flt.setRelError(relerr)
 
-    def setDesiredStep(self, double step):
+    def setDesiredStep(self, step: float):
         """Sets the parametric time or toroidal angle end and the resolution
         at which we wish gather points or to check for intersections of a FL.
 
@@ -104,15 +107,15 @@ cdef class PyFLT:
         """
         self.c_flt.setDesiredStep(step)
 
-    def setMaximumFieldlineLength(self,double max_conlen):
-        """Sets the maximum connection length to which we follow a FL.
+    def setMaximumFieldlineLength(self,max_conlen: float):
+        """Sets the maximum fieldline length to which we follow a FL.
 
         Arguments:
-            max_conlen (double): Maximum connection length in meters.
+            max_conlen (double): Maximum fieldline length in meters.
         """
         self.c_flt.setMaximumFieldlineLength(max_conlen)
 
-    def setSelfIntersectionAvoidanceLength(self,double value):
+    def setSelfIntersectionAvoidanceLength(self,value: float):
         """Sets the initial length at which we avoid intersection tests. For
         example 0.005 (meters), this means that at the first 5 millimeters, do
         not check for intersection tests.
@@ -128,35 +131,39 @@ cdef class PyFLT:
         """
         self.c_flt.runFLT()
 
-    def getBCart(self, double r, double z, double phi):
-        """Gets the Magnetic field vector in Cartesian coordinate system. Used
-        when processing data on a geometry (getting quantities).
+    def getBCart(self, r: float, z: float, phi: float):
+        """Get the B vector at point (r, z, phi) in Cartesian coordinate
+        system.
 
-        Result is written in the out variable. (Bx, By, Bz)
+        Arguments:
+            r (float): Radial position
+            z (float): Vertical position
+            theta (float): Angle in toroidal direction
+
+        Returns:
+            out (list[float]): (Bx, By, Bz)
         """
         cdef:
             vector[double] out
         self.c_flt.getBCart(r, z, phi, out)
         return <object> out
 
-    def getBCyln(self, double r, double z):
-        """Gets the Magnetic field vector (poloidal and toroidal component)
-        in Cylindrical coordinate system. Used when processing data on a
-        geometry (getting quantities).
-
-        Result is written in the out variable. (Bpol, Btor)
+    def getBCyln(self, r: float, z: float):
+        """Get the B vector at point (r, z) in Cylindrical coordinate system.
 
         Arguments:
             r (double): Radial position
             z (double): Vertical position
-            out (vector, inout): Vector for writing values
+
+        Returns:
+            out (list[float]): (Bpol, Btor)
         """
         cdef:
             vector[double] out
         self.c_flt.getBCyln(r, z, out)
         return <object> out
 
-    def getPoloidalFlux(self, double r, double z):
+    def getPoloidalFlux(self, r: float, z: float):
         """Gets the polodidal magnetic flux value. Used when processing data on
         a geometry (getting quantities).
 
@@ -173,5 +180,8 @@ cdef class PyFLT:
         """This function is used to bind an EmbreeAccell C++ object to the
         FLT C++ object. Only pointer is used, so essentially we could switch
         different Embree objects.
+
+        Arguments:
+            embree_obj (l2g.external.embree.PyEmbreeAccell): Embree object.
         """
         self.c_flt.setEmbreeObj(obj.c_eacc)

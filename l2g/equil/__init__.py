@@ -73,10 +73,10 @@ def getBackUpIMASWallIds(shot=116000, run=4, db_name="ITER_MD",
     """
 
     import imas
-    import imas.imasdef
+    import imas_core.imasdef
 
     db_entry = imas.DBEntry(shot=shot, run=run, db_name=db_name,
-            user_name=user_name, backend_id=imas.imasdef.MDSPLUS_BACKEND)
+            user_name=user_name, backend_id=imas_core.imasdef.MDSPLUS_BACKEND)
     db_entry.open()
 
     return db_entry.get("wall")
@@ -211,7 +211,7 @@ def createEqdskFromSlice(slice, HEADER="") -> EQDSKIO:
         """
         from scipy.interpolate import interp1d
         if f.shape[0] == 0:
-            return [0 for i in range(N)]
+            return np.array([0 for i in range(N)])
 
         if f.shape[0] == N:
             return f

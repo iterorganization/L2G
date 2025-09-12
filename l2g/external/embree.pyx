@@ -124,6 +124,14 @@ cdef class PyEmbreeAccell:
                    float dz):
         """Cast an infinite ray from origin point (ox, oy, oz) with direction
         vector (dx, dy, dz).
+
+        Arguments:
+            ox (float): X-component of origin
+            oy (float): Y-component of origin
+            oz (float): Z-component of origin
+            dx (float): X-component of direction
+            dy (float): Y-component of direction
+            dz (float): Z-component of direction
         """
 
         cdef:
@@ -135,8 +143,18 @@ cdef class PyEmbreeAccell:
 
     def castRay(self, float ox, float oy, float oz, float dx, float dy,
                    float dz, float tnear, float tfar):
-        """Cast an infinite ray from origin point (ox, oy, oz) with direction
-        vector (dx, dy, dz).
+        """Cast a ray from origin point (ox, oy, oz) with direction
+        vector (dx, dy, dz), starting at distance tnear and ending at distance
+        tfar. tnear=0 means the ray starts at the (ox, oy, oz).
+
+        Arguments:
+            ox (float): X-component of origin
+            oy (float): Y-component of origin
+            oz (float): Z-component of origin
+            dx (float): X-component of direction
+            dy (float): Y-component of direction
+            dz (float): Z-component of direction
+            tfar (float): Distance along the direction.
         """
 
         self.c_eacc.castRay(ox, oy, oz, dx, dy, dz, tnear, tfar)

@@ -7,7 +7,10 @@ log.addHandler(logging.NullHandler())
 
 old_factory = logging.getLogRecordFactory()
 
-def custom_log_record_factory(*args, **kwargs):
+def custom_log_record_factory(*args, **kwargs) -> logging.LogRecord:
+    """Custom log record in order to correctly obtain information which module
+    has called logging.
+    """
     record = old_factory(*args, **kwargs)
     module_name = record.name
 
@@ -15,7 +18,7 @@ def custom_log_record_factory(*args, **kwargs):
     module = sys.modules.get(module_name)
     if module:
         # If the module has a `__file__` attribute, use it to resolve the filename
-        if hasattr(module, '__file__'):
+        if hasattr(module, '__file__') and not module.__file__ is None:
             file_name: str = module.__file__
 
             if file_name.endswith("so"):
@@ -42,8 +45,7 @@ _stream_handler = None
 fmt = '%(asctime)s %(levelname)-8s [%(filename)s:%(lineno)d] : %(message)s'
 fmt_date = '%Y-%m-%d %T'
 
-
-def addFileHandler(output_file='l2g.log'):
+def addFileHandler(output_file: str='l2g.log') -> None:
     """Add a handler to redirect logs to a file.
 
     Arguments:
@@ -58,7 +60,7 @@ def addFileHandler(output_file='l2g.log'):
     _file_handler.setFormatter(logging.Formatter(fmt, fmt_date))
     log.addHandler(_file_handler)
 
-def addStreamHandler():
+def addStreamHandler() -> None:
     """Adds a stream handler for redirecting the log output to the terminal.
     There is no streamhandler added by default, for better integration into
     GUI.
@@ -70,13 +72,13 @@ def addStreamHandler():
     _stream_handler.setFormatter(logging.Formatter(fmt, fmt_date))
     log.addHandler(_stream_handler)
 
-def enableLogging():
+def enableLogging() -> None:
     """Raises the l2g logger level to INFO.
     """
     global log
     log.setLevel(logging.INFO)
 
-def enableDebugging():
+def enableDebugging() -> None:
     """Raises the l2g logger level to DEBUG.
     """
     global log

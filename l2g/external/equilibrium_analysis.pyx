@@ -203,7 +203,7 @@ cdef class EQA:
         self.mag_axis_z = self.equilibrium.mag_axis_z
         self.psi_grad_sign = self.equilibrium.psi_sign
 
-    def setDisplacement(self, r_displ: double, z_displ: double):
+    def setDisplacement(self, r_displ: float, z_displ: float):
         self.r_displ = r_displ
         self.z_displ = z_displ
 
@@ -434,7 +434,8 @@ cdef class EQA:
         log.debug(f"Magnetic surface followed. Is it closed? {is_closed[0]}")
 
     cpdef evaluate(self):
-        """Evaluates the magnetic poloidal flux function.
+        """Evaluates the equilibrium, determining the type (div or lim) and
+        obtaining characteristic data.
         """
         cdef:
             bool is_closed=True
@@ -539,10 +540,21 @@ cdef class EQA:
         log.debug("Finished evaluating")
         self.evaluated = True
 
-    def getType(self):
+    def getType(self) -> str:
+        """Plasma type.
+        Returns:
+            plasma_type (str): Either 'div' or 'lim'
+        """
         return self.plasma_type
 
-    def getBoundaryFluxValue(self):
+    def getBoundaryFluxValue(self) -> float:
+        """Poloidal flux value of the boundary magnetic surface (either a
+        closed surface in a limiter configuration or a separatrix during
+        diverted operation). In Webb/rad.
+
+        Returns:
+            psi (float): Flux value. In Webb/rad.
+        """
         if not self.plasma_type:
             # log.error(f"No plasma type: {self.plasma_type}")
             return None
@@ -552,7 +564,13 @@ cdef class EQA:
         else:
             return self.psi_lcfs
 
-    def getSecondaryXFluxValue(self):
+    def getSecondaryXFluxValue(self) -> float:
+        """Poloidal flux value of the secondary separatrix, during a double-X
+        diverted operation. In Webb/rad.
+
+        Returns:
+            psi (float): Flux value. In Webb/rad.
+        """
         if not self.plasma_type:
             # log.error(f"No plasma type: {self.plasma_type}")
             return None
@@ -560,13 +578,28 @@ cdef class EQA:
             log.error(f"Plasma is not diverted type or does not have upper X point")
         return self.psi_upp_x
 
-    def getContactPoint(self):
+    def getContactPoint(self) -> list[float, float]:
+        """Get the contact point (R, Z) on the wall of a limiter operation.
+
+        Returns:
+            contact_point (list): (R, Z) location.
+        """
         return self.contact_point
 
-    def getLowerXPoint(self):
+    def getLowerXPoint(self) -> list:
+        """Get the lower X point (R, Z) of a diverted operation.
+
+        Returns:
+            contact_point (list): (R, Z) location.
+        """
         return self.low_x_point
 
-    def getUpperXPoint(self):
+    def getUpperXPoint(self) -> list:
+        """Get the upper X point (R, Z) of a diverted operation.
+
+        Returns:
+            contact_point (list): (R, Z) location.
+        """
         return self.upp_x_point
 
     cdef double bisection(self, double flux, double Z, double a, double b):
@@ -621,7 +654,23 @@ cdef class EQA:
         log.error("Bisection failed.")
         return 0
 
-    def getMidplaneInfo(self, lcfs: float=None, which:str='owl'):
+    def getMidplaneInfo(self, lcfs: float=None, which:str='owl') -> tuple[float, float, float, float]:
+        """Obtain the midplane information, mainly the point (Rb, Z) of where
+        the midplane starts, B total [T] (magnitude of the total magnetic
+        field at (Rb, Z)) and B pm (poloidal component of the magnetic field at
+        (Rb, Z)).
+
+        Arguments:
+            lcfs (float | None): Magnetic surface magnetic poloidal flux value
+                from which the midplane starts. Optional, by default the LCFS
+                flux value is taken.
+            which (str): Select which midplane, either inner 'iwl' or outer
+                'owl'
+
+        Returns:
+            values (tuple[float, float, float, float]): Rb [m], Z[m],
+                Btotal[T], Bpm[T]
+        """
         cdef:
             # For the bisection
             double a, b # For the borders
@@ -637,7 +686,7 @@ cdef class EQA:
 
         if not self.evaluated:
             log.erorr("Equilibrium not evaluated! Evaluate it first")
-            return None, None, None, None
+            raise Exception
 
         # Initialize the values to suppress the warnings
         flux = 0
@@ -822,7 +871,7 @@ cdef class EQA:
         sep2r = self.bisection(sep2, Z, a2, b2)
         return abs(sep1r - sep2r) * 1e3
 
-    def getPsi(self, double r, double z):
+    def getPsi(self, r: float, z: float):
         self.c_BI_DATA.r = r - self.r_displ
         self.c_BI_DATA.z = z - self.z_displ
         self.c_bicubic.getValues(&self.c_BI_DATA)
