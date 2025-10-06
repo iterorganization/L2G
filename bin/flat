@@ -987,7 +987,7 @@ def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
 
     xlim = kwargs.get("xlim")
     ylim = kwargs.get("ylim")
-    side = getVal(kwargs, 'side', 'iwl')
+    side = getVal(kwargs, 'side', 'owl')
 
     for index, associated_time, equilibrium in equil_obj:
 
