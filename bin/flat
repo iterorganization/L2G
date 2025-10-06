@@ -1372,6 +1372,10 @@ if __name__ == "__main__":
     if not (HLM_D:=hlms.get(hlm)):
         HLM_D = None
 
+    if HLM_D is None and not hlm is None:
+        epprint(f"Missing HLM {hlm} section in YAML file.")
+        sys.exit(1)
+
     if command == "plot":
         kwargs = {}
         if args.out_name:
