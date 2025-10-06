@@ -32,21 +32,114 @@ def ipprint(string, *args, **kwargs):
 def opprint(string, *args, **kwargs):
     print(f"{bcolors.OKGREEN}{string}{bcolors.ENDC}", *args, **kwargs)
 
-def check_yaml(path_to_yaml_file: str):
-    """Checks a YAML file if it has valid data for FLT running.
+SUB_DICT_KEYS = {
+    'geometry': {'name', 'type', 'parameters', 'target_mesh', 'shadow_meshes',
+                 'cutoff_conlen', 'align_lcfs', 'fl_ids', 'afl_catcher_meshes',
+                 'include_target_in_shadow', 'exclude_meshes',
+                 'longwave_misalignment'},
+    'equilibrium': {'name', 'type', 'eqdsk_files', 'plasma_r_displ',
+                    'plasma_z_displ', 'imas', 'equilibrium_type',
+                    'time_step_labels', 'bt_multiplier'},
+    'hlm': {'name', 'type', 'elm_parameters', 'loss_parameters', 'p_sol',
+            'lambda_q', 'lambda_q_main', 'lambda_q_near', 'ip_transition',
+            'hlm_type', 'extrapolate', 'outside_value', 'profile_files',
+            'ratio', 'r_break'},
 
-    Returns:
-        ok (bool): True if the YAML file is ok, else False.
+    'parameters': {'lcfs_max_align_dist', 'max_connection_length', 'abs_error',
+                   'rel_error', 'time_step', 'num_of_threads', 'time_end',
+                   'self_intersection_avoidance_length', 'side'},
+    'imas': {'shot', 'run', 'name', 'user', 'device', 'time_start', 'time_end',
+             'time_samples', 'times', 'version'},
+    'longwave_misalignment': {'vectors', 'lengths'},
+    'elm_parameters': {'E_total', 'nfil', 'sigmar', 'sigmaz', 'v_elm', 'fELM',
+                       'rg2f'},
+    'loss_parameters': {'v_elm', 'n0', 'Te0', 'Ti0', 'Aion', 'Z'},
+}
+
+from typing import Iterator
+
+IGNORE_KEYS={'__line__'}
+def check_var(data: dict, entry: str, expected, required: bool=True):
+    """Checks if a dictionary contains an expected variable.
+
+    The expected argument can be:
+        - a single type, e.g.: float
+        - a list of values, e.g.: [float]
+        - a union of types, e.g.: (int, float)
+
+    Arguments:
+        data (dict): Dictionary of values
+        entry (str): Entry to check
+        expected (object): Allowed types
+        required (bool): Is the variable required
     """
-    import os
+    OK = True
+    if entry not in data:
+        if required:
+            epprint(f"ERROR: Missing required entry: {entry}")
+            return  False
+        return True
+
+    val = data[entry]
+
+    def match_type(value: object, spec: type) -> bool:
+        """Return True if value matches spec."""
+        if isinstance(spec, list):  # list of something
+            if not isinstance(value, list):
+                return False
+            subtype = spec[0]
+            return all(isinstance(item, subtype) for item in value)
+        return isinstance(value, spec)
+
+    # Handle unions of types
+    if isinstance(expected, tuple):
+        OK = any(match_type(val, spec) for spec in expected)
+    else:
+        OK = match_type(val, expected)
+    if not OK:
+        epprint(f"ERROR: Entry {entry} is of wrong type! Should be {expected} but it is {type(entry)}")
+    return OK
+
+def check_if_var_is_otherwise_valid(key: str) -> tuple[bool, list[str]]:
+    out = []
+    ok = False
+    for group in SUB_DICT_KEYS:
+        if key in SUB_DICT_KEYS[group]:
+            ok = True
+            out.append(group)
+
+    return ok, out
+
+def check_for_typos(data: dict, KEYS: set) -> bool:
+    """Go through dictionary and check the keys for typos against a set of
+    allowed keys.
+    """
+    import difflib
+    ok = True
+    for key in data:
+        if key in IGNORE_KEYS:
+            continue
+        if key not in KEYS:
+            possible_match = difflib.get_close_matches(key, KEYS, n=1)
+            ok = False
+            if possible_match:
+                epprint(f"TYPO: Incorrect entry '{key}'. Did you mean '{possible_match[0]}'?")
+                continue
+
+            is_valid, group = check_if_var_is_otherwise_valid(key)
+            if is_valid:
+                epprint(f"TYPO: Entry '{key}' is valid, however placed in the wrong position. Should be placed under {group} group(s).")
+            else:
+                epprint(f"TYPO: Incorrect entry '{key}'.")
+        if isinstance(data[key], dict) and key != "fl_ids":
+            ok &= check_for_typos(data[key], SUB_DICT_KEYS[key])
+
+    return ok
+
+def read_yaml_file(file: str) -> Iterator:
     import sys
     import yaml
-
     from yaml.loader import SafeLoader
-    YAML_TYPES = ["geometry", "equilibrium", "hlm"]
-
-    IS_OK = True
-
     ####
     # Subclassing SafeLoader in order to obtain line numbers as a form of entry
     # __line__.
@@ -57,273 +150,223 @@ def check_yaml(path_to_yaml_file: str):
             mapping['__line__'] = node.start_mark.line + 1
             return mapping
 
-    class WrongValue(Exception):
-        pass
-
-    class EntryDoesntExistException(Exception):
-        pass
-
-    class WrongTypeException(Exception):
-        pass
-
-    class FileDoesntExistException(Exception):
-        pass
-
-    def check_if_var_exists(name: str, _type: type | tuple[type, ...], d: dict,
-                            optional: bool=False, isFile: bool=False) -> bool:
-        if name not in d:
-            if not optional:
-                raise EntryDoesntExistException(f"{bcolors.FAIL}ERROR: Entry {name} does not exist{bcolors.ENDC}")
-            return False
-
-        if isinstance(d[name], list):
-            if not all([isinstance(_, _type) for _ in d[name]]):
-                raise WrongTypeException(f"{bcolors.FAIL}ERROR: Wrong type for {name}. Check it's entry: {d[name]}{bcolors.ENDC}")
-        else:
-            if not isinstance(d[name], _type):
-                raise WrongTypeException(f"{bcolors.FAIL}ERROR: Wrong type for {name}. Check it's entry: {d[name]}{bcolors.ENDC}")
-
-        if isFile:
-            if not os.path.exists(d[name]):
-                raise FileDoesntExistException(f"{bcolors.FAIL}ERROR: File for {name} entry does not exist: {d[name]}.{bcolors.ENDC}")
-
-        return True
-
-    def check_list_of_paths(name: str, d: dict, optional: bool = False) -> bool:
-        if not check_if_var_exists(name, str, d, optional):
-            return False
-        if not name in d:
-            raise EntryDoesntExistException(f"{bcolors.FAIL}ERROR: Entry {name} does not exist{bcolors.ENDC}")
-
-        files = []
-        raise_exception = False
-
-        #First check if any paths are wildcards
-        for f in d[name]:
-            if "*" in f:
-                # pprint(f"INFO: Wildcards in {f} not checked.")
-                continue
-
-            if not os.path.exists(f):
-                raise_exception = True
-                files.append(f)
-
-        if raise_exception:
-            for i in range(min(10, len(files))):
-                epprint(f"ERROR: File '{files[i]}' does not exist. Inside entry '{name}'")
-            if len(files) > 10:
-                epprint("ERROR:...")
-            raise FileDoesntExistException()
-        return True
-    #####
-    if not os.access(path_to_yaml_file, os.R_OK):
-        epprint(f"ERROR: YAML file \"{path_to_yaml_file}\" is unreadable or does not exist!")
-        sys.exit(1)
-
-    data = object()
+    data: Iterator
     try:
-        with open(path_to_yaml_file, "r") as f:
+        with open(file, "r") as f:
             data = yaml.load_all(f.read(), Loader=SafeLineLoader)
     except Exception as e:
-        epprint(f"ERROR: Could not parse \"{path_to_yaml_file}\". Check the syntax!!!")
+        epprint(f"ERROR: Could not parse \"{file}\". Check the syntax!!!")
         sys.exit(1)
 
-
-    # Bool for ejecting the name of the YAML file, but only once.
-    error_yaml_file_printed = False
-    isOptional=True
-    line_number = "<no line number>"
-    try:
-        for d in data:
-            line_number = d["__line__"]
-            if ".ignore" in d:
-                pprint(f"INFO: Document starting at {line_number} ignored due to present .ignore entry")
-                continue
-
-            # If no name or type
-            if "name" not in d or "type" not in d:
-                raise WrongValue(f"ERROR: Error in YAML file. Missing 'name' or 'type' entries!")
-
-            d_type = d["type"]
-            if d_type not in YAML_TYPES:
-                raise WrongValue(f"ERROR: Incorrect type: \"{d_type}\" It should be one of : {YAML_TYPES}")
+    return data
 
 
-            # Create a test list of variables to check.
-            # Each test list set should contain, the:
-            # name, var_type, dictionary, optional[optional], isFile[optional]
-            test_list = []
-            test_flist = []
+def check_yaml_content(data: Iterator):
+    """Checks a YAML file if it has valid data for FLT running.
 
-            match d_type:
-                case "geometry":
-                    test_list = [
-                        ["target_mesh", str, d, False, True],
-                        ["align_lcfs", bool, d, True],
-                        ["include_target_in_shadow", bool, d, True],
-                    ]
+    Returns:
+        ok (bool): True if the YAML file is ok, else False.
+    """
+    import sys
 
-                    # Check if fl_ids exists
-                    if "fl_ids" in d:
-                        # See that the keys are all string
-                        fl_ids = d["fl_ids"]
-                        if not isinstance(fl_ids, dict):
-                            raise WrongTypeException("ERROR: Entry fl_ids is of wrong type!")
 
-                        for key in fl_ids:
-                            if key == "__line__":
-                                continue
-                            if not isinstance(fl_ids[key], list):
-                                raise WrongTypeException(f"ERROR: An entry of fl_ids {key} does not have a list!")
-                            if not all(isinstance(_, int) for _ in fl_ids[key]):
-                                raise WrongTypeException(f"ERROR: Non int entry in fl_ids {key} entry")
+    equilibriums = []
+    geometries = []
+    hlms = []
 
-                    t = check_if_var_exists("parameters", dict, d, True)
-                    d_params = d["parameters"]
-                    if t:
-                        test_list += [
-                            ["abs_error", float, d_params, True],
-                            ["rel_error", float, d_params, True],
-                            ["abs_error", float, d_params, True],
-                            ["max_fieldline_length", (float, int), d_params, True],
-                            ["num_of_threads", int, d_params, True],
-                            ["self_intersection_avoidance_length", float, d_params, True],
-                            ["shadow_dim_mul", float, d_params, True],
-                            ["side", str, d_params, True],
-                            ["target_dim_mul", float, d_params, True],
-                            ["time_end", float, d_params, True],
-                            ["time_step", float, d_params, True],
-                        ]
-                    t = check_if_var_exists("longwave_misalignment", dict, d,
-                        True)
-                    if t:
-                        d_longwave_misalignment = d["longwave_misalignment"]
-                        import numpy as np
-                        test_list += [
-                            ["vector", (list, np.ndarray), d_longwave_misalignment],
-                            ["length", (list, int, float), d_longwave_misalignment]
-                        ]
+    # Check if the data contains at least name and type
+    ipprint("Loading YAML data")
+    OK = True
+    for d in data:
+        if d is None:
+            ipprint("There is an empty YAML document! Check for stray '---'.")
+            continue
+        line_number = d["__line__"]
+        if ".ignore" in d:
+            pprint(f"INFO: Document starting at {line_number} ignored due to present .ignore entry")
+            continue
 
-                    test_flist = [
-                        ["shadow_meshes", d],
-                        ["afl_catcher_meshes", d, True]
-                    ]
+        # If no name or type
+        if "name" not in d or "type" not in d:
+            epprint(f"Error: Missing 'name' entry in section at {line_number}!")
+            OK = False
 
+        if "type" not in d:
+            epprint(f"Error: Missing 'type' entry in section at {line_number}")
+            OK = False
+
+        else:
+            match d["type"]:
                 case "equilibrium":
-                    check_if_var_exists("equilibrium_type", str, d)
-                    eq_type = d["equilibrium_type"]
-
-                    match eq_type:
-                        case "eqdsk_files":
-                            check_list_of_paths("eqdsk_files", d)
-                            test_list = [
-                                ["time_step_labels", (list, float), d, isOptional],
-                            ]
-                        case "imas":
-                            check_if_var_exists("imas", dict, d)
-
-                            test_list = [
-                                ["user", str, d["imas"]],
-                                ["shot", int, d["imas"]],
-                                ["run", int, d["imas"]],
-                                ["device", str, d["imas"]],
-                                ["version", str, d["imas"]],
-                                ["time_samples", int, d["imas"], True],
-                            ]
-                            # Now check for times
-                            times_in = check_if_var_exists("times", (list, int, float), d["imas"], isOptional)
-                            if not times_in:
-                                # We check now for start time and end time
-                                check_if_var_exists("time_start", (int, float), d["imas"])
-                                check_if_var_exists("time_end", (int, float), d["imas"])
-
-                        case "_":
-                            epprint(f"ERROR: In equilibrium document at {line_number}")
-                            epprint(f"ERROR: Wrong 'equilibrium_type' entry: {eq_type}")
-                    test_list += [
-                        ["correct_helicity", bool, d, isOptional],
-                        ["plasma_r_displ", (float, list), d, isOptional],
-                        ["plasma_z_displ", (float, list), d, isOptional],
-                        ["wall_silh_r_shift", (float, list), d, isOptional],
-                        ["wall_silh_r_shift", (float, list), d, isOptional],
-                        ["bt_multiplier", float, d, isOptional]
-                    ]
+                    equilibriums.append(d)
+                case "geometry":
+                    geometries.append(d)
                 case "hlm":
-                    check_if_var_exists("hlm_type", str, d)
-
-                    hlm_type = d["hlm_type"]
-                    match hlm_type:
-                        case "custom":
-                            check_list_of_paths("profile_files", d)
-                            test_list = [
-                                ["extrapolate", bool, d, isOptional],
-                                ["outside_value", float, d, isOptional],
-                            ]
-                        case "elm":
-                            test_list = [
-                                ["r_break", (float, list), d, isOptional],
-                                ["p_sol", (int, float, list), d, isOptional],
-                                ["lambda_q_near", (float, list), d, isOptional],
-                                ["lambda_q_main", (float, list), d, isOptional],
-                            ]
-                            loss_parameters_in = check_if_var_exists("loss_parameters", dict, d, isOptional)
-                            if loss_parameters_in:
-                                test_list += [
-                                    ["v_elm" , (float), d['loss_parameters'], isOptional],
-                                    ["n0" , (float), d['loss_parameters'], isOptional ],
-                                    ["Te0" , (float), d['loss_parameters'], isOptional ],
-                                    ["Ti0" , (float), d['loss_parameters'], isOptional],
-                                    ["Aion" , (float), d['loss_parameters'], isOptional ],
-                                    ["Z" , (int), d['loss_parameters'], isOptional],
-                                ]
-                            elm_parameters_in = check_if_var_exists("elm_parameters", dict, d, isOptional)
-                            if elm_parameters_in:
-                                test_list += [
-                                    ["E_total", (float), d['elm_parameters'], isOptional],
-                                    ["nfil", (int, float), d['elm_parameters'], isOptional],
-                                    ["sigmar", (float), d['elm_parameters'], isOptional],
-                                    ["sigmaz", (float), d['elm_parameters'], isOptional],
-                                    ["v_elm", (float), d['elm_parameters'], isOptional],
-                                    ["fELM", (float), d['elm_parameters'], isOptional],
-                                    ["rg2f", (float), d['elm_parameters'], isOptional],
-                                ]
-
-                        case "ramp-down" | "ramp_down" | "ramp down":
-                            pass
-                        case "disruption":
-                            pass
-                        case "single":
-                            test_list = [
-                                ["p_sol", (float, int, list), d],
-                                ["lambda_q", (float, int, list), d],
-                            ]
-                        case "double":
-                            test_list = [
-                                ["p_sol", (float, int, list), d],
-                                ["lambda_q_near", (float, int, list), d],
-                                ["lambda_q_main", (float, int, list), d, isOptional],
-                            ]
-                        case _:
-                            epprint(f"ERROR: In hlm document at {line_number}")
-                            epprint(f"ERROR: Wrong 'hlm_type' entry: {hlm_type}")
-
-
+                    hlms.append(d)
                 case _:
-                    raise Exception(f"ERROR: Wrong document type: {d_type}!")
+                    epprint(f"Error. At block {line_number} wrong type entry: {d['type']}")
+                    OK = False
+        # Do a simple key check
+        OK &= check_for_typos(d, SUB_DICT_KEYS[d['type']])
 
-            for xargs in test_list:
-                check_if_var_exists(*xargs)
+        if not OK:
+            epprint(f"Errors in YAML section at line {line_number}. Section name: {d['name']}")
+            sys.exit(1)
 
-            for xargs in test_flist:
-                check_list_of_paths(*xargs)
-    except Exception as e:
-        print(e)
-        if not error_yaml_file_printed:
-            error_yaml_file_printed = True
-            epprint(f"ERROR: In file {path_to_yaml_file}")
-        epprint(f"ERROR: Check YAML document at line {line_number}")
-        IS_OK = False
-    return IS_OK
+
+    ipprint("INFO: Checking GEOMETRIES")
+
+    for d in geometries:
+        OK = True
+        OK &= check_var(d, "target_mesh", str)
+        OK &= check_var(d, "shadow_meshes", [str])
+        OK &= check_var(d, "afl_catcher_meshes", [str], False)
+        if not OK:
+            epprint(f"Problem with geometry data at line {d['__line__']}")
+            sys.exit(1)
+
+        # Optional
+        OK &= check_var(d, "align_lcfs", bool, False)
+        OK &= check_var(d, "include_target_in_shadow", bool, False)
+        OK &= check_var(d, "fl_ids", dict, False)
+        if not (_d:=d.get('fl_ids')) is None:
+            for key in _d:
+                if key == "__line__":
+                    continue
+                OK &= check_var(_d, key, [int], False)
+
+        if 'parameters' in d:
+            OK &= check_var(d, 'parameters', dict)
+            if OK:
+                _d = d['parameters']
+                OK &= check_var(_d, "abs_error", float, False)
+                OK &= check_var(_d, "rel_error", float, False)
+                OK &= check_var(_d, "abs_error", float, False)
+                OK &= check_var(_d, "max_fieldline_length", (float, int), False)
+                OK &= check_var(_d, "num_of_threads", int, False)
+                OK &= check_var(_d, "self_intersection_avoidance_length", float, False)
+                OK &= check_var(_d, "shadow_dim_mul", float, False)
+                OK &= check_var(_d, "side", str, False)
+                OK &= check_var(_d, "target_dim_mul", float, False)
+                OK &= check_var(_d, "time_end", float, False)
+                OK &= check_var(_d, "time_step", float, False)
+
+        if 'longwave_misalignment' in d:
+            OK &= check_var(d, 'longwave_misalignment', dict)
+            if OK:
+                _d = d['longwave_misalignment']
+                OK &= check_var(_d, "vector", (float, int, [(float, int)]), False)
+                OK &= check_var(_d, "length", (float, int, [(float, int)]), False)
+
+        if not OK:
+            epprint(f"Problem with geometry data at line {d['__line__']}")
+            sys.exit(1)
+    ipprint("INFO: Checking EQUILIBRIUMS")
+    for d in equilibriums:
+        OK = True
+
+        OK &= check_var(d, "equilibrium_type", str)
+        if not OK:
+            epprint(f"Problem with equilibrium data at line {d['__line__']}")
+            sys.exit(1)
+
+        eq_type = d['equilibrium_type']
+
+        match eq_type:
+            case "eqdsk_files":
+                OK &= check_var(d, "eqdsk_files", [str])
+                OK &= check_var(d, "time_step_labels", ([float], [int]), False)
+
+            case "imas":
+                OK &= check_var(d, "imas", dict)
+                if OK:
+                    _d = d["imas"]
+                    OK &= check_var(_d, "shot", int)
+                    OK &= check_var(_d, "run", int)
+                    OK &= check_var(_d, "user", str, False)
+                    OK &= check_var(_d, "device", str, False)
+                    OK &= check_var(_d, "version", str, False)
+
+                    # Check if specific times are defined or a time interval
+                    # is defined.
+                    OK &= check_var(_d, "times", [(float, int)], False)
+                    OK &= check_var(_d, "time_start", (float, int), False)
+                    OK &= check_var(_d, "time_end", (float, int), False)
+                    OK &= check_var(_d, "time_samples", int, False)
+
+                    # See if we have all three defined
+
+                    if not (('times' in _d) ^ (('time_start' in _d) & ('time_end' in _d))):
+                        epprint(f"Error with specifying times at line {d['__line__']}. Either no times are defined or both ways are defined.")
+                        OK = False
+            case _:
+                epprint(f"Wrong equilibrium_type: {eq_type}")
+                OK = False
+        OK &= check_var(d, "correct_helicity", bool, False)
+        OK &= check_var(d, "plasma_r_displ", (float, [float]), False)
+        OK &= check_var(d, "plasma_z_displ", (float, [float]), False)
+        OK &= check_var(d, "wall_silh_r_shift", (float, [float]), False)
+        OK &= check_var(d, "wall_silh_r_shift", (float, [float]), False)
+        OK &= check_var(d, "bt_multiplier", float, False)
+
+        if not OK:
+            epprint(f"Problem with equilibrium defined at {d['__line__']}")
+            sys.exit(1)
+    ipprint("INFO: Checking HLMs")
+    for d in hlms:
+        OK = True
+        OK &= check_var(d, "hlm_type", str)
+        if not OK:
+            epprint(f"Problem with hlm data at line {d['__line__']}")
+            sys.exit(1)
+
+        hlm_type = d['hlm_type']
+        match hlm_type:
+            case "custom":
+                OK &= check_var(d, "profile_files", [str])
+                OK &= check_var(d, "extrapolate", bool, False)
+                OK &= check_var(d, "outside_value", (float, int), False)
+            case "elm" | "L-mode":
+                OK &= check_var(d, "r_break", (float, list[float]), False)
+                OK &= check_var(d, "p_sol", (float, list[float]), False)
+                OK &= check_var(d, "lambda_q_near", (float, list[float]), False)
+                OK &= check_var(d, "lambda_q_main", (float, list[float]), False)
+
+                if "loss_parameters" in d:
+                    OK &= check_var(d, "loss_parameters", dict)
+                    if OK:
+                        _d = d["loss_parameters"]
+                        OK &= check_var(_d, "v_elm", (float, int), False)
+                        OK &= check_var(_d, "n0", (float, int), False)
+                        OK &= check_var(_d, "Te0", (float, int), False)
+                        OK &= check_var(_d, "Ti0", (float, int), False)
+                        OK &= check_var(_d, "Aion", float, False)
+                        OK &= check_var(_d, "Z", (float, int), False)
+                if "elm_parameters" in d:
+                    OK &= check_var(d, "elm_parameters", dict)
+                    if OK:
+                        _d  = d["elm_parameters"]
+                        OK &= check_var(_d, "E_total", (float, int), False)
+                        OK &= check_var(_d, "nfil", (float, int), False)
+                        OK &= check_var(_d, "sigmar", (float, int), False)
+                        OK &= check_var(_d, "sigmaz", (float, int), False)
+                        OK &= check_var(_d, "fELM", (float, int), False)
+                        OK &= check_var(_d, "rg2f", (float, int), False)
+            case "ramp-down":
+                OK &= check_var(d, "ip_transition", (float, int), False)
+            case "disruption":
+                pass
+            case "single":
+                OK &= check_var(d, "p_sol", ((float, int), [(float, int)]))
+                OK &= check_var(d, "lambda_q", ((float, int), [(float, int)]))
+            case "double":
+                OK &= check_var(d, "p_sol", ((float, int), [(float, int)]))
+                OK &= check_var(d, "lambda_q_near", ((float, int), [(float, int)]))
+                OK &= check_var(d, "lambda_q_main", ((float, int), [(float, int)]))
+            case _:
+                epprint(f"ERROR: Wrong hlm type: {hlm_type}")
+    opprint("Check complete")
+    return
 
 def load_yaml(path_to_yaml: str)->tuple[dict, ...]:
     import yaml
@@ -432,7 +475,6 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
         longwave_length (float): The distance of the
             misalignment along the direction of the vector
         result_file_name (str): Result file name
-
 
     """
     import os
@@ -1323,11 +1365,14 @@ if __name__ == "__main__":
     # interpreter. This causes issues because of the sys.exits below. Therefore
     # to be documentable by Sphinx put this code here.
 
-    # edit_subparser = subparsers.add_parser('edit', help='Edit YAML descriptions')
     args = parser.parse_args(sys_args[1:])
     command = args.command
     if args.yaml_file is None:
         pprint('ERROR: Specify path to a YAML file!')
+        sys.exit(1)
+    import os
+    if not os.access(args.yaml_file, os.F_OK | os.R_OK):
+        pprint(f"ERROR: Can't open or read {args.yaml_file}")
         sys.exit(1)
 
     import l2g
@@ -1338,17 +1383,10 @@ if __name__ == "__main__":
         l2g.enableDebugging()
 
     if command == "check":
-        try:
-            isOk = check_yaml(args.yaml_file)
-        except Exception as e:
-            isOk = False
-        if isOk:
-            pprint("Check ok!")
-        else:
-            pprint("Check kO!")
+        isOk = True
+        _data = read_yaml_file(args.yaml_file)
+        check_yaml_content(_data)
         sys.exit(0)
-
-    # Parse the YAML file.
     geometries, equilibriums, hlms = load_yaml(args.yaml_file)
 
     if command == "print":
