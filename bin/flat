@@ -60,13 +60,15 @@ from typing import Iterator
 
 IGNORE_KEYS={'__line__'}
 def check_var(data: dict, entry: str, expected, required: bool=True):
-    """Checks if a dictionary contains an expected variable.
+    """Checks if a key in a dictionary is of expected type.
 
-    The expected argument can be:
+    The expected argument can be either:
         - a single type, e.g.: float
         - a list of values, e.g.: [float]
         - a union of types, e.g.: (int, float)
-
+        - or a combination of above, for instance, a variable that can be
+          either int, float or an array of ints and floats:
+            (float, int, [(float, int)])
     Arguments:
         data (dict): Dictionary of values
         entry (str): Entry to check
@@ -82,22 +84,40 @@ def check_var(data: dict, entry: str, expected, required: bool=True):
 
     val = data[entry]
 
-    def match_type(value: object, spec: type) -> bool:
-        """Return True if value matches spec."""
-        if isinstance(spec, list):  # list of something
+    def match_type(value: object, expected_type: type) -> bool:
+        """Matches a value with the expected type.
+
+        The expected type is either a single type object, a tuple of type
+        objects.
+
+        If it is a list of type | tuple[type], then it is expected that the
+        value is a list of values containing that type.
+
+        Arguments:
+            value (object): A value
+            expected_type (type): Expected type of the value.
+        """
+        if isinstance(expected_type, list):
             if not isinstance(value, list):
                 return False
-            subtype = spec[0]
-            return all(isinstance(item, subtype) for item in value)
-        return isinstance(value, spec)
+            OK = True
+            for i, item in enumerate(value):
+                if not isinstance(item, expected_type[0]):
+                    epprint(f"ERROR: Value {item} (index {i}), is of wrong type. Should be {expected_type[0]}")
+                    OK = False
+            return OK
+        return isinstance(value, expected_type)
 
     # Handle unions of types
     if isinstance(expected, tuple):
-        OK = any(match_type(val, spec) for spec in expected)
+        OK = any(match_type(val, excted_type) for excted_type in expected)
     else:
         OK = match_type(val, expected)
     if not OK:
-        epprint(f"ERROR: Entry {entry} is of wrong type! Should be {expected} but it is {type(entry)}")
+        if isinstance(val, list):
+            epprint(f"ERROR: An element or elements of '{entry}' have a wrong type!")
+        else:
+            epprint(f"ERROR: Entry '{entry}' is of wrong type! Should be {expected} but it is {type(entry)}")
     return OK
 
 def check_if_var_is_otherwise_valid(key: str) -> tuple[bool, list[str]]:
@@ -303,10 +323,10 @@ def check_yaml_content(data: Iterator):
                 epprint(f"Wrong equilibrium_type: {eq_type}")
                 OK = False
         OK &= check_var(d, "correct_helicity", bool, False)
-        OK &= check_var(d, "plasma_r_displ", (float, [float]), False)
-        OK &= check_var(d, "plasma_z_displ", (float, [float]), False)
-        OK &= check_var(d, "wall_silh_r_shift", (float, [float]), False)
-        OK &= check_var(d, "wall_silh_r_shift", (float, [float]), False)
+        OK &= check_var(d, "plasma_r_displ", (int, float, [int, float]), False)
+        OK &= check_var(d, "plasma_z_displ", (int, float, [int, float]), False)
+        OK &= check_var(d, "wall_silh_r_shift", (int, float, [int, float]), False)
+        OK &= check_var(d, "wall_silh_r_shift", (int, float, [int, float]), False)
         OK &= check_var(d, "bt_multiplier", float, False)
 
         if not OK:
