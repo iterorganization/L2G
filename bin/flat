@@ -323,10 +323,10 @@ def check_yaml_content(data: Iterator):
                 epprint(f"Wrong equilibrium_type: {eq_type}")
                 OK = False
         OK &= check_var(d, "correct_helicity", bool, False)
-        OK &= check_var(d, "plasma_r_displ", (int, float, [int, float]), False)
-        OK &= check_var(d, "plasma_z_displ", (int, float, [int, float]), False)
-        OK &= check_var(d, "wall_silh_r_shift", (int, float, [int, float]), False)
-        OK &= check_var(d, "wall_silh_r_shift", (int, float, [int, float]), False)
+        OK &= check_var(d, "plasma_r_displ", ((int, float), [(int, float)]), False)
+        OK &= check_var(d, "plasma_z_displ", ((int, float), [(int, float)]), False)
+        OK &= check_var(d, "wall_silh_r_shift", ((int, float), [(int, float)]), False)
+        OK &= check_var(d, "wall_silh_r_shift", ((int, float), [(int, float)]), False)
         OK &= check_var(d, "bt_multiplier", float, False)
 
         if not OK:
