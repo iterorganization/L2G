@@ -281,14 +281,55 @@ class EquilibriumIterator(object):
     def __getitem__(self, i) -> tuple[int, float, "Equilibrium"]:
         return i, self._times[i], self._equilibriums[i]
 
-    def applyBtMultiplier(self, bt_multiplier: float) -> None:
+    def applyBtMultiplier(self, bt_multiplier: float | list[float]) -> None:
         """Applies a factor to the Bt (fpol_vacuum) value.
 
         Arguments:
             bt_multiplier (float): Float.
         """
-        for equilibrium in self._equilibriums:
-            equilibrium.fpol_vacuum *= bt_multiplier
+        ok = True
+        n_equilibriums = len(self._equilibriums)
+        is_list = isinstance(bt_multiplier, list)
+
+        if (is_list and len(bt_multiplier) != n_equilibriums) or (not is_list and n_equilibriums > 1 and bt_multiplier != 1):
+            log.error('You have not provided enough bt_multiplier values for all' +
+                      ' instances of plasma! ')
+            ok = False
+
+        if not ok:
+            return
+
+        if is_list:
+            for i, equilibrium in enumerate(self._equilibriums):
+                equilibrium.fpol_vacuum *= bt_multiplier[i]
+        else:
+            for equilibrium in self._equilibriums:
+                equilibrium.fpol_vacuum *= bt_multiplier
+
+    def applyPsiMultiplier(self, psi_multiplier: float | list[float]) -> None:
+        """Applies a factor to the Psi (fpol_vacuum) value.
+
+        Arguments:
+            psi_multiplier (float): Float.
+        """
+        ok = True
+        n_equilibriums = len(self._equilibriums)
+        is_list = isinstance(psi_multiplier, list)
+
+        if (is_list and len(psi_multiplier) != n_equilibriums) or (not is_list and n_equilibriums > 1 and psi_multiplier != 1):
+            log.error('You have not provided enough psi_multiplier values for all' +
+                      ' instances of plasma! ')
+            ok = False
+
+        if not ok:
+            return
+
+        if is_list:
+            for i, equilibrium in enumerate(self._equilibriums):
+                equilibrium.psi *= psi_multiplier[i]
+        else:
+            for equilibrium in self._equilibriums:
+                equilibrium.psi *= psi_multiplier
 
     def applyWallSilhouetteShift(self, r_shift: float, z_shift: float) -> None:
         """Applies a singular shift to all of the wall silhouettes stored

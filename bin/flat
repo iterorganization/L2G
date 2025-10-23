@@ -39,7 +39,7 @@ SUB_DICT_KEYS = {
                  'longwave_misalignment'},
     'equilibrium': {'name', 'type', 'eqdsk_files', 'plasma_r_displ',
                     'plasma_z_displ', 'imas', 'equilibrium_type',
-                    'time_step_labels', 'bt_multiplier'},
+                    'time_step_labels', 'bt_multiplier', 'psi_multiplier'},
     'hlm': {'name', 'type', 'elm_parameters', 'loss_parameters', 'p_sol',
             'lambda_q', 'lambda_q_main', 'lambda_q_near', 'ip_transition',
             'hlm_type', 'extrapolate', 'outside_value', 'profile_files',
@@ -327,7 +327,8 @@ def check_yaml_content(data: Iterator):
         OK &= check_var(d, "plasma_z_displ", ((int, float), [(int, float)]), False)
         OK &= check_var(d, "wall_silh_r_shift", ((int, float), [(int, float)]), False)
         OK &= check_var(d, "wall_silh_r_shift", ((int, float), [(int, float)]), False)
-        OK &= check_var(d, "bt_multiplier", float, False)
+        OK &= check_var(d, "bt_multiplier", ((int, float), [(int, float)]), False)
+        OK &= check_var(d, "psi_multiplier", ((int, float), [(int, float)]), False)
 
         if not OK:
             epprint(f"Problem with equilibrium defined at {d['__line__']}")
@@ -600,6 +601,10 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
     bt_multiplier = getVal(eqid, "bt_multiplier", 1.0)
     if bt_multiplier != 1.0:
         equil_obj.applyBtMultiplier(bt_multiplier)
+
+    psi_multiplier = getVal(eqid, "psi_multiplier", 1.0)
+    if psi_multiplier != 1.0:
+        equil_obj.applyPsiMultiplier(psi_multiplier)
 
     import l2g.mesh
     ## Preparing geometry
