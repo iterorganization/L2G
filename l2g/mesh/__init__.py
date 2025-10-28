@@ -69,6 +69,22 @@ def rotatePointsAroundAxis(points: np.ndarray, p1: np.ndarray, p2: np.ndarray,
     # out_points += p1
     return np.array(out_points + p1, dtype=np.float32)
 
+def triangle_areas(vertices: np.ndarray, triangles: np.ndarray) -> np.ndarray:
+    """Return an array of areas of triangles.
+
+    Arguments:
+        vertices (np.ndarray): Array of points
+        triangles (np.ndarray): Array of triangles
+    """
+    p1 = vertices[triangles[:, 0]]
+    p2 = vertices[triangles[:, 1]]
+    p3 = vertices[triangles[:, 2]]
+
+    p12 = p2 - p1
+    p13 = p3 - p1
+    cross = np.cross(p12, p13)
+    return 0.5 * np.linalg.norm(cross, axis=1)
+
 class WrongFileExtensionException(Exception):
     pass
 
@@ -149,6 +165,9 @@ class Mesh():
     triangles and with time-dependent data on it. Primarily it supports the
     MED format (MED-file, MEDCoupling) but it is intended to be an easy to use
     interface with different I/O backends behind.
+
+    Important that its main use is for reading/writing to Unstructured meshes
+    made of triangles. Any other cell type is ignored.
 
     .. code-block:: python
 
@@ -247,8 +266,8 @@ class Mesh():
         self.file_path = file_path
 
         if ext == "med":
-            from . import _medcoupling
-            self.backend = _medcoupling
+            from . import medio
+            self.backend = medio
             self.backend_name = "MED"
         elif ext.startswith('vt'):
             from . import _vtk
@@ -283,9 +302,7 @@ class Mesh():
         index of a value corresponds to the index of a cell.
 
         Measurements:
-         - 1D cell = length.
          - 2D cell = area.
-         - 3D cell = volume.
 
         Returns:
             measurements (np.ndarray): 1D array of floats.
@@ -294,7 +311,10 @@ class Mesh():
         if self.backend is None:
             raise NoMeshDataLoaded
 
-        return self.backend.getMeasurements(self.file_path)
+        if self.vertices.size == 0:
+            self.readMeshData()
+
+        return triangle_areas(self.vertices, self.triangles)
 
     def readMeshData(self) -> None:
         """Function that calls the backends to fetch the mesh data of the file
@@ -364,7 +384,7 @@ class Mesh():
         else:
             return False
 
-    def getAllFieldNames(self) -> list:
+    def getAllFieldNames(self) -> list[str]:
         """Get the name of all quantities in the mesh files.
         """
 
@@ -387,7 +407,7 @@ class Mesh():
 
         if self.doesItContainField(field_name):
             out = self.backend.getAllFieldIterations(self.file_path, field_name)
-            out = [[_[0], _[2]] for _ in out]
+            out = [[_[0], _[1]] for _ in out]
 
         return out
 
@@ -458,8 +478,8 @@ class Mesh():
             ext = ext[1:]
         backend = None
         if ext == "med":
-            from . import _medcoupling
-            backend = _medcoupling
+            from . import medio
+            backend = medio
         elif ext == "vtu":
             from . import _vtk
             backend = _vtk
@@ -516,13 +536,32 @@ class Mesh():
             return
 
         if self.backend_name == "MED":
-            from . import _medcoupling
+            from . import medio
+            if self.file_path in medio.__medtr3reader__:
+                reader = medio.__medtr3reader__[self.file_path]
+            else:
+                reader = medio.MEDTR3Reader(self.file_path)
+
+            mesh_name = reader.mesh_names[0]
+
+            writer = medio.MEDTR3Writer(mesh_name)
+
             for array_name in self.arrays:
+                register_field = True
                 for index in self.arrays[array_name]:
-                    _medcoupling.writeField(self.file_path, array_name,
-                        self.arrays[array_name][index], index,
-                        self.times[array_name][index],
-                        self.info_on_components[array_name][index])
+                    array = self.arrays[array_name][index]
+                    time = self.times[array_name][index]
+                    components = self.info_on_components[array_name][index]
+
+                    if register_field:
+                        writer.registerField(array_name, components)
+                        register_field = False
+
+                    writer.addFieldData(array_name, index, time, array)
+            writer.writeField(self.file_path)
+
+            reader.traverse() # Update the reader.
+
         elif self.backend_name == "VTK":
             # Haven't found a way to append array data to an XML Unstructured
             # Grid data, though if I wrote my own XML writer it would be
@@ -557,6 +596,9 @@ class Mesh():
             writer.WriteNextTime(self.time)
 
             if self.index == self.number_of_time_steps - 1:
+                # Stop the writing when we reach the number of time steps to
+                # write. Note that the setNumberOfTimesteps function must be
+                # called in order for this to work.
                 writer.Stop()
 
         # Clear the data arrays.

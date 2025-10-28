@@ -2,7 +2,7 @@
 name = "l2g"
 description = "A FLT (Field Line Tracing) suite"
 readme = "README"
-version = "2024dev"
+version = "2025dev"
 authors = [
     {name="Gregor Simič", email="gregor.simic@iter.org"}
 ]
@@ -15,7 +15,7 @@ classifiers = [
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "Topic :: Software Development",
-    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Physics",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
     "Programming Language :: Cython"
@@ -25,7 +25,7 @@ requires-python = ">=3.10"
 [project.optional-dependencies]
 tmp = [
     "imas-python",
-    "medcoupling==9.13.0",
+    "h5py",
     "vtk",
     "matplotlib>=3.3.0",
     "numpy>=1.19.4",

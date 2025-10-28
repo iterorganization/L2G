@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Converts fields of a MED file to MATLAB format.
 
-import medcoupling as mc
+import l2g.mesh
 import numpy as np
 import os
 from scipy.io import savemat
@@ -24,7 +24,8 @@ if file_name.lower().endswith(".med"):
     file_name = file_name[:-4]
 
 # Get all fields
-fieldNames = set(mc.GetAllFieldNames(med_file))
+mesh = l2g.mesh.Mesh(med_file)
+fieldNames = set(mesh.getAllFieldNames())
 fields_to_ignore = ["vtkGhostType", "normals"]
 for f in fields_to_ignore:
     if f in fieldNames:
@@ -35,38 +36,22 @@ if not fieldNames:
 
 else:
     # Expect that each field has data at the same indexes
-    indexes = [(_[0], _[1]) for _ in mc.GetAllFieldIterations(med_file, next(iter(fieldNames)))]
+    indexes = [(_[0], _[1]) for _ in mesh.getAllFieldIterations(next(iter(fieldNames)))]
 
     for i in range(len(indexes)):
         mat_file = f"{file_name}_{i}_matlab.mat"
         out = {}
 
         for fieldName in fieldNames:
-            field = mc.ReadField(med_file, fieldName, *indexes[i])
-            array = field.getArray()
-            out[fieldName] = array.toNumPyArray()
+            field = mesh.getField(fieldName, indexes[i][0])
+            out[fieldName] = field
 
         # Save to matlab file
         savemat(mat_file, out)
 
 # Save the mesh data
-medfile = mc.MEDFileUMesh(med_file)
-medmesh = medfile.getMeshAtLevel(0)
-
-coords = medmesh.getCoords().toNumPyArray()
-
-n_triangles = medmesh.getNumberOfCellsWithType(mc.NORM_TRI3)
-triangles = np.empty((n_triangles, 3), np.uint32)
-
-c = 0
-for i in range(medmesh.getNumberOfCells()):
-    if medmesh.getTypeOfCell(i) != mc.NORM_TRI3:
-        continue
-    triangles[c, :] = medmesh.getNodeIdsOfCell(i)
-    c += 1
-    if c == n_triangles:
-        break
-
+coords, triangles = mesh.getMeshData()
+n_triangles = triangles.shape[0]
 
 # Calculate the bary center
 barycenter = np.empty((n_triangles , 3), np.float64)

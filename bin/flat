@@ -651,13 +651,14 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
     run_flt = True
     if os.path.exists(result_file_path):
         pprint("INFO: A MED file already exists. Checking if it has the same number of time slices as the input equilibrium.")
-        import medcoupling as mc
-        field_names = mc.GetAllFieldNames(result_file_path)
+        import l2g.mesh.medio
+        reader = l2g.mesh.medio.MEDTR3Reader(result_file_path)
+        field_names = reader.getAllFields()
         run_flt = False
         if "conlen" not in field_names:
             run_flt = True
         else:
-            iterations = mc.GetAllFieldIterations(result_file_path, "conlen")
+            iterations = reader.getAllFieldIterations("conlen")
             if len(iterations) != len(equil_obj):
                 run_flt = True
             else:
