@@ -110,7 +110,7 @@ def add_med_info(f: h5py.File, maj: int=4, min: int=1, rel: int=1):
 def create_field_structure(f: h5py.File) -> None:
     """Create Group CHA at root. Track order is required!
     """
-    if 'CHA' not in f:
+    if not 'CHA' in f:
         f.create_group('CHA', track_order=True)
 
 def check_if_field_compatible(f: h5py.Group, field_name: str, mesh_name: str,
@@ -127,14 +127,14 @@ def check_if_field_compatible(f: h5py.Group, field_name: str, mesh_name: str,
     compatible = True
     if field_name in f:
         _attrs = f[field_name].attrs
-        if mesh_name not in _attrs or mesh_name != _attrs['MAI']:
+        if 'MAI' not in _attrs or mesh_name != _attrs['MAI'].decode():
             compatible = False
 
         if 'NCO' not in _attrs or num_of_components != _attrs['NCO']:
             compatible = False
 
         cstring = "".join(f"{_:<16}" for _ in components)  # pyright: ignore[reportUnusedVariable]
-        if 'NOM' not in _attrs or cstring != _attrs['NOM']:
+        if 'NOM' not in _attrs or cstring != _attrs['NOM'].decode():
             compatible = False
     else:
         compatible = False

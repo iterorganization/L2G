@@ -450,7 +450,6 @@ class MEDTR3Writer(object):
             mode = 'r+'
 
         mesh_name = self.mesh_name
-
         with h5py.File(path, mode) as f:
 
             create_field_structure(f)

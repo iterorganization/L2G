@@ -499,7 +499,7 @@ class Mesh():
         return new_obj
 
     def addField(self, array_name: str, array: np.ndarray,
-                 info_on_components: list=[]):
+                 info_on_components: list=[""]):
         """Add field to be written to a file. The input array is actually a
         numpy array, but when we are talking on saving it to files, where the
         array corresponds to an unstructured grid made of triangles, it is
@@ -513,6 +513,10 @@ class Mesh():
             info_on_components (list): When we have vector data it is necessary to also
                 provides the info_on_components of each component of the vector data.
         """
+        if len(info_on_components) == 0:
+            log.error('Field components cannot be an empty list. At the ' +
+                      'bare minimum it has to be [""]')
+
         if array_name not in self.arrays:
             self.arrays[array_name] = {}
 
@@ -552,10 +556,18 @@ class Mesh():
                     array = self.arrays[array_name][index]
                     time = self.times[array_name][index]
                     components = self.info_on_components[array_name][index]
-
+                    n_components = len(components)
                     if register_field:
                         writer.registerField(array_name, components)
                         register_field = False
+
+                    # Check if array has the correct shape.
+                    if n_components > 1 and array.ndim < 2:
+                        # Reshape the array correctly.
+                        if array.size % n_components != 0:
+                            raise Exception(f'Field {array_name}, size {array.size} is not divisible by {n_components}')
+
+                        array = array.reshape((-1, n_components))
 
                     writer.addFieldData(array_name, index, time, array)
             writer.writeField(self.file_path)
