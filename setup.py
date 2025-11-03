@@ -188,8 +188,7 @@ extensions = prepare_cython_extensions(pyx_files, setup_path)
 setup(
     ext_modules=extensions,
     packages = ["l2g", "l2g.comp", "l2g.equil", "l2g.hlm", "l2g.plot",
-                "l2g.settings", "l2g.mesh",
-                "l2g.external"],
+                "l2g.settings", "l2g.mesh", "l2g.external", "l2g.mesh.medio"],
     data_files = [('', getDataFiles())],
     package_data={"": ["*.pyi"]},
     scripts = ['bin/flat', 'bin/submitFLAT', 'bin/FLAT.sbatch',
