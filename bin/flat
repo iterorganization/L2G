@@ -34,7 +34,7 @@ def opprint(string, *args, **kwargs):
 
 SUB_DICT_KEYS = {
     'geometry': {'name', 'type', 'parameters', 'target_mesh', 'shadow_meshes',
-                 'cutoff_conlen', 'align_lcfs', 'fl_ids', 'afl_catcher_meshes',
+                 'align_lcfs', 'fl_ids', 'afl_catcher_meshes',
                  'include_target_in_shadow', 'exclude_meshes',
                  'longwave_misalignment'},
     'equilibrium': {'name', 'type', 'eqdsk_files', 'plasma_r_displ',
@@ -47,7 +47,8 @@ SUB_DICT_KEYS = {
 
     'parameters': {'lcfs_max_align_dist', 'max_connection_length', 'abs_error',
                    'rel_error', 'time_step', 'num_of_threads', 'time_end',
-                   'self_intersection_avoidance_length', 'side'},
+                   'self_intersection_avoidance_length', 'side',
+                   'cutoff_conlen'},
     'imas': {'shot', 'run', 'name', 'user', 'device', 'time_start', 'time_end',
              'time_samples', 'times', 'version'},
     'longwave_misalignment': {'vectors', 'lengths'},
