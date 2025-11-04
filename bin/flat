@@ -1184,6 +1184,15 @@ def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
             hlm_params = HLM()
             t = get_hlm(hlmd, index)
             hlm_params.load(t)
+            _file = hlmd["profile_files"][index]
+            print(f"INFO: Loading custom profile: {_file}")
+            _data = np.loadtxt(_file)
+            if _data.shape[0] == 2:
+                hlm_params.points = _data[0]
+                hlm_params.profile = _data[1]
+            else:
+                hlm_params.points = _data[:, 0]
+                hlm_params.profile = _data[:, 1]
             drsep = np.linspace(0, 0.3, 100)
             import l2g.hlm.general
             import l2g.hlm.steady_state
@@ -1215,6 +1224,8 @@ def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
                         profile=hlm_params.profile,
                         extrapolate=hlm_params.extrapolate,
                         outside_value=hlm_params.outside_value)
+                    # Apply pitch at midplane
+                    qpar *= Btotal / Bpm
                 case "elm":
                     title += " ELM PLM + inter-ELM"
                     # Get the OWL connection length profile
