@@ -141,7 +141,7 @@ class HLM(BaseClassOptions):
                  "lambda_q_near", "ratio", "r_break", "ip_transition",
                  "Rb", "Z", "Btotal", "points", "profile", "additional_points",
                  "additional_profiles", "extrapolate", "outside_value",
-                 "longwave_misaligment_applied", "longwave_l"]
+                 "longwave_misaligment_applied", "longwave_l", 'q_par0']
 
     # Lists for each scenario
     flat_top = ["r_break", "p_sol", "lambda_q_main", "lambda_q_near"]
@@ -161,6 +161,7 @@ class HLM(BaseClassOptions):
     def __init__(self):
         self.hlm_type: str = ""
         self.p_sol: float = 100e6
+        self.q_par0: float = 4e6
         self.lambda_q: float = 0.012
         self.lambda_q_main: float = 0.17
         self.lambda_q_near: float = 0.005

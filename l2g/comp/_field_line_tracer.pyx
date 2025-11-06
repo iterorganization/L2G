@@ -107,11 +107,10 @@ cdef class FieldLineTracer:
 
        flt = l2g.comp.FieldLineTracer()
 
-       # Set the parameters, options and hlm settings
+       # Set the parameters and options
 
        flt.parameters
        flt.options
-       flt.hlm_params
 
        # Set mesh data in the form of vertices and triangles
        flt.setTargetData(v, t)
@@ -130,7 +129,6 @@ cdef class FieldLineTracer:
        # Process the data
 
        flt.results
-       flt.hlm_results
 
        # Get specific field lines
        flt.fl_ids = [1,2,3,...]
@@ -142,7 +140,6 @@ cdef class FieldLineTracer:
     cdef vector[int] c_direction
 
     cdef public object name
-    cdef public object hlm_params
     cdef public object parameters
     cdef public object options
     cdef public object embree_obj
@@ -158,7 +155,6 @@ cdef class FieldLineTracer:
     cdef public object target_triangles
     cdef public object normals
     cdef public object fl_ids
-    cdef public object hlm_results
 
     # Booleans to see if functions were called
     cdef object equilibrium_loaded
@@ -166,7 +162,6 @@ cdef class FieldLineTracer:
     def __init__(self):
         self.name = "SFLT_case-1"
         import l2g.settings
-        self.hlm_params: l2g.settings.HLM                 = l2g.settings.HLM()
         self.parameters: l2g.settings.Parameters          = l2g.settings.Parameters()
         self.options:    l2g.settings.Options             = l2g.settings.Options()
         import l2g.external.embree
@@ -191,8 +186,6 @@ cdef class FieldLineTracer:
         self.target_triangles: list = []
         self.fl_ids:           list = []
 
-        # HLM results
-        self.hlm_results: l2g.comp.L2GResultsHLM = l2g.comp.L2GResultsHLM()
         self.equilibrium_loaded: bool = False
 
     def __cinit__(self):
@@ -862,131 +855,6 @@ cdef class FieldLineTracer:
                 self.results.drsep2 = drsep2
             else:
                 self.results.drsep2 = np.zeros(drsep.shape)
-
-    def applyHLM(self) -> None:
-        """Applies an exponential plasma profile. Either single or double,
-        depending on the type stored in self.hlm_params.
-        """
-        if self.equilibrium is None:
-            log.error("No loaded equilibrium. Stopping")
-            return
-
-        if self.results.empty:
-            log.error("No mesh results to apply Ramp Down on. Stopping")
-            return
-
-        if self.results.drsep is None:
-            log.error("Mesh results are empty. Stopping.")
-            return
-
-        if not self.hlm_results.empty:
-            self.hlm_results.reset()
-
-        # Obtain the arrays from the FLT results
-        drsep = self.results.drsep # In meters
-        Bdot = np.abs(self.results.Bdot)
-        n_cells = drsep.shape[0]
-        bfield_mag = np.linalg.norm(self.results.BVec.reshape((n_cells, 3)), axis=1)
-        self.eq.evaluate()
-
-        Rb, _, Btotal, Bpm = self.eq.getMidplaneInfo(which=self.parameters.side)
-        import l2g.hlm.general
-        import l2g.hlm.steady_state
-        import l2g.hlm.ramp_down
-
-        if self.hlm_params.hlm_type == "single":
-            q_par = l2g.hlm.general.single_exponential_psol(drsep=drsep,
-                Bt=Btotal, Bpm=Bpm, Rb=Rb, P_sol=self.hlm_params.p_sol,
-                F=0.5, lambda_q=self.hlm_params.lambda_q)
-        elif self.hlm_params.hlm_type == "double":
-            if self.hlm_params.longwave_misaligment_applied:
-                q_par = l2g.hlm.general.double_exponential_psol_longwave(
-                    drsep=drsep, Bt=Btotal, Bpm=Bpm, Rb=Rb,
-                    lambda_q_main=self.hlm_params.lambda_q_main,
-                    lambda_q_near=self.hlm_params.lambda_q_near,
-                    Rq=self.hlm_params.ratio, P_sol=self.hlm_params.p_sol,
-                    F=0.5, delta_mis=self.hlm_params.longwave_l)
-            else:
-                q_par = l2g.hlm.general.double_exponential_psol(drsep=drsep,
-                    Bt=Btotal, Bpm=Bpm, Rb=Rb,
-                    lambda_q_main=self.hlm_params.lambda_q_main,
-                    lambda_q_near=self.hlm_params.lambda_q_near,
-                    Rq=self.hlm_params.ratio, P_sol=self.hlm_params.p_sol, F=0.5)
-        elif self.hlm_params.hlm_type == "custom":
-            # We have points and profile
-            q_par = l2g.hlm.general.custom(drsep=drsep,
-                points=self.hlm_params.points, profile=self.hlm_params.profile,
-                extrapolate=self.hlm_params.extrapolate,
-                outside_value=self.hlm_params.outside_value)
-            # The custom is defined on a midplane with magnetic surfaces going
-            # perpendicular to it. In reality of course we have the toroidal
-            # and poloidal component that already states that the flux tubes
-            # go from the midplane at an angle. Therefore we multiply this
-            # profile with the factor in order to actually scale it to the
-            # midplane.
-            # In other words apply the pitch at the midplane. Other functions
-            # defined in the l2g.hlm already contains this term, except for the
-            # q_parallel profile here.
-            q_par *= Btotal / Bpm
-        elif self.hlm_params.hlm_type == "elm":
-            # The ELM data is loaded with an extra step.
-            interELM = l2g.hlm.steady_state.inter_ELM(drsep, Rb, Btotal, Bpm,
-                    Rb=self.hlm_params.r_break, P_sol=self.hlm_params.p_sol,
-                    lambda_n=self.hlm_params.lambda_q_near,
-                    lambda_m=self.hlm_params.lambda_q_main)
-            elm = l2g.hlm.general.custom(drsep=drsep,
-                points=self.hlm_params.points, profile=self.hlm_params.profile)
-            q_par = interELM + elm
-
-            Te = l2g.hlm.general.custom(drsep=drsep,
-                points=self.hlm_params.points,
-                profile=self.hlm_params.additional_profiles[0])
-
-            Ti = l2g.hlm.general.custom(drsep=drsep,
-                points=self.hlm_params.points,
-                profile=self.hlm_params.additional_profiles[1])
-
-            self.hlm_results.additional_arrays = []
-            self.hlm_results.additional_arrays.append(elm)
-            self.hlm_results.additional_arrays.append(interELM)
-            self.hlm_results.additional_arrays.append(self.applyShadowMask(Te))
-            self.hlm_results.additional_arrays.append(self.applyShadowMask(Ti))
-        elif self.hlm_params.hlm_type == "L-mode":
-            q_par = l2g.hlm.steady_state.inter_ELM(drsep=drsep,
-                R_bdry=Rb, B_total=Btotal, B_pol=Bpm,
-                Rb=self.hlm_params.r_break, P_sol=self.hlm_params.p_sol,
-                lambda_n=self.hlm_params.lambda_q_near,
-                lambda_m=self.hlm_params.lambda_q_main)
-
-        elif self.hlm_params.hlm_type == "ramp-down":
-            # P_sol taken from IMAS, hopefully.
-            Ip = self.equilibrium.Ip
-            if Ip < self.hlm_params.ip_transition:
-                lambda_q = l2g.hlm.ramp_down.decay_length_L_mode_diverted(
-                    a = self.equilibrium.a, Ip=Ip,
-                    Area=self.equilibrium.Area, R=self.equilibrium.mag_axis_r)
-                q_par = l2g.hlm.general.single_exponential_psol(drsep, Btotal,
-                    Bpm, Rb, lambda_q * 1e-3, self.equilibrium.Psol)
-            else:
-                lambda_q = float("NaN")
-                q_par = np.zeros(drsep.shape)
-
-            self.hlm_results.additional_arrays = [lambda_q]
-        else:
-            q_par = np.zeros(drsep.shape)
-
-        expansion = bfield_mag / Btotal
-        q_inc = q_par * Bdot / Btotal
-
-        q_inc = self.applyShadowMask(q_par * Bdot / Btotal)
-        if self.hlm_params.hlm_type == "elm":
-            # Also put incident arrays for the inter-ELM and ELM
-            self.hlm_results.additional_arrays.append(self.applyShadowMask(elm * Bdot / Btotal))
-            self.hlm_results.additional_arrays.append(self.applyShadowMask(interELM * Bdot / Btotal))
-
-        self.hlm_results.q_inc = q_inc
-        self.hlm_results.q_par = q_par
-        self.hlm_results.flux_expansion = expansion
 
     def applyShadowMask(self, array: np.ndarray) -> np.ndarray:
         """This function applies the shadow mask to an input array.

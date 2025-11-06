@@ -16,11 +16,10 @@ class FieldLineTracer:
 
        flt = l2g.comp.FieldLineTracer()
 
-       # Set the parameters, options and hlm settings
+       # Set the parameters and options
 
        flt.parameters
        flt.options
-       flt.hlm_params
 
        # Set mesh data in the form of vertices and triangles
        flt.setTargetData(v, t)
@@ -39,7 +38,6 @@ class FieldLineTracer:
        # Process the data
 
        flt.results
-       flt.hlm_results
 
        # Get specific field lines
        flt.fl_ids = [1,2,3,...]
@@ -47,7 +45,6 @@ class FieldLineTracer:
 
     """
     name: str
-    hlm_params: l2g.settings.HLM
     parameters: l2g.settings.Parameters
     options: l2g.settings.Options
     embree_obj: l2g.external.embree.PyEmbreeAccell
@@ -61,7 +58,6 @@ class FieldLineTracer:
     target_triangles: list
     fl_ids: list
     normals: np.ndarray
-    hlm_results: l2g.comp.L2GResultsHLM
 
     def __init__(self) -> None: ...
     # Input function
@@ -162,10 +158,6 @@ class FieldLineTracer:
     def calculateDrsep(self) -> None:
         """From the evaluated Flux data and the equilibrium data evaluate the
         radial distance along the midplane for the input target mesh data.
-        """
-    def applyHLM(self) -> None:
-        """Applies an exponential plasma profile. Either single or double,
-        depending on the type stored in self.hlm_params.
         """
     def applyShadowMask(self, array: np.ndarray) -> np.ndarray:
         """This function applies the shadow mask to an input array.

@@ -43,12 +43,12 @@ SUB_DICT_KEYS = {
     'hlm': {'name', 'type', 'elm_parameters', 'loss_parameters', 'p_sol',
             'lambda_q', 'lambda_q_main', 'lambda_q_near', 'ip_transition',
             'hlm_type', 'extrapolate', 'outside_value', 'profile_files',
-            'ratio', 'r_break'},
+            'ratio', 'r_break', 'q_par0', 'r_offset'},
 
-    'parameters': {'lcfs_max_align_dist', 'max_connection_length', 'abs_error',
+    'parameters': {'lcfs_max_align_dist', 'max_fieldline_length', 'abs_error',
                    'rel_error', 'time_step', 'num_of_threads', 'time_end',
                    'self_intersection_avoidance_length', 'side',
-                   'cutoff_conlen'},
+                   'cutoff_conlen', 'max_connection_length'},
     'imas': {'shot', 'run', 'name', 'user', 'device', 'time_start', 'time_end',
              'time_samples', 'times', 'version'},
     'longwave_misalignment': {'vectors', 'lengths'},
@@ -342,6 +342,8 @@ def check_yaml_content(data: Iterator):
             epprint(f"Problem with hlm data at line {d['__line__']}")
             sys.exit(1)
 
+        OK &= check_var(d, "r_offset", ((float, int), [(float, int)]), False)
+
         hlm_type = d['hlm_type']
         match hlm_type:
             case "custom":
@@ -379,10 +381,19 @@ def check_yaml_content(data: Iterator):
             case "disruption":
                 pass
             case "single":
-                OK &= check_var(d, "p_sol", ((float, int), [(float, int)]))
+                OK &= check_var(d, "p_sol", ((float, int), [(float, int)]), False)
+                OK &= check_var(d, "q_par0", ((float, int), [(float, int)]), False)
+                if not (("p_sol" in d) ^ ("q_par0" in d)):
+                    epprint("ERROR: You either have both p_sol and q_par0 defined or none. Only one can be defined.")
+                    OK = False
                 OK &= check_var(d, "lambda_q", ((float, int), [(float, int)]))
+
             case "double":
-                OK &= check_var(d, "p_sol", ((float, int), [(float, int)]))
+                OK &= check_var(d, "p_sol", ((float, int), [(float, int)]), False)
+                OK &= check_var(d, "q_par0", ((float, int), [(float, int)]), False)
+                if not (("p_sol" in d) ^ ("q_par0" in d)):
+                    epprint("ERROR: You either have both p_sol and q_par0 defined or none. Only one can be defined.")
+                    OK = False
                 OK &= check_var(d, "lambda_q_near", ((float, int), [(float, int)]))
                 OK &= check_var(d, "lambda_q_main", ((float, int), [(float, int)]))
             case _:
@@ -504,6 +515,13 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
     import l2g.comp
     import l2g.equil
     import time
+
+    #  For HLM
+    import l2g.hlm.general
+    import l2g.hlm.steady_state
+    import l2g.hlm.ramp_down
+    from l2g.comp import L2GResultsHLM
+    from l2g.settings import HLM
 
     pprint("INFO: Running FLT")
 
@@ -867,26 +885,13 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
                 pprint(f"INFO: Saving fl to {file_path}")
                 l2g.mesh.save_results_to_vtk(flt_obj.fl_results, file_path)
 
-            # if all(isinstance(_, int) for _ in fl_ids):
-            #     flt_obj.fl_ids = fl_ids
-            #     flt_obj.getFL()
-            #     # Now save the data
-            #     file_path = os.path.join(output_directory,
-            #                              f"{case_name}_{index}.vtk")
-            #     pprint(f"INFO: Saving fl to {file_path}")
-            #     l2g.mesh.save_results_to_vtk(flt_obj.fl_results, file_path)
-            # else:
-            #     for group_index, group in enumerate(fl_ids):
-            #         flt_obj.fl_ids = group
-            #         flt_obj.getFL()
-            #         file_path = os.path.join(output_directory,
-            #             f"{case_name}_{group_index}_{index}.vtk")
-            #         pprint(f"INFO: Saving fl to {file_path}")
-            #         l2g.mesh.save_results_to_vtk(flt_obj.fl_results, file_path)
             opprint("INFO: Done")
         if apply_heat_loads:
-            flt_obj.hlm_params.load(get_hlm(hlmd, index))
-            hlm_type = flt_obj.hlm_params.hlm_type
+            t = get_hlm(hlmd, index)
+            hlm_params = HLM()
+            hlm_params.load(t)
+            hlm_results = L2GResultsHLM()
+            hlm_type = hlm_params.hlm_type
             ipprint(f"INFO: Applying HLM type: {hlm_type}")
 
             if hlm_type == "elm":
@@ -909,10 +914,10 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
                 pprint("INFO: Obtaining PLM loss profiles")
                 obj.calculate_loss_profiles(**d)
                 # Final drsep
-                flt_obj.hlm_params.points = obj.r
-                flt_obj.hlm_params.additional_profiles = []
-                flt_obj.hlm_params.additional_profiles.append(obj.Te)
-                flt_obj.hlm_params.additional_profiles.append(obj.Ti)
+                hlm_params.points = obj.r
+                hlm_params.additional_profiles = []
+                hlm_params.additional_profiles.append(obj.Te)
+                hlm_params.additional_profiles.append(obj.Ti)
 
                 # Now calculate the heat load profile
                 if not (d := hlmd.get("elm_parameters")):
@@ -922,7 +927,7 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
                 pprint("INFO: Obtaining ELM heat load profiles")
                 obj.calculate_heat_load_profile(**d)
 
-                flt_obj.hlm_params.profile = obj.qpar
+                hlm_params.profile = obj.qpar
             if hlm_type == "disruption":
                 # Obtain the disruption profile. For that we require the IMAS
                 # access, or that the source of the equilibrium is the IMAS
@@ -934,45 +939,154 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
                 print(f"INFO: Loading custom profile: {_file}")
                 _data = np.loadtxt(_file)
                 if _data.shape[0] == 2:
-                    flt_obj.hlm_params.points = _data[0]
-                    flt_obj.hlm_params.profile = _data[1]
+                    hlm_params.points = _data[0]
+                    hlm_params.profile = _data[1]
                 else:
-                    flt_obj.hlm_params.points = _data[:, 0]
-                    flt_obj.hlm_params.profile = _data[:, 1]
+                    hlm_params.points = _data[:, 0]
+                    hlm_params.profile = _data[:, 1]
 
-            flt_obj.applyHLM()
+            drsep = flt_obj.results.drsep
+            # Apply offset
+            if 'r_offset' in t:
+                r_offset = t['r_offset']
+                ipprint(f"INFO: Applying {r_offset=}")
+                drsep = drsep - t['r_offset']
+
+            Bdot = np.abs(flt_obj.results.Bdot)
+            bfield_mag = np.linalg.norm(flt_obj.results.BVec.reshape((-1, 3)),
+                                        axis=1)
+
+            flt_obj.eq.evaluate()
+            Rb, _, Btotal, Bpm = flt_obj.eq.getMidplaneInfo(
+                    which=flt_obj.parameters.side)
+
+            match hlm_type:
+                case "single":
+                    if 'q_par0' in t:
+                        q_par = l2g.hlm.general.single_exponential_qpar(drsep,
+                            hlm_params.lambda_q, hlm_params.q_par0)
+                    else:
+                        q_par = l2g.hlm.general.single_exponential_psol(drsep=drsep,
+                            Bt=Btotal, Bpm=Bpm, Rb=Rb, P_sol=hlm_params.p_sol,
+                            F=0.5, lambda_q=hlm_params.lambda_q)
+                case "double":
+                    if hlm_params.longwave_misaligment_applied:
+                        q_par = l2g.hlm.general.double_exponential_psol_longwave(
+                            drsep=drsep, Bt=Btotal, Bpm=Bpm, Rb=Rb,
+                            lambda_q_main=hlm_params.lambda_q_main,
+                            lambda_q_near=hlm_params.lambda_q_near,
+                            Rq=hlm_params.ratio, P_sol=hlm_params.p_sol,
+                            F=0.5, delta_mis=hlm_params.longwave_l)
+                    else:
+                        q_par = l2g.hlm.general.double_exponential_psol(drsep=drsep,
+                            Bt=Btotal, Bpm=Bpm, Rb=Rb,
+                            lambda_q_main=hlm_params.lambda_q_main,
+                            lambda_q_near=hlm_params.lambda_q_near,
+                            Rq=hlm_params.ratio, P_sol=hlm_params.p_sol, F=0.5)
+                case "custom":
+                    # We have points and profile
+                    q_par = l2g.hlm.general.custom(drsep=drsep,
+                        points=hlm_params.points, profile=hlm_params.profile,
+                        extrapolate=hlm_params.extrapolate,
+                        outside_value=hlm_params.outside_value)
+                    # The custom is defined on a midplane with magnetic surfaces going
+                    # perpendicular to it. In reality of course we have the toroidal
+                    # and poloidal component that already states that the flux tubes
+                    # go from the midplane at an angle. Therefore we multiply this
+                    # profile with the factor in order to actually scale it to the
+                    # midplane.
+                    # In other words apply the pitch at the midplane. Other functions
+                    # defined in the l2g.hlm already contains this term, except for the
+                    # q_parallel profile here.
+                    q_par *= Btotal / Bpm
+                case "elm":
+                    # The ELM data is loaded with an extra step.
+                    interELM = l2g.hlm.steady_state.inter_ELM(drsep, Rb, Btotal, Bpm,
+                            Rb=hlm_params.r_break, P_sol=hlm_params.p_sol,
+                            lambda_n=hlm_params.lambda_q_near,
+                            lambda_m=hlm_params.lambda_q_main)
+                    elm = l2g.hlm.general.custom(drsep=drsep,
+                        points=hlm_params.points, profile=hlm_params.profile)
+                    q_par = interELM + elm
+
+                    Te = l2g.hlm.general.custom(drsep=drsep,
+                        points=hlm_params.points,
+                        profile=hlm_params.additional_profiles[0])
+
+                    Ti = l2g.hlm.general.custom(drsep=drsep,
+                        points=hlm_params.points,
+                        profile=hlm_params.additional_profiles[1])
+
+                    hlm_results.additional_arrays = []
+                    hlm_results.additional_arrays.append(elm)
+                    hlm_results.additional_arrays.append(interELM)
+                    hlm_results.additional_arrays.append(flt_obj.applyShadowMask(Te))
+                    hlm_results.additional_arrays.append(flt_obj.applyShadowMask(Ti))
+                case "L-mode":
+                    q_par = l2g.hlm.steady_state.inter_ELM(drsep=drsep,
+                        R_bdry=Rb, B_total=Btotal, B_pol=Bpm,
+                        Rb=hlm_params.r_break, P_sol=hlm_params.p_sol,
+                        lambda_n=hlm_params.lambda_q_near,
+                        lambda_m=hlm_params.lambda_q_main)
+
+                case "ramp-down":
+                    # P_sol taken from IMAS, hopefully.
+                    Ip = flt_obj.equilibrium.Ip
+                    if Ip < hlm_params.ip_transition:
+                        lambda_q = l2g.hlm.ramp_down.decay_length_L_mode_diverted(
+                            a = flt_obj.equilibrium.a, Ip=Ip,
+                            Area=flt_obj.equilibrium.Area, R=flt_obj.equilibrium.mag_axis_r)
+                        q_par = l2g.hlm.general.single_exponential_psol(drsep, Btotal,
+                            Bpm, Rb, lambda_q * 1e-3, flt_obj.equilibrium.Psol)
+                    else:
+                        lambda_q = float("NaN")
+                        q_par = np.zeros(drsep.shape)
+
+                    hlm_results.additional_arrays = [lambda_q]
+                case _:
+                    q_par = np.zeros(drsep.shape)
+
+            q_inc = flt_obj.applyShadowMask(q_par * Bdot / Btotal)
+            if hlm_type == "elm":
+                # Also put incident arrays for the inter-ELM and ELM
+                hlm_results.additional_arrays.append(flt_obj.applyShadowMask(elm * Bdot / Btotal))
+                hlm_results.additional_arrays.append(flt_obj.applyShadowMask(interELM * Bdot / Btotal))
+
+            hlm_results.q_inc = q_inc
+            hlm_results.q_par = q_par
+            hlm_results.flux_expansion = bfield_mag / Btotal
 
             ipprint("INFO: Writing HLM arrays to file")
             # Slashes "/" are not allowed in the name of a field. They have
             # to be escaped!
-            result_file.addField(array=flt_obj.hlm_results.flux_expansion,
+            result_file.addField(array=hlm_results.flux_expansion,
                                  array_name="Total flux expansion")
-            result_file.addField(array=flt_obj.hlm_results.q_inc,
+            result_file.addField(array=hlm_results.q_inc,
                 array_name=r"q_perp")
-            result_file.addField(array=flt_obj.hlm_results.q_par,
+            result_file.addField(array=hlm_results.q_par,
                 array_name=r"q_para")
 
             if hlm_type == "elm":
                 # Writing additional arrays
                 # Take arrays from additional_arrays variable.
                 result_file.addField(
-                    array=flt_obj.hlm_results.additional_arrays[0],
+                    array=hlm_results.additional_arrays[0],
                     array_name=r"q_para ELM",
                     info_on_components=["W/m^2"])
                 result_file.addField(
-                    array=flt_obj.hlm_results.additional_arrays[1],
+                    array=hlm_results.additional_arrays[1],
                     array_name=r"q_para inter-ELM")
                 result_file.addField(
-                    array=flt_obj.hlm_results.additional_arrays[2],
+                    array=hlm_results.additional_arrays[2],
                     array_name=r"T_e [eV]")
                 result_file.addField(
-                    array=flt_obj.hlm_results.additional_arrays[3],
+                    array=hlm_results.additional_arrays[3],
                     array_name=r"T_i [eV]")
                 result_file.addField(
-                    array=flt_obj.hlm_results.additional_arrays[4],
+                    array=hlm_results.additional_arrays[4],
                     array_name=r"q_perp ELM")
                 result_file.addField(
-                    array=flt_obj.hlm_results.additional_arrays[5],
+                    array=hlm_results.additional_arrays[5],
                     array_name=r"q_perp inter-ELM")
             result_file.writeFields()
             opprint("INFO:Writing done!")
