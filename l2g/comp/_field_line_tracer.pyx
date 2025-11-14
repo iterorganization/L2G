@@ -767,7 +767,7 @@ cdef class FieldLineTracer:
                    (self.c_points[3*i+1] - cp_z) ** 2
             rz_dist_points[i] = True
             # Distance should be smaller for MaskedArray filtering!
-            if dist <= lcfs_max_align_dist_sq:
+            if dist >= lcfs_max_align_dist_sq:
                 rz_dist_points[i] = False
         masked_array = np.ma.MaskedArray(self.results.drsep, rz_dist_points)
 
