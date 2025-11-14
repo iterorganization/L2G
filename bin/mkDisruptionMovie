@@ -86,14 +86,6 @@ parser.add_argument('-o', '--output_name', type=str, default="out.gif",
                     help="Name of gif.", metavar="OUTNAME")
 
 # Additional cosmetic arguments
-parser.add_argument('-minx', '--min_x', type=float, help="Abscissa lower limit",
-                    metavar="MIN X")
-parser.add_argument('-maxx', '--max_x', type=float, help="Abscissa upper limit",
-                    metavar="MAX X")
-parser.add_argument('-miny', '--min_y', type=float, help="Ordinate lower limit",
-                    metavar="MIN Y")
-parser.add_argument('-maxy', '--max_y', type=float, help="Ordinate upper limit",
-                    metavar="MAX Y")
 parser.add_argument("-ns", '--number_of_samples', type=int,
                     metavar="#number_of_samples", default=100,
                     help="Number of samples to take. If the " +

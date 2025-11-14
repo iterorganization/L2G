@@ -80,8 +80,19 @@ except:
                              wall_backup.description_2d[0].limiter.unit[1].outline.r[::-1]])
     wall_contour_z = np.concatenate([wall_backup.description_2d[0].limiter.unit[0].outline.z,
                              wall_backup.description_2d[0].limiter.unit[1].outline.z[::-1]])
-Z_LIMITS = np.min(wall_contour_z) - 1, np.max(wall_contour_z) + 1
-R_LIMITS = np.min(wall_contour_r) - 1, np.max(wall_contour_r) + 1
+Z_LIMITS = [np.min(wall_contour_z) - 1, np.max(wall_contour_z) + 1]
+R_LIMITS = [np.min(wall_contour_r) - 1, np.max(wall_contour_r) + 1]
+if not args.min_x is None:
+    R_LIMITS[0] = args.min_x
+
+if not args.max_x is None:
+    R_LIMITS[1] = args.max_x
+
+if not args.min_y is None:
+    Z_LIMITS[0] = args.min_y
+
+if not args.max_y is None:
+    Z_LIMITS[1] = args.max_y
 
 # Plot limiter
 ax.plot(wall_contour_r, wall_contour_z, 'r-')
@@ -101,7 +112,6 @@ secondary_contour_z = []
 
 # Labels
 times = []
-from time import sleep
 
 mask = np.logical_and(summary_ids.time >= args.time_start,
                       summary_ids.time <= args.time_end)
