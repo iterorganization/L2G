@@ -761,18 +761,23 @@ cdef class FieldLineTracer:
         # doing comparison
         (cp_r, cp_z) = self.eq.getContactPoint()
         lcfs_max_align_dist_sq = self.parameters.lcfs_max_align_dist ** 2
-        rz_dist_points = np.empty(self.results.drsep.shape, dtype="bool")
-        for i in range(rz_dist_points.size):
+        el_min = None
+        dist_min = 1e20
+        for i in range(self.c_points.size() // 3):
             dist = (self.c_points[3*i] - cp_r) ** 2 + \
                    (self.c_points[3*i+1] - cp_z) ** 2
-            rz_dist_points[i] = True
             # Distance should be smaller for MaskedArray filtering!
             if dist >= lcfs_max_align_dist_sq:
-                rz_dist_points[i] = False
-        masked_array = np.ma.MaskedArray(self.results.drsep, rz_dist_points)
+                continue
 
+            if self.results.drsep[i] < dist_min:
+                dist_min = self.results.drsep[i]
+                el_min = i
+
+        if el_min is None:
+            log.info(f"No element found that is closer than lcfs_max_align_dist={self.parameters.lcfs_max_align_dist}")
+            return
         # Get the element that is closest.
-        el_min = np.ma.argmin(masked_array)
         dr_min = self.results.drsep[el_min]
         elr_min = self.c_points[3 * el_min]
         elz_min = self.c_points[3 * el_min + 1]
