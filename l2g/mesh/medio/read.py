@@ -129,7 +129,7 @@ def get_field(f: h5py.File, field_name: str, mesh_name: str, index: int) -> np.n
     if num_of_components == 1:
         return data
     else:
-        return data.reshape((number_of_cells, num_of_components))
+        return data.reshape((num_of_components, -1)).T
 
 def get_mesh_data(f: h5py.File, mesh_name: str) -> tuple[np.ndarray, np.ndarray]:
     """Get vertices and triangles of a mesh from MED file.
