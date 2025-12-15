@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.typing as npt
 
 import logging
 log = logging.getLogger(__name__)
@@ -40,7 +41,7 @@ class Equilibrium(object):
         Psol (float): Power @ SOL
         Area (float): Plasma crossection area.
     """
-    __slots__ = [
+    __slots__: list[str] = [
         "wall_contour_r",
         "wall_contour_z",
         "mag_axis_r",
@@ -63,8 +64,8 @@ class Equilibrium(object):
         "Area"]
 
     def __init__(self):
-        self.wall_contour_r: list = []
-        self.wall_contour_z: list = []
+        self.wall_contour_r: list[float] = []
+        self.wall_contour_z: list[float] = []
 
         self.mag_axis_r: float = -1.0
         self.mag_axis_z: float = -1.0
@@ -72,17 +73,17 @@ class Equilibrium(object):
         self.grid_dim_r: int = -1
         self.grid_dim_z: int = -1
 
-        self.grid_r: np.ndarray = np.array([])
-        self.grid_z: np.ndarray = np.array([])
-        self.psi: np.ndarray = np.array([])
-        self.psi_sign: int | None = None # Sign of flux gradient from center to boundary.
-        self.psi_boundary: float | None = None
-        self.psi_axis: float | None = None
+        self.grid_r: npt.NDArray[np.float64] = np.array([])
+        self.grid_z: npt.NDArray[np.float64] = np.array([])
+        self.psi: npt.NDArray[np.float64] = np.array([])
+        self.psi_sign: int = 1 # Sign of flux gradient from center to boundary.
+        self.psi_boundary: float = 0
+        self.psi_axis: float = 0
 
-        self.Ip: float | None = -1.0
+        self.Ip: float = -1.0
 
-        self.fpol: np.ndarray = np.array([])
-        self.fpol_flux: np.ndarray = np.array([])
+        self.fpol: npt.NDArray[np.float64] = np.array([])
+        self.fpol_flux: npt.NDArray[np.float64] = np.array([])
         self.fpol_vacuum: float= -1.0
 
         self.type: str = ''
@@ -90,8 +91,6 @@ class Equilibrium(object):
         self.a: float = 0.0
         self.Psol: float = 0.0
         self.Area: float = 0.0
-
-        pass
 
 def correct_equilibrium_helicity(eq_obj: Equilibrium) -> None:
     """Corrects the equilibrium helicity. That is changes the sign of the

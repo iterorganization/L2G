@@ -137,7 +137,7 @@ def generateVtkObject(vertices, triangles):
     vtk_obj.SetCells(VTK_TRIANGLE, cells)
     return vtk_obj
 
-def getVtkObj(file_path: str, vertices: np.ndarray, triangles: np.ndarray):
+def getVtkObj(file_path: str, vertices: np.ndarray, triangles: np.ndarray) -> vtkUnstructuredGrid:
     global __vtk_obj__
     """Holding a reference VTK object on a file_path.
     """
@@ -149,7 +149,8 @@ def getVtkObj(file_path: str, vertices: np.ndarray, triangles: np.ndarray):
 
     return __vtk_obj__[file_path]
 
-def writeMesh(file_path, vertices, triangles, mesh_name: str='mesh'):
+def writeMesh(file_path: str, vertices: np.ndarray, triangles: np.ndarray,
+              mesh_name: str='mesh') -> None:
     """Depending on the file_path extension we create a writer.
     """
 
@@ -210,7 +211,7 @@ def checkIfFieldExists(file_path: str, field_name: str) -> bool:
     # Do nothing for now
     return True
 
-def getAllFieldIterations(file_path: str, field_name: str) -> list:
+def getAllFieldIterations(file_path: str, field_name: str) -> list[tuple[int, float]]:
     return []
 
 def doesItContainGroup(*args, **kwargs) -> bool:

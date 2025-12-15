@@ -1,5 +1,11 @@
 import numpy as np
+import numpy.typing as npt
 from math import isclose
+
+import typing
+if typing.TYPE_CHECKING:
+    from l2g.equil import Equilibrium
+    from l2g.external.equilibrium_analysis import EQA
 
 class Polygon(object):
     """Polygon class for simple 2D Ray-Casting usage.
@@ -142,7 +148,7 @@ class Polygon(object):
                 break
         return out
 
-def getOwlConlensGraph(eq: 'EQA'):
+def getOwlConlensGraph(eq: 'EQA') -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Use this function that obtains the OWL connection length at the outer
     midplane.
 
@@ -165,7 +171,7 @@ def getOwlConlensGraph(eq: 'EQA'):
     from l2g.external.rkf45 import PyRKF45FLT
     from math import sqrt, cos
 
-    equilibrium = eq.equilibrium
+    equilibrium: 'Equilibrium' = eq.equilibrium
 
     # Evaluate if still not evaluated
     eq.evaluate()
@@ -175,7 +181,7 @@ def getOwlConlensGraph(eq: 'EQA'):
     # Get the R points on the midplane. Up to the wall.
     polygon = Polygon(equilibrium.wall_contour_r, equilibrium.wall_contour_z)
     r_end = polygon.horizontalRayIntersection(Rb, Zc)
-    r_points = np.linspace(Rb, r_end, 200)
+    r_points: np.ndarray = np.linspace(Rb, r_end, 200)
 
     bicubic = PyBicubic(equilibrium.grid_r, equilibrium.grid_z,
                         equilibrium.psi)
@@ -223,7 +229,7 @@ def getOwlConlensGraph(eq: 'EQA'):
         conlen_up[i] = length
     return r_points - Rb, conlen_down, conlen_up
 
-if __name__ == "__main__":
+def main() -> None:
     import l2g
     import l2g.equil
     from l2g.external.equilibrium_analysis import EQA
@@ -236,7 +242,7 @@ if __name__ == "__main__":
         "equilibrium wall contour for shadowing. It utilizes the external " +
         "C++ library.")
 
-    parser.add_argument("eqdsk_file", help="EQDSK-G file")
+    _ = parser.add_argument("eqdsk_file", help="EQDSK-G file")
 
     args = parser.parse_args()
     file = args.eqdsk_file
@@ -248,8 +254,6 @@ if __name__ == "__main__":
     equilibrium = l2g.equil.getEquilibriumFromEQFile(file)
     l2g.enableDebugging()
     l2g.addStreamHandler()
-    import logging
-    log = logging.getLogger(__name__)
 
     eqa = EQA(equilibrium)
     eqa.evaluate()
@@ -266,3 +270,6 @@ if __name__ == "__main__":
     plt.grid()
     plt.legend()
     plt.show()
+
+if __name__ == "__main__":
+    main()

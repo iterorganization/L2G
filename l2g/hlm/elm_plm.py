@@ -16,7 +16,7 @@ The method solves the equations 5.5 in dimensionless form.
 from scipy.interpolate import interp1d
 import logging
 import numpy as np
-import math
+import numpy.typing as npt
 log = logging.getLogger(__name__)
 
 
@@ -132,9 +132,10 @@ class ELM_PLM(object):
        plt.show()
 
     """
-    def __init__(self, drsep, conlen):
-        self.drsep = drsep
-        self.conlen = conlen
+    def __init__(self, drsep: npt.NDArray[np.float64],
+                 conlen: npt.NDArray[np.float64]):
+        self.drsep: npt.NDArray[np.float64] = drsep
+        self.conlen: npt.NDArray[np.float64] = conlen
         self.interp_conlen = interp1d(drsep, conlen, kind="linear",
                                       fill_value="extrapolate")
 
@@ -535,4 +536,3 @@ class ELM_PLM(object):
             del f
             return
         return f, axs
-

@@ -1,10 +1,17 @@
 """This module contains data container classes used to collect data from FLT
 runs.
 """
-from typing import Optional, List
 import numpy as np
+import numpy.typing as npt
 import logging
+import typing
+
 log = logging.getLogger(__name__)
+
+if typing.TYPE_CHECKING:
+    from vtkmodules.vtkCommonDataModel import vtkUnstructuredGrid
+    from vtkmodules.vtkCommonDataModel import vtkPolyData
+
 
 class L2GResults:
     """This class holds FLT relevant data.
@@ -30,7 +37,7 @@ class L2GResults:
         drsep: 1D array of radial distance along the midplane on baryCent in meters
         q: 1D array of incident heat load values on baryCent in W
         qpar: 1D array of parallel heat laod values on baryCent in W
-        geom_hit_ids: 1D array of integer IDs of geometries loaded into Embree
+        geom_hit_ids: 1D array of integer IDs of geometries loaded into TLAS
         vertices: 1D array of mesh vertices (size is equal to 3*N, where N is the
                 number of vertices)
         triangles: 1D array of mesh triangles (size is equal to 3*M, where M is
@@ -38,7 +45,7 @@ class L2GResults:
 
     """
 
-    __slots__ = [
+    __slots__: list[str] = [
         "normals",  # Provided by FieldLineTracer
         "flux",     # Provided by FieldLineTracer
         "BVec",     # Provided by FieldLineTracer
@@ -58,7 +65,7 @@ class L2GResults:
         "vertices"
         ]
 
-    arrays_to_dump = [
+    arrays_to_dump: list[str] = [
         "normals",
         "flux",
         "BVec",
@@ -79,19 +86,19 @@ class L2GResults:
 
     def reset(self, N: int=0):
         if N == 0:
-            self.normals:       Optional[np.ndarray] = None
-            self.flux:          Optional[np.ndarray] = None
-            self.BVec:          Optional[np.ndarray] = None
-            self.BVecCyln:      Optional[np.ndarray] = None
-            self.Bdot:          Optional[np.ndarray] = None
-            self.angle:         Optional[np.ndarray] = None
-            self.mask:          Optional[np.ndarray] = None
-            self.direction:     Optional[np.ndarray] = None
-            self.conlen:        Optional[np.ndarray] = None
-            self.drsep:         Optional[np.ndarray] = None
-            self.drsep2:        Optional[np.ndarray] = None
-            self.geom_hit_ids:  Optional[np.ndarray] = None
-            self.prim_hit_ids:  Optional[np.ndarray] = None
+            self.normals:       npt.NDArray[np.float64] = np.array([])
+            self.flux:          npt.NDArray[np.float64] = np.array([])
+            self.BVec:          npt.NDArray[np.float64] = np.array([])
+            self.BVecCyln:      npt.NDArray[np.float64] = np.array([])
+            self.Bdot:          npt.NDArray[np.float64] = np.array([])
+            self.angle:         npt.NDArray[np.float64] = np.array([])
+            self.mask:          npt.NDArray[np.float64] = np.array([])
+            self.direction:     npt.NDArray[np.int32] = np.array([])
+            self.conlen:        npt.NDArray[np.float64] = np.array([])
+            self.drsep:         npt.NDArray[np.float64] = np.array([])
+            self.drsep2:        npt.NDArray[np.float64] = np.array([])
+            self.geom_hit_ids:  npt.NDArray[np.int32] = np.array([])
+            self.prim_hit_ids:  npt.NDArray[np.int32] = np.array([])
 
         else:
             # First we check if we already have arrays of the given size
@@ -114,11 +121,10 @@ class L2GResults:
                 self.geom_hit_ids = np.empty(N, dtype=np.int32)
                 self.prim_hit_ids = np.empty(N, dtype=np.int32)
 
-        self.empty = True
-        self.recalculate = True
+        self.empty: bool = True
+        self.recalculate: bool = True
 
-
-    def generate_vtk_object(self):
+    def generate_vtk_object(self) -> 'vtkUnstructuredGrid':
         """From the data it generates a VTK object.
         """
         if self.triangles is None or self.vertices is None:
@@ -135,7 +141,6 @@ class L2GResults:
         except ImportError as e:
             log.error("VTK not available")
             return None
-
 
         data = vtkUnstructuredGrid()
         points = vtkPoints()
@@ -186,20 +191,19 @@ class L2GFLs:
     """Class that holds calculated FLs on given target triangles.
     """
 
-    __slots__ = ["points", "target_to_m"]
+    __slots__: list[str] = ["points", "target_to_m"]
 
     def __init__(self):
         # List of Ids
-        self.points: Optional[np.ndarray] = None
-        self.target_to_m: Optional[float] = 1.0 # What inverse scale to use to
+        self.points: np.ndarray | None = None
+        self.target_to_m: float = 1.0 # What inverse scale to use to
                                                 # transform to the same
                                                 # unit dimension as used
                                                 # target.
 
-    def generate_vtk_object(self):
+    def generate_vtk_object(self) -> 'vtkPolyData':
         if self.points is None:
-            log.error("No data to dump")
-            return None
+            raise Exception("No data to dump")
 
         try:
             from vtkmodules.vtkCommonCore import vtkPoints
@@ -207,9 +211,8 @@ class L2GFLs:
                                                        vtkPolyLine,
                                                        vtkPolyData)
             from vtkmodules.util import numpy_support
-        except ImportError as e:
-            log.error("VTK not available")
-            return None
+        except ImportError as _:
+            raise Exception("VTK not available")
 
         N_points = np.sum([len(_) for _ in self.points]) // 3
 
@@ -253,7 +256,6 @@ class L2GFLs:
         conlenScalar = numpy_support.numpy_to_vtk(lengths)
         conlenScalar.SetName('conlen')
         cellData.AddArray(conlenScalar)
-
         return data
 
 class L2GResultsHLM:
@@ -269,9 +271,8 @@ class L2GResultsHLM:
         flux_expansion: Flux expansion
         additional_arrays: Storage for additional arrays
     """
-    __slots__ = ["q_inc", "q_par", "flux_expansion", "additional_arrays",
-                 "empty"]
-
+    __slots__: list[str] = ["q_inc", "q_par", "flux_expansion",
+                            "additional_arrays", "empty"]
 
     def __init__(self):
         self.reset()
@@ -280,5 +281,5 @@ class L2GResultsHLM:
         self.q_inc: np.ndarray = np.array([])
         self.q_par: np.ndarray = np.array([])
         self.flux_expansion: np.ndarray = np.array([])
-        self.additional_arrays: List[np.ndarray] = []
+        self.additional_arrays: list[np.ndarray] = []
         self.empty: bool = True

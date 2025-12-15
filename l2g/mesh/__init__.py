@@ -3,17 +3,18 @@
 import numpy as np
 import logging
 import os
+from types import ModuleType
 
 log = logging.getLogger(__name__)
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from l2g.comp import L2GResults, L2GResultsHLM, L2GFLs
 
 def supportedFileExts() -> list[str]:
     return ["med", "vtk", "vtu"]
 
-def rotatePointsAroundAxis(points: np.ndarray, p1: np.ndarray, p2: np.ndarray,
-    theta: float):
+def rotatePointsAroundAxis(points: np.ndarray, p1: np.ndarray,
+                           p2: np.ndarray, theta: float) -> np.ndarray:
     """Rotate the argument points around the axis :math:`|p2 - p1|` for the
     angle theta.
 
@@ -62,6 +63,7 @@ def rotatePointsAroundAxis(points: np.ndarray, p1: np.ndarray, p2: np.ndarray,
 
     # We need to fix the stride. Best way is to copy all values...
     # No idea otherwise how to fix the array stride.
+    # It can be done with "np.ascontigous" array.
     out_points[:] = out
     # out_points = out_points.T
 
@@ -100,7 +102,7 @@ class GroupNotInMesh(Exception):
 class NoMeshDataLoaded(Exception):
     pass
 
-def integrate_quantity(mesh: 'Mesh', field_name: str, area_density=True,
+def integrate_quantity(mesh: 'Mesh', field_name: str, area_density: bool=True,
                        opt_groups: list[str] | None = None) -> float | dict[str, float]:
     """Integrate by time and return the value of a quantity on the provided
     Mesh object. Additionally if a list of groups (sub-meshes) are provided,
@@ -161,7 +163,7 @@ def integrate_quantity(mesh: 'Mesh', field_name: str, area_density=True,
     return out
 
 class Mesh():
-    """This is a convenient class for reading/writing 2D surface mesh made of
+    """This is a convenience class for reading/writing 2D surface mesh made of
     triangles and with time-dependent data on it. Primarily it supports the
     MED format (MED-file, MEDCoupling) but it is intended to be an easy to use
     interface with different I/O backends behind.
@@ -219,22 +221,22 @@ class Mesh():
         self.triangles: np.ndarray = np.array([])
 
         # Field index
-        self.index = 0
-        self.time = 0.0
-        self.number_of_time_steps = 1
+        self.index: int = 0
+        self.time: float = 0.0
+        self.number_of_time_steps: int = 1
 
         # Fields
         self.arrays: dict[str, dict[int, np.ndarray]] = {}
 
         # Writing data
-        self.info_on_components: dict[str, dict[int, list]] = {}
+        self.info_on_components: dict[str, dict[int, list[str]]] = {}
         self.times: dict[str, dict[int, float]] = {}
 
         # MODULE pointer
-        self.backend = None
-        self.backend_name = 'UNKNOWN'
+        self.backend: ModuleType = None
+        self.backend_name: str = 'UNKNOWN'
         if file_path:
-            self.file_path = file_path
+            self.file_path: str = file_path
             self.openFile(self.file_path)
         else:
             self.file_path = ""
@@ -255,7 +257,7 @@ class Mesh():
         if ext not in supportedFileExts():
             log.error(f"File {file_path} does not have a supported file ext.")
             log.info(f"Supported exts: {' '.join(supportedFileExts())}")
-            self.backend_name = None
+            self.backend_name = ""
             self.backend = None
             raise WrongFileExtensionException(f"{ext} not supported.")
 
@@ -392,7 +394,7 @@ class Mesh():
             return self.backend.getAllFieldNames(self.file_path)
         return []
 
-    def getAllFieldIterations(self, field_name: str) -> list:
+    def getAllFieldIterations(self, field_name: str) -> list[tuple[int, float]]:
         """Returns all indexes and times of the field inside the file.
 
         Returns:
@@ -400,14 +402,14 @@ class Mesh():
                 and times (i.e., [[0, 0.0], [1, 0.5]].
         """
 
-        out = []
+        out: list[tuple[int, float]] = []
 
         if self.backend is None:
             return []
 
         if self.doesItContainField(field_name):
             out = self.backend.getAllFieldIterations(self.file_path, field_name)
-            out = [[_[0], _[1]] for _ in out]
+            out = [(_[0], _[1]) for _ in out]
 
         return out
 
@@ -499,7 +501,7 @@ class Mesh():
         return new_obj
 
     def addField(self, array_name: str, array: np.ndarray,
-                 info_on_components: list=[""]):
+                 info_on_components: list[str]=[""]):
         """Add field to be written to a file. The input array is actually a
         numpy array, but when we are talking on saving it to files, where the
         array corresponds to an unstructured grid made of triangles, it is
@@ -530,13 +532,13 @@ class Mesh():
         self.info_on_components[array_name][index] = info_on_components
         self.times[array_name][index] = self.time
 
-    def writeFields(self):
+    def writeFields(self) -> None:
         """Write the fields to the mesh file, which were added with the function
         :py:meth:`l2g.mesh.Mesh.addField`.
         """
 
         if self.backend is None:
-            log.error("No valid backed.")
+            log.error("No valid backend.")
             return
 
         if self.backend_name == "MED":
@@ -621,7 +623,7 @@ class Mesh():
         self.info_on_components = {}
         self.times = {}
 
-        return True
+        return
 
     def translateMesh(self, vector: np.ndarray) -> None:
         """Translates the vertices with the provided vector.
@@ -822,7 +824,7 @@ def save_mesh_to_vtk(data, file_path):
     writer.SetFileName(file_path)
     writer.Write()
 
-def save_results_to_vtk(result_obj: Union['L2GFLs', 'L2GResults'],
+def save_results_to_vtk(result_obj: 'L2GFLs | L2GResults',
                        file_path: str) -> None:
     """Helper function to save result objects: :class:`L2GResults`,
     :class:`L2GFLs` to a file.

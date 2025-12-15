@@ -31,7 +31,7 @@ def traverse_med_file(f: h5py.File) -> tuple[list[str], dict[str, Mesh], dict[st
     """
     meshes: dict[str, Mesh] = {}
     mesh_names: list[str] = []
-    fields: dict[str, list[int]] = {}
+    fields: dict[str, list[tuple[int, float]]] = {}
 
     if (FAS := f.get('FAS')):
 
@@ -85,7 +85,7 @@ def traverse_med_file(f: h5py.File) -> tuple[list[str], dict[str, Mesh], dict[st
     if (CHA := f.get('CHA')):
         for field_name in CHA.keys():
 
-            iterations = []
+            iterations: list[tuple[int, float]] = []
             # Get the indexes and times
 
             # Get the tied mesh name

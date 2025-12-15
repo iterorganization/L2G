@@ -1,5 +1,7 @@
+from l2g.equil import Equilibrium
 import glob
 import os
+from typing import Any
 
 import logging
 log = logging.getLogger(__name__)
@@ -110,7 +112,7 @@ class EquilibriumIterator(object):
             self._equilibriums.append(equilibrium)
             self._times.append(i)
 
-    def loadIMASEquilibriums(self, d: dict = {}) -> None:
+    def loadIMASEquilibriums(self, d: dict[str, Any]) -> None:
         """Generate Equilibrium objects from IMAS.
 
         The dictionary arguments
@@ -140,7 +142,7 @@ class EquilibriumIterator(object):
         .. code-block:: python
 
            d = {
-             "shot": 135011, # Must be specifieds. Int
+             "shot": 135011, # Must be specified. Int
              "run": 7, # Must be specified. Int
              "user": "user_name", # Default public
              "device": "device_name", # Default iter
@@ -278,26 +280,24 @@ class EquilibriumIterator(object):
     def __len__(self) -> int:
         return len(self._equilibriums)
 
-    def __getitem__(self, i) -> tuple[int, float, "Equilibrium"]:
+    def __getitem__(self, i: int) -> tuple[int, float, "Equilibrium"]:
         return i, self._times[i], self._equilibriums[i]
 
     def applyBtMultiplier(self, bt_multiplier: float | list[float]) -> None:
-        """Applies a factor to the Bt (fpol_vacuum) value.
+        """Applies a multiplier to the Bt (fpol_vacuum) value. If the
+        multiplier is a list of values, the number of values must correspond
+        to the number of equilibriums.
 
         Arguments:
-            bt_multiplier (float): Float.
+            bt_multiplier (float | list[float]): Float or a list of floats.
         """
-        ok = True
         n_equilibriums = len(self._equilibriums)
         is_list = isinstance(bt_multiplier, list)
 
-        if (is_list and len(bt_multiplier) != n_equilibriums) or (not is_list and n_equilibriums > 1 and bt_multiplier != 1):
+        if (is_list and len(bt_multiplier) != n_equilibriums):
             log.error('You have not provided enough bt_multiplier values for all' +
                       ' instances of plasma! ')
-            ok = False
-
-        if not ok:
-            return
+            raise Exception("Not enough Bt multiplier values provided")
 
         if is_list:
             for i, equilibrium in enumerate(self._equilibriums):
@@ -307,22 +307,20 @@ class EquilibriumIterator(object):
                 equilibrium.fpol_vacuum *= bt_multiplier
 
     def applyPsiMultiplier(self, psi_multiplier: float | list[float]) -> None:
-        """Applies a factor to the Psi (fpol_vacuum) value.
+        """Applies a multiplier to the Psi (fpol_vacuum) value. If the
+        multiplier is a list of values, the number of values must correspond
+        to the number of equilibriums.
 
         Arguments:
             psi_multiplier (float): Float.
         """
-        ok = True
         n_equilibriums = len(self._equilibriums)
         is_list = isinstance(psi_multiplier, list)
 
-        if (is_list and len(psi_multiplier) != n_equilibriums) or (not is_list and n_equilibriums > 1 and psi_multiplier != 1):
+        if (is_list and len(psi_multiplier) != n_equilibriums):
             log.error('You have not provided enough psi_multiplier values for all' +
                       ' instances of plasma! ')
-            ok = False
-
-        if not ok:
-            return
+            raise Exception("Not enough Psi multiplier values provided")
 
         if is_list:
             for i, equilibrium in enumerate(self._equilibriums):
@@ -345,10 +343,10 @@ class EquilibriumIterator(object):
             equilibrium.wall_contour_z = [_ + z_shift for _ in equilibrium.wall_contour_z]
 
     def applyPlasmaShift(self, r_shift: float | list[float],
-                         z_shift: float | list[float]) -> bool:
-        """Applies a single or set of shifts (radial and/or vertical) to the
-        plasma equilibrium. The number of shift should be the same as the
-        number of equilibriums inside the iterator object.
+                         z_shift: float | list[float]) -> None:
+        """Applies a single or set of shifts (radial and/or vertical) to all
+        loaded plasma equilibrium. If the shifts are a list of values, the
+        number of values must correspond to the number of equilibriums.
 
         Arguments:
             r_shift (float): Radial shift. In meters
@@ -363,21 +361,16 @@ class EquilibriumIterator(object):
 
         n_equilibriums = len(self._equilibriums)
 
-        ok = True
-        if (isinstance(r_shift, list) and len(r_shift) != n_equilibriums) or (not isinstance(r_shift, list) and n_equilibriums > 1 and r_shift != 0.0):
-            ok = False
-            log.error('You have not provided enough r shift values for all' +
-                      ' instances of plasma! ')
+        is_r_list = isinstance(r_shift, list)
+        is_z_list = isinstance(z_shift, list)
+        if is_r_list and len(r_shift) != n_equilibriums:
+            raise Exception("Not enough radial shift values provided.")
 
-        if (isinstance(z_shift, list) and len(z_shift) != n_equilibriums) or (not isinstance(z_shift, list) and n_equilibriums > 1 and z_shift != 0.0):
-            ok = False
-            log.error('You have not provided enough z shift values for all' +
-                      ' instances of plasma!')
-        if not ok:
-            return False
+        if is_z_list and len(z_shift) != n_equilibriums:
+            raise Exception("Not enough vertical shift values provided.")
 
 
-        if isinstance(r_shift, list):
+        if is_r_list:
             for i,equilibrium in enumerate(self._equilibriums):
                 log.info(f"Applying shift_r={r_shift[i]}m")
                 equilibrium.mag_axis_r += r_shift[i]
@@ -390,7 +383,7 @@ class EquilibriumIterator(object):
                 equilibrium.mag_axis_r += r_shift
                 equilibrium.grid_r += r_shift
 
-        if isinstance(z_shift, list):
+        if is_z_list:
             for i,equilibrium in enumerate(self._equilibriums):
                 log.info(f"Applying shift_z={z_shift[i]}m")
                 equilibrium.mag_axis_z += z_shift[i]
@@ -401,4 +394,4 @@ class EquilibriumIterator(object):
                 # Apply shift to the equilibrium
                 equilibrium.mag_axis_z += z_shift
                 equilibrium.grid_z += z_shift
-        return True
+        return

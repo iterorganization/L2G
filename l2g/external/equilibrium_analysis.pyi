@@ -38,19 +38,19 @@ class EQA:
         Returns:
             psi (float): Flux value. In Webb/rad.
         """
-    def getContactPoint(self) -> list:
+    def getContactPoint(self) -> list[float]:
         """Get the contact point (R, Z) on the wall of a limiter operation.
 
         Returns:
             contact_point (list): (R, Z) location.
         """
-    def getLowerXPoint(self) -> list:
+    def getLowerXPoint(self) -> list[float]:
         """Get the lower X point (R, Z) of a diverted operation.
 
         Returns:
             contact_point (list): (R, Z) location.
         """
-    def getUpperXPoint(self) -> list:
+    def getUpperXPoint(self) -> list[float]:
         """Get the upper X point (R, Z) of a diverted operation.
 
         Returns:
@@ -73,7 +73,7 @@ class EQA:
             values (tuple[float, float, float, float]): Rb [m], Z[m],
                 Btotal[T], Bpm[T]
         """
-    def alingLcfsToPoints(self, point: list) -> list:
+    def alingLcfsToPoints(self, point: list[float]) -> list[float]:
         """Finds the shortest displacement required to put the limiter LCFS
         to point p.
 

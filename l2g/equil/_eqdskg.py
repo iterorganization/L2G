@@ -76,20 +76,23 @@ class EQDSKIO(object):
     # Patterns for regexing
 
     # Search for Not A Number expressions.
-    nanPatt = re.compile(r'(?i)\bnan\b')
+    nanPatt: re.Pattern[str] = re.compile(r'(?i)\bnan\b')
 
     # Integer pattern for reading values separated with space
-    integerPattern = r'(?:^|(?<=\s))-?[0-9]+(?:$|(?=\s))'
-    intPatt = re.compile(f'.*{integerPattern}.*')
+    integerPattern: str = r'(?:^|(?<=\s))-?[0-9]+(?:$|(?=\s))'
+    intPatt: re.Pattern[str] = re.compile(f'.*{integerPattern}.*')
+
+    # Float pattern
+    floatPattern: str = r'-?[0-9]{1}\.[0-9]{9}[eE][-+]?[0-9]{2}'
 
     # Pattern for reading scientific numbers
-    scientificPattern = r'[+-]?[0-9]\.[0-9]{6,9}[eE][+-][0-9]{2}'
+    scientificPattern: str = r'[+-]?[0-9]\.[0-9]{6,9}[eE][+-][0-9]{2}'
 
-    genPatt = re.compile(f'(?:{integerPattern}|{scientificPattern})')
+    genPatt: re.Pattern[str] = re.compile(f'(?:{integerPattern}|{scientificPattern})')
 
 
-    def __init__(self, file=''):
-        self.name = ''
+    def __init__(self, file: str=''):
+        self.name: str = ''
         self.resetValues()
 
         if file:
@@ -98,10 +101,10 @@ class EQDSKIO(object):
                 log.error(f'Failed to load file: {file}')
 
     def resetValues(self) -> None:
-        self.INPUT_EQDSK = ''
-        self.HEADER = ''
+        self.INPUT_EQDSK: str = ''
+        self.HEADER: str = ''
 
-        self.PSIRZ = [] # Plasma psi WEBER
+        self.PSIRZ: list[list[float]] = [] # Plasma psi WEBER
 
         self.CURRENT: float = 0
 
@@ -112,20 +115,20 @@ class EQDSKIO(object):
         self.NH: int = 0
 
         self.LIMITR: int = 0  # Number of limiter points
-        self.RLIM: list = []  # rlim
-        self.ZLIM: list = []  # zlim
+        self.RLIM: list[float] = []  # rlim
+        self.ZLIM: list[float] = []  # zlim
 
         self.NBBBS: int = 0 # Number of Boundary points
-        self.RBBBS: list = []  # rbbbs
-        self.ZBBBS: list = []  # zbbs
+        self.RBBBS: list[float] = []  # rbbbs
+        self.ZBBBS: list[float] = []  # zbbs
 
         self.RMAXIS: float = 0 # Position of toroidal magnetic
         self.ZMAXIS: float = 0 # field
-        self.FPOL: list = []
-        self.PRES: list = []
-        self.FFPRIM: list = []
-        self.PPRIME: list = []
-        self.QPSI: list = []
+        self.FPOL: list[float] = []
+        self.PRES: list[float] = []
+        self.FFPRIM: list[float] = []
+        self.PPRIME: list[float] = []
+        self.QPSI: list[float] = []
 
         self.SIMAG: float = 0  # Flux value at magnetix axis
         self.SIBRY: float = 0  # Flux value on boundary
@@ -144,8 +147,10 @@ class EQDSKIO(object):
         -ZDIM / 2  to  ZDIM / 2
         """
 
-        self.eqdskString = ''
-        self.successfullRead = False
+        self.eqdskString: str = ''
+        self.generatedText: str = ''
+        self.per_line_count: int = 0
+        self.successfullRead: bool = False
 
     def getName(self) -> str:
         """Returns the name.
@@ -195,25 +200,20 @@ class EQDSKIO(object):
         HEADER = LINES[0]
         self.HEADER = HEADER
         # regexHeader = '^.+[0-9] +?([0-9]+) +?([0-9]+)'
-        regexHeader = r'\s[0-9]\s+([0-9]+)\s+([0-9]+)'
+        regexHeader: str = r'\s[0-9]\s+([0-9]+)\s+([0-9]+)'
 
-        result = re.findall(regexHeader, HEADER)
-        # self.log("Reading 1st line of EQDSK.")
-        if result:
-            nw, nh = result[0]
-            self.NW = int(nw)
-            self.NH = int(nh)
+        header_ints: list[tuple[int, int]] = re.findall(regexHeader, HEADER)
+        if header_ints:
+            nw, nh = [int(_) for _ in header_ints[0]]
+            self.NW = nw
+            self.NH = nh
         else:
             return False
-        # self.log('Done reading 1st line.')
-        # self.log("Reading 2nd line of EQDSK")
         i = 1
-        result = self.readOneLine(LINES[i])
+        result: list[float] = self.readOneLine(LINES[i])
 
         if not result:
-            # self.log("[INFO] 2nd line must be a comment")
             while 1:
-                # self.log("[INFO] Filtering the comments.")
                 i += 1
 
                 result = self.readOneLine(LINES[i])
@@ -243,52 +243,48 @@ class EQDSKIO(object):
             result = self.readOneLine(LINES[i])
             self.CURRENT = result[0]
 
-            msg = "The 2nd value on line 4 of the EQDSK is not equal to " \
+            msg = "The 2nd value on line 4 of the EQDSK is not equal to " + \
                   "the flux at magnetic axis read from the 3rd line"
             assert self.SIMAG == result[1], msg
-            DUMMY = result[2]
-            msg = "The 4th value on line 4 of the EQDSK is not equal to the"\
-                  " magnetic axis R position, read from the 3rd line!"
+            _ = result[2]
+            msg = "The 4th value on line 4 of the EQDSK is not equal to " + \
+                  " the magnetic axis R position, read from the 3rd line!"
             assert self.RMAXIS == result[3], msg
-            DUMMY = result[4]
-            # self.log("Done reading 4th line.")
+            _ = result[4]
             i += 1
-            # self.log("Reading 5th line of EQDSK")
             result = self.readOneLine(LINES[i])
-            msg = "The 1st value on line 5 is not equal to the magnetic " \
+            msg = "The 1st value on line 5 is not equal to the magnetic "  + \
                   " axis Z position, read from the 3rd line!"
             assert self.ZMAXIS == result[0], msg
-            DUMMY = result[1]
-            msg = " The 3rd value on line 5 is not equal to the flux at " \
+            _ = result[1]
+            msg = " The 3rd value on line 5 is not equal to the flux at "  + \
                   " boundary, read from the 3rd line"
             assert self.SIBRY == result[2], msg
-            DUMMY = result[3]
-            DUMMY = result[4]
+            _ = result[3]
+            _ = result[4]
             # self.log("Done reading 5th line.")
 
             line_index = i + 1
             P1, P2 = self.readValues(LINES[line_index:])
 
             _I = 0
-            self.FPOL = P1[_I: _I + self.NW]
-            _I += self.NW
+            self.FPOL = P1[_I: _I + nw]
+            _I += nw
 
-            self.PRES = P1[_I: _I + self.NW]
-            _I += self.NW
+            self.PRES = P1[_I: _I + nw]
+            _I += nw
 
-            self.FFPRIM = P1[_I: _I + self.NW]
-            _I += self.NW
+            self.FFPRIM = P1[_I: _I + nw]
+            _I += nw
 
-            self.PPRIME = P1[_I: _I + self.NW]
-            _I += self.NW
+            self.PPRIME = P1[_I: _I + nw]
+            _I += nw
 
-            self.PSIRZ = []
-            for i in range(self.NH):
-                self.PSIRZ.append(P1[_I: _I + self.NW])
-                _I += self.NW
+            self.PSIRZ = [P1[_I+i*nw: _I+(i+1)*nw] for i in range(nh)]
+            _I += nw * nh
 
-            self.QPSI = P1[_I: _I + self.NW]
-            _I += self.NW
+            self.QPSI = P1[_I: _I + nw]
+            _I += nw
 
             _I = 0
             self.NBBBS = int(P2[_I])
@@ -297,31 +293,25 @@ class EQDSKIO(object):
             self.LIMITR = int(P2[_I])
             _I += 1
 
-            self.RBBBS = []
-            self.ZBBBS = []
-            for i in range(self.NBBBS):
-                self.RBBBS.append(P2[_I])
-                self.ZBBBS.append(P2[_I + 1])
-                _I += 2
+            self.RBBBS = P2[_I:_I+2*self.NBBBS:2]
+            self.ZBBBS = P2[_I+1:_I+2*self.NBBBS:2]
+            _I += 2 * self.NBBBS
 
-            self.RLIM = []
-            self.ZLIM = []
-            for i in range(self.LIMITR):
-                self.RLIM.append(P2[_I])
-                self.ZLIM.append(P2[_I + 1])
-                _I += 2
-        except NanValuesInEqdskFile as e:
+            self.RLIM = P2[_I: _I+2*self.LIMITR:2]
+            self.ZLIM = P2[_I+1: _I+2*self.LIMITR:2]
+
+        except NanValuesInEqdskFile as _:
             log.error("NaN values in EQDSK file!")
             self.successfullRead = False
             return False
-        except Exception as e:
+        except Exception as _:
             log.error("Failed to read EQDSK")
             self.successfullRead = False
             return False
         self.successfullRead = True
         return True
 
-    def readOneLine(self, line: str) -> list:
+    def readOneLine(self, line: str) -> list[float]:
         """Reads the float values from one line and returns a list of 5
         elements. If the line does not have 5 elements, it is considered a
         comment line and returns an empty list.
@@ -334,8 +324,7 @@ class EQDSKIO(object):
         if line.lstrip()[0].isalpha():
             return []
 
-        pattern = r'-?[0-9]{1}\.[0-9]{9}[eE][-+]?[0-9]{2}'
-        result = re.findall(pattern, line)
+        result: list[float] = re.findall(self.floatPattern, line)
 
         if len(result) == 5:
             # 5 float values on line.
@@ -343,11 +332,11 @@ class EQDSKIO(object):
             return out
         else:
             # Manually check the values
-            out = []
+            out: list[float] = []
             for el in line.split():
                 try:
                     out.append(float(el))
-                except Exception as e:
+                except Exception as _:
                     pass
             if len(out) == 5:
                 # 5 values. All ok
@@ -356,17 +345,24 @@ class EQDSKIO(object):
                 # Must be a comment line
                 return []
 
-    def readValues(self, LINES) -> tuple[list, list]:
+    def readValues(self, LINES: list[str]) -> tuple[list[float], list[float]]:
         """Reads values from EQDSK lines.
+
+        Arguments:
+            LINES (list[str]): Array of lines.
+
+        Returns:
+            part_1 list[float]: Values before plasma and boundary geometry.
+            part_2 list[float]: Values regarding plasma and boundary geometry.
         """
         # Part one consists of values before the section of limiter and
         # boundary geometry. Basically meaning reading values until finding
         # two integer values.
-        part_1 = []
+        part_1: list[float] = []
         # Part two are all values regarding plasma and boundary geometry.
         # HOPEFULLY, the lines start with two INTEGERS and not somewhere in
         # between.
-        part_2 = []
+        part_2: list[float] = []
 
         SWITCH = 1
 
@@ -410,16 +406,14 @@ class EQDSKIO(object):
         self.generatedText += self.HEADER + '\n'
 
         # First line
-        DUMMY = 0.0
-        self._PerLineCount = 1
+        DUMMY: float = 0.0
+        self.per_line_count = 1
 
 
-        self.createRealLine(self.RDIM, self.ZDIM, self.RCENTR,
-                            self.RLEFT, self.ZMID)
+        self.createRealLine(self.RDIM, self.ZDIM, self.RCENTR, self.RLEFT,
+                            self.ZMID)
 
-        self.createRealLine(self.RMAXIS,
-                            self.ZMAXIS,
-                            self.SIMAG, self.SIBRY,
+        self.createRealLine(self.RMAXIS, self.ZMAXIS, self.SIMAG, self.SIBRY,
                             self.BCENTR)
 
         self.createRealLine(self.CURRENT, self.SIMAG, DUMMY,
@@ -432,32 +426,32 @@ class EQDSKIO(object):
 
         if not self.generatedText.endswith('\n'):
             self.generatedText += '\n'
-        self._PerLineCount = 1
+        self.per_line_count = 1
 
         self.createRealLine(*self.PRES)
 
         if not self.generatedText.endswith('\n'):
             self.generatedText += '\n'
-        self._PerLineCount = 1
+        self.per_line_count = 1
 
         self.createRealLine(*self.FFPRIM)
 
         if not self.generatedText.endswith('\n'):
             self.generatedText += '\n'
-        self._PerLineCount = 1
+        self.per_line_count = 1
 
         self.createRealLine(*self.PPRIME)
 
         if not self.generatedText.endswith('\n'):
             self.generatedText += '\n'
-        self._PerLineCount = 1
+        self.per_line_count = 1
 
         for psi_width in self.PSIRZ:
             self.createRealLine(*psi_width)
 
         if not self.generatedText.endswith('\n'):
             self.generatedText += '\n'
-        self._PerLineCount = 1
+        self.per_line_count = 1
 
         self.createRealLine(*self.QPSI)
 
@@ -466,16 +460,16 @@ class EQDSKIO(object):
 
         self.createIntLine(self.NBBBS, self.LIMITR)
         self.generatedText += '\n'
-        self._PerLineCount = 1
+        self.per_line_count = 1
 
-        alternating_array = [None] * 2 * self.NBBBS
+        alternating_array: list[float] = [0.0] * 2 * self.NBBBS
         alternating_array[::2] = self.RBBBS
         alternating_array[1::2] = self.ZBBBS
         self.createRealLine(*alternating_array)
         self.generatedText += '\n'
 
-        self._PerLineCount = 1
-        alternating_array = [None] * 2 * self.LIMITR
+        self.per_line_count = 1
+        alternating_array = [0.0] * 2 * self.LIMITR
         alternating_array[::2] = self.RLIM
         alternating_array[1::2] = self.ZLIM
         self.createRealLine(*alternating_array)
@@ -485,20 +479,18 @@ class EQDSKIO(object):
 
         return self.generatedText
 
-    def createRealLine(self, *args) -> None:
-        Format = '%.9E'
+    def createRealLine(self, *args: float) -> None:
         for el in args:
-            stringReal = Format % el
-            self.generatedText += ' ' * (16 - len(stringReal)) + stringReal
-            if self._PerLineCount % 5 == 0:
+            self.generatedText += f'{el:>16.9E}'
+            if self.per_line_count % 5 == 0:
                 self.generatedText += '\n'
-            self._PerLineCount += 1
+            self.per_line_count += 1
 
-    def createIntLine(self, *args):
+    def createIntLine(self, *args: int):
         for el in args:
             self.generatedText += '   ' + str(el)
 
-    def mmMoveInR(self, mm):
+    def mmMoveInR(self, mm: float) -> None:
         """ Radially moves the values of eqdsk for *mm* millimeters.
 
         All R relevant quantities:
@@ -586,7 +578,7 @@ class EQDSKIO(object):
 
         self.RMAXIS += scale * mm
 
-    def fluxOffset(self, offset):
+    def fluxOffset(self, offset: float) -> None:
         """Offsetting the flux quantities.
         SIMAG += offset
         SIBRY = offset
@@ -605,15 +597,15 @@ class EQDSKIO(object):
             for j in range(Y):
                 self.PSIRZ[i][j] += offset
 
-    def convertTo_m(self, a):
+    def convertTo_m(self, a: list[float]) -> list[float]:
         """Determine the size unit. If the units are in mm, divide the
         values by 1000.
 
         Arguments:
             a (array): Array of floats holding the R or Z values.
         """
-        import numpy as np
-        order = int(np.log10(max([abs(el) for el in a])))
+        import math
+        order: int = int(math.log(max([abs(el) for el in a]), 10))
         if order == 2:
             # Hopefully centimeters
             return [el / 100.0 for el in a]
@@ -623,13 +615,13 @@ class EQDSKIO(object):
         else:
             return a
 
-    def getRBBBS(self):
+    def getRBBBS(self) -> list[float]:
         """Gets the R points for LCFS.
 
         """
         return self.convertTo_m(self.RBBBS)
 
-    def getZBBBS(self):
+    def getZBBBS(self) -> list[float]:
         """Gets the Z points for LCFS.
 
         Determine the size unit. If the units are in meters, multiply the
@@ -637,12 +629,12 @@ class EQDSKIO(object):
         """
         return self.convertTo_m(self.ZBBBS)
 
-    def getRLIM(self):
+    def getRLIM(self) -> list[float]:
         """Gets the R points for wall silhouette.
         """
         return self.convertTo_m(self.RLIM)
 
-    def getZLIM(self):
+    def getZLIM(self) -> list[float]:
         """Gets the Z points for wall silhouette.
         """
         return self.convertTo_m(self.ZLIM)

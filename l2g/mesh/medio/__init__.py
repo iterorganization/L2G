@@ -34,7 +34,7 @@ class MEDTR3Reader(object):
         # Create dictionaries, as when we
         self.meshes: dict[str, Mesh] = {}
         self.mesh_fam_ids: dict[str, np.ndarray] = {}
-        self.fields: dict[str, list[int]] = {}
+        self.fields: dict[str, list[tuple[int, float]]] = {}
         self.mesh_names: list[str] = []
         self.file_path: str = file_path
         if not os.access(file_path, os.R_OK):
@@ -73,7 +73,6 @@ class MEDTR3Reader(object):
             self.meshes = meshes
             self.fields = fields
 
-
     def getAllMeshes(self) -> list[str]:
         """Return the names of the meshes inside a MED file. Use this to
         determine if there are multiple meshes in a file.
@@ -107,7 +106,7 @@ class MEDTR3Reader(object):
 
         return list(self.fields.keys())
 
-    def getAllFieldIterations(self, field_name: str) ->tuple[list[int], list[float]]:
+    def getAllFieldIterations(self, field_name: str) -> list[tuple[int, float]]:
         """Returns the [indexes], [times] arrays of the field.
 
         Returns:
@@ -524,7 +523,7 @@ def getAllFieldNames(file_path: str) -> list[str]:
     mesh = __medtr3reader__[file_path]
     return list(mesh.fields.keys())
 
-def getAllFieldIterations(file_path: str, field: str):
+def getAllFieldIterations(file_path: str, field: str) -> list[tuple[int, float]]:
     global __medtr3reader__
 
     if file_path not in __medtr3reader__:

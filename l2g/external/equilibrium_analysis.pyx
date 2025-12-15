@@ -578,7 +578,7 @@ cdef class EQA:
             log.error(f"Plasma is not diverted type or does not have upper X point")
         return self.psi_upp_x
 
-    def getContactPoint(self) -> list[float, float]:
+    def getContactPoint(self) -> list[float]:
         """Get the contact point (R, Z) on the wall of a limiter operation.
 
         Returns:
@@ -586,7 +586,7 @@ cdef class EQA:
         """
         return self.contact_point
 
-    def getLowerXPoint(self) -> list:
+    def getLowerXPoint(self) -> list[float]:
         """Get the lower X point (R, Z) of a diverted operation.
 
         Returns:
@@ -594,7 +594,7 @@ cdef class EQA:
         """
         return self.low_x_point
 
-    def getUpperXPoint(self) -> list:
+    def getUpperXPoint(self) -> list[float]:
         """Get the upper X point (R, Z) of a diverted operation.
 
         Returns:
