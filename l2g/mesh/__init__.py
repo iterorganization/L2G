@@ -87,6 +87,25 @@ def triangle_areas(vertices: np.ndarray, triangles: np.ndarray) -> np.ndarray:
     cross = np.cross(p12, p13)
     return 0.5 * np.linalg.norm(cross, axis=1)
 
+def triangle_normals(vertices: np.ndarray, triangles: np.ndarray) -> np.ndarray:
+    """Return an array of normals of triangles
+
+    Arguments:
+        vertices (np.ndarray): Array of points of shape (N, 3)
+        triangles (np.ndarray): Array of triangles of shape (N, 3)
+
+    Returns:
+        normals (np.ndarray): 2D array (N, 3) of normals.
+    """
+    p1 = vertices[triangles[:, 0]]
+    p2 = vertices[triangles[:, 1]]
+    p3 = vertices[triangles[:, 2]]
+
+    p12 = p2 - p1
+    p13 = p3 - p1
+    cross = np.cross(p12, p13)
+    return cross / np.linalg.norm(cross, axis=1)
+
 class WrongFileExtensionException(Exception):
     pass
 
@@ -317,6 +336,20 @@ class Mesh():
             self.readMeshData()
 
         return triangle_areas(self.vertices, self.triangles)
+
+    def getNormals(self) -> np.ndarray:
+        """Returns a 2D array of shape (N, 3) of cell normals.
+
+        Returns:
+            normals (np.ndarray): 2D array of normals.
+        """
+        if self.backend is None:
+            raise NoMeshDataLoaded
+
+        if self.vertices.size == 0:
+            self.readMeshData()
+
+        return triangle_normals(self.vertices, self.triangles)
 
     def readMeshData(self) -> None:
         """Function that calls the backends to fetch the mesh data of the file
