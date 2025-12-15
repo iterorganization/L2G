@@ -728,15 +728,12 @@ def run_case(geod: dict[str, Any], eqid: dict[str, Any], hlmd: dict[str, Any] | 
                 pprint(f"Excluding {m}")
                 shadow_mesh_files.remove(m)
 
-        geom_ids = []
         if "include_target_in_shadow" in geod and geod["include_target_in_shadow"]:
-            pprint("INFO: Loading target mesh to Embree.")
-            geom_id = flt_obj.embree_obj.commitMesh(target_mesh.vertices * flt_obj.parameters.target_to_m,
+            pprint("INFO: Loading target mesh to TLAS.")
+            geom_id = flt_obj.tlas_obj.commitMesh(target_mesh.vertices * flt_obj.parameters.target_to_m,
                                                     target_mesh.triangles)
 
-            geom_ids.append((geom_id, geod["target_mesh"]))
-
-        pprint("INFO: Loading shadow meshes to Embree.")
+        pprint("INFO: Loading shadow meshes to TLAS.")
         for file in shadow_mesh_files:
             pprint(f"INFO: Loading {file}")
             m = l2g.mesh.Mesh(file)
@@ -745,12 +742,11 @@ def run_case(geod: dict[str, Any], eqid: dict[str, Any], hlmd: dict[str, Any] | 
                 m.translateMesh(longwave_vector)
 
             v, t = m.getMeshData()
-            geom_id = flt_obj.embree_obj.commitMesh(v * flt_obj.parameters.shadow_to_m,
+            geom_id = flt_obj.tlas_obj.commitMesh(v * flt_obj.parameters.shadow_to_m,
                                                 t)
-            geom_ids.append((geom_id, file))
 
         if "afl_catcher_meshes" in geod:
-            pprint("INFO: Loading artificial fieldlines filter meshes to Embree.")
+            pprint("INFO: Loading artificial fieldlines filter meshes to TLAS.")
             for file in geod["afl_catcher_meshes"]:
                 pprint(f"INFO: Loading {file}")
                 m = l2g.mesh.Mesh(file)
@@ -758,8 +754,7 @@ def run_case(geod: dict[str, Any], eqid: dict[str, Any], hlmd: dict[str, Any] | 
                 if longwave_misalignment_flag:
                     m.translateMesh(longwave_vector)
                 v, t = m.getMeshData()
-                geom_id = flt_obj.embree_obj.commitMesh(v * flt_obj.parameters.shadow_to_m, t)
-                geom_ids.append((geom_id, file))
+                geom_id = flt_obj.tlas_obj.commitMesh(v * flt_obj.parameters.shadow_to_m, t)
                 flt_obj.parameters.artificial_fl_catcher_geom_id.add(geom_id)
 
         if run_flt:
@@ -774,7 +769,6 @@ def run_case(geod: dict[str, Any], eqid: dict[str, Any], hlmd: dict[str, Any] | 
             pprint("INFO: FLT data already exists so loading the result file " +
                     f"{result_file_path}!")
             result_file = l2g.mesh.Mesh(result_file_path)
-
 
     else:
         # We do not need to obtain the FLT results but still require the FLT

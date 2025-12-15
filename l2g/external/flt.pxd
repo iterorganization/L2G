@@ -1,7 +1,7 @@
 # distutils: language = c++
 # cython: language_level = 3
 
-from l2g.external.embree cimport EmbreeAccell
+from l2g.external.tlas cimport TLAS
 
 from libcpp cimport bool
 from libcpp.vector cimport vector
@@ -43,7 +43,7 @@ cdef extern from "flt.hpp" nogil:
         void getBCart(double r, double z, double phi, vector[double] &out)
         double getPoloidalFlux(double r, double z)
         double getVacuumFPOL()
-        void setEmbreeObj(EmbreeAccell* accellObj)
+        void setTLAS(TLAS* tlas_obj)
 
 # Function signatures that have c_ prefix are written so that they can be used
 # in nogil blocks.

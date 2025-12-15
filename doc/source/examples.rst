@@ -106,17 +106,17 @@ Now we wish to setup the :term:`FLT` class in order to start it.
    flt_obj.setTargetData(vertices, triangles)
 
    # Now we load the Shadowing mesh data
-   embree_obj = l2g.comp.core.PyEmbreeAccell()
+   tlas_obj = l2g.comp.core.PyTLAS()
    # We can also include the target mesh as shadow, in case of self shadowing
    # effects. Otherwise if the shadow meshes already includes the target, we
    # can skip this step
-   embree_obj.commitMesh(vertices, triangles)
+   tlas_obj.commitMesh(vertices, triangles)
 
-   embree_obj.commitMesh(shadowing_vertices_1, shadowing_triangles_1)
-   embree_obj.commitMesh(shadowing_vertices_2, shadowing_triangles_2)
+   tlas_obj.commitMesh(shadowing_vertices_1, shadowing_triangles_1)
+   tlas_obj.commitMesh(shadowing_vertices_2, shadowing_triangles_2)
 
-   # Tie the embree_obj to the flt_obj
-   flt_obj.setEmbreeObj(embree_obj)
+   # Tie the tlas_obj to the flt_obj
+   flt_obj.setTLASObj(tlas_obj)
 
    # Now we can set the case parameters. Check the code PUT_LINK_HERE to see
    # the documentation of available options

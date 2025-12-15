@@ -143,7 +143,7 @@ sh_points, sh_tri = createShadow()
 # plt.show()
 
 import l2g
-from l2g.external.embree import PyEmbreeAccell
+from l2g.external.tlas import PyTLAS
 import l2g.comp
 import l2g.equil
 import l2g.mesh
@@ -195,13 +195,13 @@ case.setTargetData(tg_points.flatten(), tg_tri.flatten())
 case.setEquilibrium(equilibrium)
 
 # Construct shadow
-embreeObj = PyEmbreeAccell()
-# Add the shadow and target meshes to Embree.
-embreeObj.commitMesh(sh_points.flatten(), sh_tri.flatten())
-embreeObj.commitMesh(tg_points.flatten(), tg_tri.flatten())
+tlasObj = PyTLAS()
+# Add the shadow and target meshes to TLAS.
+tlasObj.commitMesh(sh_points.flatten(), sh_tri.flatten())
+tlasObj.commitMesh(tg_points.flatten(), tg_tri.flatten())
 
-# Attach the Embree object to the case.
-case.setEmbreeObj(embreeObj)
+# Attach the TLAS object to the case.
+case.setTLASObj(tlasObj)
 
 case.parameters.time_step = 0.01 # toroidal angle resolution
 case.parameters.max_fieldline_length = 1.0 # in meters

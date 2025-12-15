@@ -24,7 +24,7 @@ The following technologies are used for :term:`FLT` inside the external CPP
 library:
 
   - RKF45 (Runge-Kutta-Fehlberg 45 adaptive step) for :term:`FL` equations
-  - `Embree <https://www.embree.org/>`_, used for intersection tests
+  - `TinyBVH <https://github.com/jbikker/tinybvh/>`_, used for intersection tests
   - `Cython <https://cython.org/>`_, used for wrapping and enabling the use of
     external C++ libraries, enabling the use of OpenMP multithreading.
   - Implementaion of `bicubic interpolation <https://en.wikipedia.org/wiki/Bicubic_interpolation/>`_,

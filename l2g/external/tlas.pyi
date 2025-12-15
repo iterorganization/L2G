@@ -1,9 +1,8 @@
 import numpy as np
 
-class PyEmbreeAccell:
-    """This class wraps the EmbreeAccell class from L2G_cpp and is used to
-    provide geometries to Embree and holds information about the geometries,
-    i.e., what was hit, etc...
+class PyTLAS:
+    """This class wraps the TLAS class from YAFLT and is used to perform
+    intersection tests.
     """
     def __init__(self) -> None: ...
     def commitMesh(self, vertices: np.ndarray, triangles: np.ndarray, name: str = "") -> int:
@@ -11,7 +10,7 @@ class PyEmbreeAccell:
         of cells. The code reutrns the ID of the commited geometry, which the
         user then has to handle the managment.
 
-        To avoid confusion when commiting meshes to EmbreeAccell the
+        To avoid confusion when commiting meshes to TLAS the
         variables vertices and triangles can be normal python lists.
         Preferably the vertices should be a 1D array of floats (np.float32) and
         triangles should be a 1D array of unsigned integers (np.uint32).
@@ -32,7 +31,8 @@ class PyEmbreeAccell:
 
         """
     def deleteMesh(self, geom_id: int) -> bool:
-        """Removes a commited mesh from Embree if it exists
+        """Removes a geometry with the assigned geom_id from TLAS. Returns True
+        if successful.
 
         Arguments:
             geom_id (unsigned): Non-negative ID of a geometry to remove.
@@ -53,7 +53,7 @@ class PyEmbreeAccell:
             dy (float): Y-component of direction
             dz (float): Z-component of direction
         """
-    def castRay(self, ox: float, oy: float, oz :float, dx: float, dy: float, dz: float, tnear: float, tfar: float) -> None:
+    def castRay(self, ox: float, oy: float, oz :float, dx: float, dy: float, dz: float, tfar: float) -> None:
         """Cast a ray from origin point (ox, oy, oz) with direction
         vector (dx, dy, dz), starting at distance tnear and ending at distance
         tfar. tnear=0 means the ray starts at the (ox, oy, oz).

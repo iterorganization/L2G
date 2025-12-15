@@ -82,9 +82,8 @@ derivatives via an interpolation method on the :math:`\Psi(R, Z)`. The set of
 differential equations are solved using RKF45.
 
 This covers just following the field lines, so the next step, obviously, is
-checking if there are any collisions with the shadowing geometry. Embree is
-used, where we trace a finite ray to see if we obtain hits with the
-shadowing geometry.
+checking if there are any collisions with the shadowing geometry. If there is
+a collision we stop, otherwise we continue to the next step.
 
 So in order to follow a field line and check for intersections with the
 shadowing geometry, the following steps are performed:

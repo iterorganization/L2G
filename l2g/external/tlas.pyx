@@ -5,34 +5,33 @@ import numpy as np
 cimport numpy as np
 
 # External CPP class
-from l2g.external.embree cimport EmbreeAccell
+from l2g.external.tlas cimport TLAS
 
 from libcpp.limits cimport numeric_limits
 
-cdef class PyEmbreeAccell:
-    """This class wraps the EmbreeAccell class from L2G_cpp and is used to
-    provide geometries to Embree and holds information about the geometries,
-    i.e., what was hit, etc...
+cdef class PyTLAS:
+    """This class wraps the TLAS class from YAFLT and is used to perform
+    intersection tests.
     """
 
     def __cinit__(self):
-        self.c_eacc = new EmbreeAccell()
+        self.c_tlas = new TLAS()
 
     def __init__(self):
-        # List of Loaded GeomIDs in the Embree object.
+        # List of Loaded GeomIDs in the TLAS object.
         self.loaded_meshes_id: list = []
         # Mapping of name to mesh if name is provided when supplying a mesh.
         # Useful when you want to dynamically see what meshes are loaded, to
         # load only when there is a new mesh. This is though entirely up to
         # the user to manage.
-        self.name_to_mesh: dict = {}
+        self.name_to_mesh: dict[str, int] = {}
 
     def commitMesh(self, vertices, triangles, name=""):
         """Commit a mesh, consisting of list of vertices and list
         of cells. The code reutrns the ID of the commited geometry, which the
         user then has to handle the managment.
 
-        To avoid confusion when commiting meshes to EmbreeAccell the
+        To avoid confusion when commiting meshes to TLAS the
         variables vertices and triangles can be normal python lists.
         Preferably the vertices should be a 1D array of floats (np.float32) and
         triangles should be a 1D array of unsigned integers (np.uint32).
@@ -65,7 +64,7 @@ cdef class PyEmbreeAccell:
             if len(vertices.shape) > 1:
                 vertices = vertices.reshape(vertices.size)
         except Exception as e:
-            print("Could not prepare vertices for committing to Embree.")
+            print("Could not prepare vertices for committing to TLAS.")
             raise e
         npa_vertices = vertices
 
@@ -77,7 +76,7 @@ cdef class PyEmbreeAccell:
             if len(triangles.shape) > 1:
                 triangles = triangles.reshape(triangles.size)
         except Exception as e:
-            print("Could not prepare triangles for committing to Embree.")
+            print("Could not prepare triangles for committing to TLAS.")
             raise e
         npa_triangles = triangles
 
@@ -85,7 +84,7 @@ cdef class PyEmbreeAccell:
 
         n_triangles = len(triangles) // 3
 
-        geomId = self.c_eacc.commitMesh(&npa_vertices[0], n_vertices,
+        geomId = self.c_tlas.commitMesh(&npa_vertices[0], n_vertices,
                                         &npa_triangles[0], n_triangles)
         self.loaded_meshes_id.append(geomId)
         if name != "":
@@ -93,7 +92,8 @@ cdef class PyEmbreeAccell:
         return geomId
 
     def deleteMesh(self, unsigned geom_id) -> bool:
-        """Removes a commited mesh from Embree if it exists
+        """Removes a geometry with the assigned geom_id from TLAS. Returns True
+        if successful.
 
         Arguments:
             geom_id (unsigned): Non-negative ID of a geometry to remove.
@@ -101,13 +101,22 @@ cdef class PyEmbreeAccell:
 
         if not geom_id in self.loaded_meshes_id:
             return False
-        ok = self.c_eacc.deleteMesh(geom_id)
+        ok = self.c_tlas.deleteMesh(geom_id)
         if ok:
             self.loaded_meshes_id.remove(geom_id)
             # Now to delete entry in the name_to_mesh.
             entry = [k for k, v in self.name_to_mesh.items() if v == geom_id]
             if entry:
                 self.name_to_mesh.pop(entry[0])
+
+            # Now deincrement any id that was > geom_id, since the TLAS is
+            # rebuilt with the new setup
+            for entry in self.name_to_mesh:
+                if self.name_to_mesh[entry] > geom_id:
+                    self.name_to_mesh[entry] -= 1
+            for i in range(len(self.loaded_meshes_id)):
+                if self.loaded_meshes_id[i] > geom_id:
+                    self.loaded_meshes_id[i] -= 1
         return ok
 
     def isEmpty(self) -> bool:
@@ -135,17 +144,17 @@ cdef class PyEmbreeAccell:
         """
 
         cdef:
-            double tnear, tfar
+            double tfar
 
         tnear = 0.05
         tfar = numeric_limits[double].infinity()
-        self.c_eacc.castRay(ox, oy, oz, dx, dy, dz, tnear, tfar)
+        self.c_tlas.castRay(ox, oy, oz, dx, dy, dz, tfar)
 
     def castRay(self, float ox, float oy, float oz, float dx, float dy,
-                   float dz, float tnear, float tfar):
+                   float dz, float tfar):
         """Cast a ray from origin point (ox, oy, oz) with direction
-        vector (dx, dy, dz), starting at distance tnear and ending at distance
-        tfar. tnear=0 means the ray starts at the (ox, oy, oz).
+        vector (dx, dy, dz), starting at point O and ending at distance
+        tfar.
 
         Arguments:
             ox (float): X-component of origin
@@ -157,22 +166,22 @@ cdef class PyEmbreeAccell:
             tfar (float): Distance along the direction.
         """
 
-        self.c_eacc.castRay(ox, oy, oz, dx, dy, dz, tnear, tfar)
+        self.c_tlas.castRay(ox, oy, oz, dx, dy, dz, tfar)
 
     def checkIfHit(self):
         """After calling castInfRay, check if there is a hit with this
         function.
         """
-        return self.c_eacc.checkIfHit()
+        return self.c_tlas.checkIfHit()
 
     def returnGeomId(self):
         """Returns the id of the geometry that was hit. Geometry here
         corresponds to the mesh.
         """
-        return self.c_eacc.returnGeomId()
+        return self.c_tlas.returnGeomId()
 
     def returnPrimId(self):
         """Returns the id of the primitive that was hit. Here the id primitive
         corresponds to the cell (triangle) of the hit geometry.
         """
-        return self.c_eacc.returnPrimId()
+        return self.c_tlas.returnPrimId()

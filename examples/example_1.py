@@ -1,16 +1,18 @@
+# Pseudo code. Not valid
+
 import l2g.comp.core
-import l2g.comp
+import l2g.external.tlas
+import l2g.mesh
 import l2g.equil
 
 
 # Path to MED file! Filled by you!
 mesh = "/path/to/MEd/file.med"
-medmesh = l2g.comp.MEDMeshIO()
-medmesh.readMeshFromMedFile(mesh)
+medmesh = l2g.mesh.Mesh(mesh)
 vertices, cells = medmesh.getMeshData()
 
-embree_obj = l2g.comp.core.PyEmbreeAccell()
-embree_obj.commitMesh(vertices, cells)
+tlas_obj = l2g.external.tlas.PyTLAS()
+tlas_obj.commitMesh(vertices, cells)
 
 equilibrium = l2g.equil.Equilibrium()
 # Optional
@@ -36,7 +38,7 @@ equilibrium.grid_z = []
 flt = l2g.comp.FieldLineTracer()
 flt.setEquilibrium(equilibrium)
 flt.setTargetData(vertices, cells)
-flt.setEmbreeObj(embree_obj)
+flt.setTLASObj(tlas_obj)
 
 # Change parameters or options here.
 # flt.parameters...

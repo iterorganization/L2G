@@ -178,7 +178,7 @@ def integrate_beam(a, b) -> float:
 
 
 def apply_torbeam_map(id2meshes: dict, normals: dict, cell_measurements: dict,
-                      embree_obj: "l2g.external.embree.PyEmbreeAccell",
+                      tlas_obj: "l2g.external.tlas.PyTLAS",
                       tor_data: dict):
     """Applies tor_data to meshes.
     """
@@ -263,24 +263,24 @@ def apply_torbeam_map(id2meshes: dict, normals: dict, cell_measurements: dict,
                 # Perform ray tracing
                 for j in range(n_points):
                     p = points[j]
-                    embree_obj.castRay(p[0], p[1], p[2], k[0], k[1], k[2],
+                    tlas_obj.castRay(p[0], p[1], p[2], k[0], k[1], k[2],
                                        tnear, tfar)
                     total_lines += 1
                     beam_total_rays += 1
-                    if not embree_obj.checkIfHit():
+                    if not tlas_obj.checkIfHit():
 
                         # Try to see if there is a hit in reverse
-                        embree_obj.castRay(p[0], p[1], p[2], -k[0], -k[1],
+                        tlas_obj.castRay(p[0], p[1], p[2], -k[0], -k[1],
                                            -k[2], tnear, tfar)
-                        if not embree_obj.checkIfHit():
+                        if not tlas_obj.checkIfHit():
                             continue
 
                     total_hits += 1
                     beam_hit_counter += 1
                     # Mesh or geometry id.
-                    geom_id = embree_obj.returnGeomId()
+                    geom_id = tlas_obj.returnGeomId()
                     # Cell or triangle id.
-                    primId = embree_obj.returnPrimId()
+                    primId = tlas_obj.returnPrimId()
 
                     # Take into account incident angle. Both vector here are
                     # normalized
@@ -360,9 +360,9 @@ meshes = data["meshes"]
 torbeam = data["torbeam"]
 name = data["name"]
 
-# Load the meshes into embree
+# Load the meshes into TLAS
 import l2g.mesh
-import l2g.external.embree
+import l2g.external.tlas
 import numpy as np
 import scipy.special
 import scipy.integrate
@@ -376,7 +376,7 @@ result_dir = pathlib.Path(os.path.join("results", name))
 if not os.path.exists(result_dir):
     os.makedirs(result_dir, exist_ok=True)
 
-embree_obj = l2g.external.embree.PyEmbreeAccell()
+tlas_obj = l2g.external.tlas.PyTLAS()
 cell_measurements = {}
 normals = {}
 result_meshes = {}
@@ -388,7 +388,7 @@ result_id_to_mesh["o"] = {}
 for file in meshes:
     mesh = l2g.mesh.Mesh(str(file))
     vertices, triangles = mesh.getMeshData()
-    geom_id = embree_obj.commitMesh(vertices, triangles)
+    geom_id = tlas_obj.commitMesh(vertices, triangles)
     cell_measurements[geom_id] = mesh.getCellMeasurements() * 1e-6
     old_path = pathlib.Path(file)
 
@@ -425,5 +425,5 @@ for case in ["x", "o"]:
 
     ind2beam, tor_data = read_torbeam_data(torbeam[case])
     apply_torbeam_map(result_id_to_mesh[case], normals, cell_measurements,
-                      embree_obj, tor_data)
+                      tlas_obj, tor_data)
 

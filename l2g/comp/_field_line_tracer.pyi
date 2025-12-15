@@ -1,7 +1,7 @@
 import numpy as np
 import l2g.comp
 import l2g.equil
-import l2g.external.embree
+import l2g.external.tlas
 import l2g.external.equilibrium_analysis
 import l2g.settings
 
@@ -47,7 +47,7 @@ class FieldLineTracer:
     name: str
     parameters: l2g.settings.Parameters
     options: l2g.settings.Options
-    embree_obj: l2g.external.embree.PyEmbreeAccell
+    tlas_obj: l2g.external.tlas.PyTLAS
     equilibrium: l2g.equil.Equilibrium
     eq: l2g.external.equilibrium_analysis.EQA
     results: l2g.comp.L2GResults
@@ -62,18 +62,7 @@ class FieldLineTracer:
     def __init__(self) -> None: ...
     # Input function
     def setParameters(self, parameters: l2g.settings.Parameters) -> None: ...
-    def setEmbreeObj(self, embree_obj: l2g.external.embree.PyEmbreeAccell) -> None: ...
-    def commitMeshesToEmbree(self, mesh_files: list[str] | str, dim_mul: float=1e-3) -> list:
-        """Commits mesh from files to embree.
-
-        Returns:
-            ok (bool): Ok if finished
-
-        Arguments:
-            mesh_files: Either a single file or multiple files
-            dim_mul (float): Dimension multiplier to convert mesh dimension to
-                meters. Default 1e-3.
-        """
+    def setTLASObj(self, tlas_obj: l2g.external.tlas.PyTLAS) -> None: ...
     def setTargetData(self, vertices: np.ndarray, triangles: np.ndarray | None) -> None:
         """Sets the target data.
 

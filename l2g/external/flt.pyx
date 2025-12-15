@@ -3,7 +3,7 @@
 
 # External CPP class
 from l2g.external.flt cimport FLT
-from l2g.external.embree cimport PyEmbreeAccell
+from l2g.external.tlas cimport PyTLAS
 
 from libcpp cimport bool
 from libcpp.vector cimport vector
@@ -176,12 +176,12 @@ cdef class PyFLT:
         """
         return self.c_flt.getPoloidalFlux(r, z)
 
-    def applyRT(self, PyEmbreeAccell obj):
-        """This function is used to bind an EmbreeAccell C++ object to the
+    def applyRT(self, PyTLAS obj):
+        """This function is used to bind an TLAS C++ object to the
         FLT C++ object. Only pointer is used, so essentially we could switch
-        different Embree objects.
+        different TLAS objects.
 
         Arguments:
-            embree_obj (l2g.external.embree.PyEmbreeAccell): Embree object.
+            tlas_obj (l2g.external.tlas.PyTLAS): TLAS object.
         """
-        self.c_flt.setEmbreeObj(obj.c_eacc)
+        self.c_flt.setTLAS(obj.c_tlas)

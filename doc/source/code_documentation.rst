@@ -205,7 +205,7 @@ in the :py:class:`l2g.comp.FieldLineTracer` code as example.
    :private-members:
 
 
-.. automodule:: l2g.external.embree
+.. automodule:: l2g.external.tlas
    :members:
    :undoc-members:
    :private-members:

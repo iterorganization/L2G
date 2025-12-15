@@ -291,7 +291,7 @@ meshes = data["meshes"]
 torbeam = data["torbeam"]
 name = data["name"]
 
-# Load the meshes into embree
+# Load the meshes into tlas
 import numpy as np
 import scipy.special
 import scipy.integrate

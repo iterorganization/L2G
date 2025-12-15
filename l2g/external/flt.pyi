@@ -1,4 +1,4 @@
-import l2g.external.embree
+import l2g.external.tlas
 import numpy as np
 
 class PyFLT:
@@ -76,7 +76,7 @@ class PyFLT:
     def runFLT(self) -> None:
         """Calls the runFLT function which starts the FLT.
         """
-    def getBCart(self, r: float, z: float, phi: float) -> list[float, float, float]:
+    def getBCart(self, r: float, z: float, phi: float) -> list[float]:
         """Get the B vector at point (r, z, phi) in Cartesian coordinate
         system.
 
@@ -88,7 +88,7 @@ class PyFLT:
         Returns:
             out (list[float]): (Bx, By, Bz)
         """
-    def getBCyln(self, r: float, z: float) -> list[float, float, float]:
+    def getBCyln(self, r: float, z: float) -> list[float]:
         """Get the B vector at point (r, z) in Cylindrical coordinate system.
 
         Arguments:
@@ -108,11 +108,11 @@ class PyFLT:
         Returns:
             flux (double): Poloidal magnetic flux. In Webb/rad.
         """
-    def applyRT(self, obj: l2g.external.embree.PyEmbreeAccell) -> None:
-        """This function is used to bind an EmbreeAccell C++ object to the
-        FLT C++ object. Only pointer is used, so essentially we could switch
-        different Embree objects.
+    def applyRT(self, obj: l2g.external.tlas.PyTLAS) -> None:
+        """This function is used to bind an TLAS C++ object to the FLT C++
+        object. Only pointer is used, so essentially we could switch different
+        TLAS objects.
 
         Arguments:
-            embree_obj (l2g.external.embree.PyEmbreeAccell): Embree object.
+            tlas_obj (l2g.external.tlas.PyTLAS): TLAS object.
         """

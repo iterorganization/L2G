@@ -7,7 +7,7 @@ import cython
 
 ## Cython imports
 from l2g.external.flt cimport FLT
-from l2g.external.embree cimport PyEmbreeAccell
+from l2g.external.tlas cimport PyTLAS
 
 
 # Std stuff
@@ -142,7 +142,7 @@ cdef class FieldLineTracer:
     cdef public object name
     cdef public object parameters
     cdef public object options
-    cdef public object embree_obj
+    cdef public object tlas_obj
     cdef public object equilibrium
     cdef public object eq
     # cdef public object point_results
@@ -164,8 +164,8 @@ cdef class FieldLineTracer:
         import l2g.settings
         self.parameters: l2g.settings.Parameters          = l2g.settings.Parameters()
         self.options:    l2g.settings.Options             = l2g.settings.Options()
-        import l2g.external.embree
-        self.embree_obj: l2g.external.embree.PyEmbreeAccell = l2g.external.embree.PyEmbreeAccell()
+        import l2g.external.tlas
+        self.tlas_obj: l2g.external.tlas.PyTLAS = l2g.external.tlas.PyTLAS()
         import l2g.equil
         self.equilibrium:l2g.equil.Equilibrium        = l2g.equil.Equilibrium()
         import l2g.external.equilibrium_analysis
@@ -194,36 +194,9 @@ cdef class FieldLineTracer:
     def setParameters(self, parameters: 'l2g.comp.Parameters') -> None:
         self.parameters = parameters
 
-    cpdef setEmbreeObj(self, PyEmbreeAccell embree_obj):
-        self.embree_obj = embree_obj
-        self.c_FLT.setEmbreeObj(embree_obj.c_eacc)
-
-    def commitMeshesToEmbree(self, mesh_files: list[str] | str, dim_mul=1e-3) -> list:
-        """Commits mesh from files to embree.
-
-        Returns:
-            ok (bool): Ok if finished
-
-        Arguments:
-            mesh_files: Either a single file or multiple files
-            dim_mul (float): Dimension multiplier to convert mesh dimension to
-                meters. Default 1e-3.
-        """
-        import l2g.mesh
-        log.info("Commiting meshes to Embree object...")
-        if isinstance(mesh_files, str):
-            mesh_files = [mesh_files]
-
-        out_ids = []
-
-        for file in mesh_files:
-            log.info(f"Commiting {file} to Embree object.")
-            mesh = l2g.mesh.Mesh(file)
-            v, t = mesh.getMeshData()
-            out_ids.append(self.embree_obj.commitMesh(v * dim_mul, t))
-            # Dimension is in meters
-
-        return out_ids
+    cpdef setTLASObj(self, PyTLAS tlas_obj):
+        self.tlas_obj = tlas_obj
+        self.c_FLT.setTLAS(tlas_obj.c_tlas)
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
@@ -385,10 +358,8 @@ cdef class FieldLineTracer:
         before running any FLT run functions.
         """
         log.info("Committing parameters")
-        # Set the Embree pointer
-        # self.c_FLT.applyRT(self.embree_obj)
-        # Re-set the embree object. Should be checked.
-        self.setEmbreeObj(self.embree_obj)
+        # Set the TLAS pointer
+        self.setTLASObj(self.tlas_obj)
 
         # Apply RKF45 accuracy settings
         self.c_FLT.setAbsError(self.parameters.abs_error)

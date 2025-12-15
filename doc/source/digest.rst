@@ -45,7 +45,7 @@ in :ref:`why_openmp`.
         input_equil [label="Equilibrium data", shape="note"]
         input_mesh [label="Mesh data", shape="box3d"]
 
-        ext_embree [label="Embree", shape="component", href="https://www.embree.org/", target="_blank"]
+        ext_tinybvh [label="TinyBvh", shape="component", href="https://github.com/jbikker/tinybvh", target="_blank"]
         ext_rkf45 [label="RKF4(5)", shape="component"]
 
         py_plot [label="Plotting", shape="component"]
@@ -56,7 +56,7 @@ in :ref:`why_openmp`.
         subgraph cluster_1 {
             color=lightgreen;
 
-            {ext_embree ext_rkf45};
+            {ext_tinybvh ext_rkf45};
             label="External libraries";
         }
 
@@ -96,7 +96,7 @@ in :ref:`why_openmp`.
         /*l2g_py -> input_equil [dir=back, lhead=cluster_0]*/
         l2g_py -> output_graphics [lhead=cluster_2, label="Write"]
         py_cython -> l2g_py [ltail=cluster_4, style=dashed, arrowhead=none]
-        ext_embree -> l2g_cpp [ltail=cluster_3, style=dashed, arrowhead=none]
+        ext_tinybvh -> l2g_cpp [ltail=cluster_3, style=dashed, arrowhead=none]
 
     }
 
@@ -124,14 +124,11 @@ FLT Kernel
 The kernel of the code (where field line tracing, :term:`FLT`, is performed) is
 written in C++. Parallelization is achieved in the C++ code using OpenMP.
 
-Embree
-------
+tinybvh
+-------
 
-For :term:`FLT` we require Finite Ray-Tracing, since we do not have infinite
-rays, but segmented rays (field-lines) for which we would like to see if during
-the tracing it hits any of the shadow geometry. Embree is a Ray-Tracing
-library, written to be used on CPUs. It has a easy to use interface for
-performing ray intersection tests.
+The tinybvh project is used to test for intersection with 2D surface triangular
+meshes during :term:`FLT`.
 
 
 RKF45

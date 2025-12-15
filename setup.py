@@ -19,31 +19,21 @@ except ImportError:
 
 # Find L2G_CPP_ROOTDIR
 L2G_CPP_ROOTDIR: str
-EMBREE_VERSION: str
-EMBREE_ROOTDIR: str
 
-if (L2G_CPP_ROOTDIR := os.environ.get("L2G_CPP_ROOT_DIR") or os.environ.get("EBROOTL2G_CPP")) is None:
+# YAFLT cpp root dir
+L2G_CPP_ROOTDIR: str | None = os.environ.get('L2G_CPP_ROOT_DIR') or os.environ.get('EBROOTL2G_CPP')
+
+if L2G_CPP_ROOTDIR is None:
     sys.exit("L2G_CPP_ROOT_DIR or EBROOTL2G_CPP are not set! L2G_cpp is required!")
-
-if (EMBREE_ROOTDIR := os.environ.get("EMBREE_ROOT_DIR") or os.environ.get("EBROOTEMBREE")) is None:
-    sys.exit("EMBREE_ROOT_DIR or EBROOTEMBREE are not set! Embree is required!")
-
-if (EMBREE_VERSION:=os.environ.get("EMBREE_VERSION") or os.environ.get("EBVERSIONEMBREE")) is None:
-    # Try to get it from EBVERSIONEMBREE
-    sys.exit("EMBREE_VERSION is not set in the envrionment!")
-
-if len(EMBREE_VERSION) > 1:
-    EMBREE_VERSION = EMBREE_VERSION[0]
 
 useOpenMP = True
 
 def get_include_directories() -> list[str]:
-    """Get the include directories of the C++ code and Embree.
+    """Get the include directories.
     """
     out: list[str] = []
 
     out.append(os.path.join(L2G_CPP_ROOTDIR, 'include'))
-    out.append(os.path.join(EMBREE_ROOTDIR, 'include'))
     out.append(np.get_include())
 
     return out
@@ -53,8 +43,6 @@ def get_libraries() -> list[str]:
     """
     out: list[str] = []
     out.append("flt")
-    if sys.platform == "win32":
-        out.append("embree3")
     return out
 
 def get_library_dirs() -> list[str]:
@@ -63,9 +51,6 @@ def get_library_dirs() -> list[str]:
     out: list[str] = []
 
     out.append(os.path.join(L2G_CPP_ROOTDIR, 'lib'))
-    if sys.platform == "win32":
-        out.append(os.path.join(EMBREE_ROOTDIR, 'lib'))
-
     return out
 
 def get_extra_compile_args() -> list[str]:
@@ -83,16 +68,12 @@ def get_extra_compile_args() -> list[str]:
         out.append("/wd4244")
         # dll-interface warning
         out.append("/wd4251")
-        # The C++ code is compatible with Embree 3/4
-        out.append(f"/DEMBREE_VERSION={EMBREE_VERSION}")
     else:
         out.append("-O3")
         out.append("-march=native")
         out.append("-Wall")
         if useOpenMP:
             out.append("-fopenmp")
-        # The C++ code is compatible with Embree 3/4
-        out.append(f"-DEMBREE_VERSION={EMBREE_VERSION}")
     return out
 
 def get_extra_link_args() -> list[str]:
@@ -120,8 +101,6 @@ def getDataFiles() -> list[str]:
     # if sys.platform == "win32":
     #     # Gather the required DLLs
     #     out.append(os.path.join(L2G_CPP_ROOTDIR, 'bin', 'flt.dll'))
-    #     out.append(os.path.join(EMBREE_ROOTDIR, 'bin', 'embree3.dll'))
-    #     out.append(os.path.join(EMBREE_ROOTDIR, 'bin', 'tbb12.dll'))
 
     return out
 
@@ -198,5 +177,7 @@ setup(
                "bin/get_disruption_profile_from_imas",
                "bin/torbeam_mapper", "bin/torbeam_plotter",
                "bin/get_disruption_profile_from_imas",
-               "bin/mkDisruptionMovie"]
+               "bin/mkDisruptionMovie", "bin/plotEquilibriums",
+               "bin/plot_summary_plasma_type"]
+
 )

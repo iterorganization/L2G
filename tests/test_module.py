@@ -1,7 +1,7 @@
 from tabnanny import verbose
 import unittest
 
-from l2g.external.embree import PyEmbreeAccell
+from l2g.external.tlas import PyTLAS
 from l2g.external.flt import PyFLT
 from l2g.external.equilibrium_analysis import EQA
 from l2g.external.bicubic import PyBicubic
@@ -16,15 +16,15 @@ class TestModule(unittest.TestCase):
         for _ in range(10):
             obj = PyFLT()
 
-    def test_embree_object_creation(self):
+    def test_tlas_object_creation(self):
         for _ in range(10):
-            obj = PyEmbreeAccell()
+            obj = PyTLAS()
 
-    def test_assign_embree_to_flt(self):
+    def test_assign_tlas_to_flt(self):
         for _ in range(10):
-            embree_obj = PyEmbreeAccell()
+            tlas_obj = PyTLAS()
             flt_obj = PyFLT()
-            flt_obj.applyRT(embree_obj)
+            flt_obj.applyRT(tlas_obj)
 
 
     def test_PyBfgs2d_object_creation(self):
