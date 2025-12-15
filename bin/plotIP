@@ -15,6 +15,10 @@ parser.add_argument('-u', '--user', metavar='USER', type=str, default="public",
                     help='Username')
 parser.add_argument('-d', '--device',
                     metavar="DEVICE", type=str, default="ITER", help='Device')
+parser.add_argument('-b', '--backend',
+                    metavar="BACKEND", type=str, default="mdsplus", help='Backend (hdf5 or mdsplus)')
+parser.add_argument('-v', '--version',
+                    metavar="VERSION", type=str, default="3", help='IMAS data version')
 parser.add_argument('-ts', '--time_slice', metavar='#time_slice', type=float,
                     default=0.0, help='Time slice')
 parser.add_argument('-o', '--output_name', type=str, default="out",
@@ -24,12 +28,10 @@ args = parser.parse_args()
 
 import numpy as np
 import imas
-import imas.imasdef
-ids = imas.DBEntry(backend_id=imas.imasdef.MDSPLUS_BACKEND,
-    user_name=args.user, db_name=args.device, shot=args.shot, run=args.run,
-    data_version="3")
-ids.open()
-summary = ids.get("summary")
+
+uri = f"imas:{args.backend}?database={args.device};shot={args.shot};run={args.run};user={args.user};version={args.version}"
+ids = imas.DBEntry(uri, 'r')
+summary = ids.get("summary", autoconvert=False)
 
 TITLE=f"s={args.shot} r={args.run}"
 

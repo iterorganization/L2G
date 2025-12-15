@@ -5,7 +5,8 @@ description="""Utility for plotting the characteristic boundary contours of
 poloidal magnetic fluxes.
 """
 parser = argparse.ArgumentParser(description=description)
-subparsers = parser.add_subparsers(dest="input_type", help="Data source: IMAS, EQDSK, ...")
+subparsers = parser.add_subparsers(dest="input_type",
+    help="Data source: IMAS, EQDSK, ...", required=True)
 
 imas_subparser = subparsers.add_parser("imas", help="Plot from IMAS source")
 imas_subparser.add_argument('-s', '--shot', metavar='SHOT', type=int,
@@ -22,6 +23,8 @@ imas_subparser.add_argument('-t', '--times', metavar='TIMES', type=float,
 eqdsk_subparser = subparsers.add_parser("eqdsk", help="Plot from EQDSK source")
 eqdsk_subparser.add_argument("-f", "--files", type=str,
                               nargs="*", help="Path to EQDSK file.")
+eqdsk_subparser.add_argument("-t", "--times", type=float, nargs="*",
+                             help="Time labels")
 args = parser.parse_args()
 
 import l2g.equil
@@ -44,6 +47,11 @@ elif args.input_type == "eqdsk":
     files = list(args.files)
     title=""
     iter_obj.loadEqdskEquilibriums(files)
+
+    if args.times:
+        if len(iter_obj) != len(args.times):
+            print("Provide the same number of time labels as there are equilibriums!")
+        iter_obj._times = args.times
 
 import matplotlib.pyplot as plt
 import matplotlib.axis
@@ -114,7 +122,12 @@ for index, time, equilibrium in iter_obj:
     # Cleaning path
     paths = clean_path(paths, polygon)
 
-    plot_paths(ax, paths, label=f"{time}", color=colors[index])
+    if int(time) == time:
+        label = f"{int(time)}"
+    else:
+        label = f"{time:.3f}"
+
+    plot_paths(ax, paths, label=label, color=colors[index])
 
 ax.legend(title="Time [s]")
 ax.axis("equal")

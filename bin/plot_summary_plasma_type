@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import sys
 import imas
-import imas.imasdef
 
 def overlapping_interval(x1, x2, y1, y2):
     if max(x1,y1) > min(x2, y2):
@@ -40,20 +39,11 @@ shot = args.shot
 run = args.run
 user = args.user
 version = args.version
+backend = args.backend
 
-backend = imas.imasdef.MDSPLUS_BACKEND
-if not args.backend is None:
-    if args.backend == "mdsplus":
-        pass
-    elif args.backend == "hdf5":
-        backend = imas.imasdef.HDF5_BACKEND
-    else:
-        sys.exit("Wrong backend provided. Either hdf5 or mdsplus")
-
-ids = imas.DBEntry(backend_id=backend, user_name=user,
-    db_name=device, shot=shot, run=run, data_version=version)
-ids.open()
-summary = ids.get("summary")
+uri=f"imas:{backend}?shot={shot};run={run};user={user};version={version};database={device}"
+ids = imas.DBEntry(uri, 'r')
+summary = ids.get("summary", autoconvert=False)
 
 TITLE=f"s={shot} r={run}"
 
@@ -93,13 +83,6 @@ for i in range(len(ind_diff_plasma_type)-1):
 for i in to_prune[::-1]:
     ind_diff_plasma_type.pop(i)
 
-
-# Now let's set the H/L mode thingies
-# Find the interval that is diverted mode
-diff_ip = np.diff(np.sign(np.abs(summary.global_quantities.ip.value) - 20e6))
-ind_diff_ip = [0] + np.where(diff_ip != 0)[0].tolist() + [summary.time.size-1]
-
-
 figure = plt.figure()
 ax = figure.add_subplot(111)
 ax.set_title(TITLE)
@@ -125,27 +108,9 @@ for ind in ind_diff_plasma_type:
         # Diverted
         label = "Diverted"
         color = "b"
-
-        # for ip_ind in range(len(ind_diff_ip)-1):
-        #     overlap = overlapping_interval(ind_diff_ip[ip_ind], ind_diff_ip[ip_ind+1], sta, ind)
-        #     if overlap is None:
-        #         continue
-
-        #     if abs(summary.global_quantities.ip.value[overlap[0]+2]) < 20e6:
-        #         # ip_label = r"L-mod $[I_p < 10MA]$"
-        #         ip_label = r"L-mod"
-        #         ip_c = "y"
-        #     else:
-        #         ip_label = r"H-mod $[I_p >= 10MA]$"
-        #         ip_c = "g"
-        #     print(overlap)
-        #     region = ax.axvspan(xmin=time[overlap[0]], xmax=time[overlap[1]], ymin=0.6, ymax=0.8, color=ip_c, alpha=0.1)
-        #     (x0, y0), (x1, y1) = region.get_path().get_extents().get_points()
-        #     ax.text((x0 + x1) / 2, (y0 + y1) / 2 * y_length, ip_label, ha='center', va='center', rotation='horizontal', fontsize=10, color="crimson")
-        #     ax.text(x1, y_length*0.6, f"t={time[overlap[1]]:.2f}s", ha='center')
     region = ax.axvspan(xmin=time[sta], xmax=time[ind], ymin=0.8, ymax=1, color=color, alpha=0.13)
     # print(type(region), ax.get_ylim())
-    (x0, y0), (x1, y1) = region.get_path().get_extents().get_points()
+    (x0, y0), (x1, y1) = region.get_bbox().get_points()
     ax.text((x0 + x1) / 2, (y0 + y1) / 2 * y_length, label, ha='center', va='center', rotation='horizontal', fontsize=12, color="crimson")
 
     # Also specify the time value on the border

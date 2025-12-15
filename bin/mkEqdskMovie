@@ -1,5 +1,29 @@
 #!/usr/bin/env python3
+from l2g.equil import EQDSKIO, getEquilibriumFromEQDSKG
+import l2g.external.equilibrium_analysis
+from l2g.plot._marching_squares import Marching
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation, PillowWriter
+from functools import partial
+import sys # For printing to stdout
 import argparse
+
+def plot_paths(ax, paths: tuple[list, list], *args, **kwargs) -> list:
+    out = []
+    label = False
+    if 'label' in kwargs:
+        label = True
+    for path in paths[0]:
+        out += ax.plot(path[0], path[1], *args, **kwargs)
+
+        # ax.plot(path[0][0], path[1][0], "bo", ms=12)
+        # ax.plot(path[0][-1], path[1][-1], "yo", ms=12)
+
+        if label:
+            label = False
+            kwargs.pop('label')
+    return out
+
 description = """From a series of EQDSK files create a GIF movie, in which the
 LCFS or separatrixes of the equilibrium are plotted.
 """
@@ -20,21 +44,64 @@ parser.add_argument('-t', '--output_type', metavar='gif|png', type=str,
 
 args = parser.parse_args()
 eqdskFiles = args.eqdsk_files
-
-import l2g.plot
-from l2g.equil import EQDSKIO, getEquilibriumFromEQDSKG
+print(eqdskFiles)
 # eqdskFiles.sort()
 eqdsks = [EQDSKIO(_) for _ in eqdskFiles]
 labels = [_.getName() for _ in eqdsks]
 equilibriums = [getEquilibriumFromEQDSKG(_) for _ in eqdsks]
 
 print('Making the movie... It can take a few minutes.')
-l2g.plot.createLcfsMovie(
-    equilibriums=equilibriums,
-    labels=labels,
-    legend_name="Time",
-    movieName=args.output_name,
-    dpi=args.dpi,
-    bitrate=args.bitrate,
-    type=args.output_type)
+
+fig, ax = plt.subplots()
+fig.set_tight_layout(True)
+
+ax.grid(True)
+ax.axis('equal')
+
+ax.set_xlabel('R [m]')
+ax.set_ylabel('Z [m]')
+
+ax.plot(equilibriums[0].wall_contour_r, equilibriums[1].wall_contour_z, 'r-')
+
+# Plot first LCFS
+eq = l2g.external.equilibrium_analysis.EQA(equilibriums[0])
+eq.evaluate()
+m = Marching()
+m.setData(equilibriums[0].grid_r, equilibriums[0].grid_z, equilibriums[0].psi)
+path = m.getContourPath(eq.getBoundaryFluxValue())
+lines = plot_paths(ax, path, label=labels[0])
+while lines:
+    # The pop(0) element gets us the ax.plot object. And to completely
+    # remove it you also have to call remove()
+    lines.pop(0).remove()
+
+fig.canvas.draw()
+N = len(equilibriums)
+
+sys.stdout.write(f"\rProcessing movie: {int(100 * 0.0/ N)}%")
+sys.stdout.flush()
+def update(i, lines):
+    sys.stdout.write(f"\rProcessing movie: {100 * i/ N:.2f}%")
+    sys.stdout.flush()
+    while lines:
+        lines.pop(0).remove()
+
+    eq.setEquilibrium(equilibriums[i])
+    eq.evaluate()
+    m.setData(equilibriums[i].grid_r, equilibriums[i].grid_z,
+              equilibriums[i].psi)
+    path = m.getContourPath(eq.getBoundaryFluxValue())
+    lines += plot_paths(ax, path, label=labels[i], color='b')
+
+    if eq.getType() == "div":
+        path = m.getContourPath(eq.getSecondaryXFluxValue())
+        lines += plot_paths(ax, path, color='g')
+    ax.legend(title='Time', loc='upper right')
+
+output_name = args.output_name
+if not output_name.lower().endswith('.gif'):
+    output_name += '.gif'
+anim = FuncAnimation(fig, partial(update, lines=lines), frames=N, interval=250)
+anim.save(output_name, writer=PillowWriter(bitrate=args.bitrate))
+
 print('Done!')

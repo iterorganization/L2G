@@ -81,6 +81,7 @@ args = parser.parse_args()
 import os
 import sys
 import imas
+import imas.ids_defs
 
 SHOT=args.shot
 RUN=args.run
@@ -90,31 +91,21 @@ OUTPUT_DIRECTORY=os.path.abspath(os.path.expanduser(args.output_directory))
 TIME_START = args.time_start
 TIME_END = args.time_end
 VERSION = args.version
+BACKEND = args.backend
 
-if args.backend == "mdsplus":
-    BACKEND=imas.imasdef.MDSPLUS_BACKEND
-elif args.backend == "hdf5":
-    BACKEND = imas.imasdef.HDF5_BACKEND
-else:
-    BACKEND = None
 
 import numpy as np
-
-entry = imas.DBEntry(shot=SHOT, run=RUN, user_name=USER, db_name=DEVICE,
-                     backend_id=BACKEND, data_version=VERSION)
-code, _ = entry.open()
-
-if code != 0:
-    sys.exit(code)
+uri = f"imas:{BACKEND}?shot={SHOT};run={RUN};user={USER};database={DEVICE};version={VERSION}"
+entry = imas.DBEntry(uri, 'r')
 
 # Get the times
 try:
-    wall = entry.get("wall")
+    wall = entry.get("wall", autoconvert=False)
 except:
     print("Falling back in getting wall")
-    wall = l2g.getBackUpIMASWallIds()
+    wall = l2g.getBackupIMASWallIds()
 
-summary = entry.get("summary")
+summary = entry.get("summary", autoconvert=False)
 
 mask = np.logical_and(summary.time >= TIME_START, summary.time <= TIME_END)
 tsteps = summary.time[mask]
@@ -147,7 +138,7 @@ import l2g.external.equilibrium_analysis
 eq = l2g.external.equilibrium_analysis.EQA()
 for index, time in enumerate(tsteps):
     print(f"Processing {index}. Time {time}.")
-    equilibrium_ids = entry.get_slice("equilibrium", time, imas.imasdef.CLOSEST_SAMPLE)
+    equilibrium_ids = entry.get_slice("equilibrium", time, imas.ids_defs.CLOSEST_INTERP, autoconvert=False)
 
     # Obtain the equilibrium. First get it without the helicity correction, so
     # that we get the sign of the flux gradient.
@@ -165,7 +156,7 @@ for index, time in enumerate(tsteps):
         print("Failed to evaluate equilibrium! Skipping!")
 
 
-    disruption = entry.get_slice("disruption", time, imas.imasdef.CLOSEST_SAMPLE)
+    disruption = entry.get_slice("disruption", time, imas.ids_defs.CLOSEST_INTERP, autoconvert=False)
 
     total_conductive_power = (disruption.global_quantities.power_ohm - \
         disruption.global_quantities.power_radiated_electrons_impurities)[0]
@@ -213,7 +204,6 @@ for index, time in enumerate(tsteps):
     for flux in fluxes:
         paths, types = marching_obj.getContourPath(flux)
         found = False
-
 
         possible_points = []
         for path in paths:

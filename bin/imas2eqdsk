@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import imas
+import imas.ids_defs
 import l2g.equil
 import numpy as np
 
@@ -33,6 +34,11 @@ parser.add_argument('-v', '--version',
                     type=str,
                     default='3',
                     help='argument for version. Default 3')
+parser.add_argument('-b', '--backend',
+                    metavar='backend',
+                    type=str,
+                    default='mdsplus',
+                    help='argument for backend. Default mdsplus')
 parser.add_argument('-s', '--shot',
                     type=int,
                     metavar='shot',
@@ -60,27 +66,15 @@ shot = args.shot
 run = args.run
 version = args.version
 times = args.times
+backend = args.backend
 # t_s = 399.927598 # time slice
 DINA_SCENARIO_NAME="DT-DINA2020-04"
 
-# imas_obj = imas.ids(shot, run)
-# imas_obj.open_env(user, device, version)
+uri = f"imas:{backend}?shot={shot};run={run};user={user};database={device};version={version}"
+imas_obj = imas.DBEntry(uri, 'r')
 
-# ids_equilibrium = imas_obj.equilibrium
-
-# # time_slices = args.time_slices[:]
-
-# ids_wall = imas_obj.wall
-# ids_wall.get()
-
-# imas_obj.summary.get()
-
-imas_obj = imas.DBEntry(shot=shot, run=run, user_name=user, db_name=device,
-                        backend_id=imas.imasdef.MDSPLUS_BACKEND)
-imas_obj.open()
-
-ids_wall = imas_obj.get("wall")
-ids_summary = imas_obj.get("summary")
+ids_wall = imas_obj.get("wall", autoconvert=False)
+ids_summary = imas_obj.get("summary", autoconvert=False)
 
 if len(times) == 0:
     # Extract the times using time_start time_end
@@ -91,12 +85,12 @@ if len(times) == 0:
 # print(ids_times, )
 print(f"Generating EQDSK files from {shot}/{run}")
 for ts in times:
-    ids_equilibrium = imas_obj.get_slice("equilibrium", ts, imas.imasdef.CLOSEST_SAMPLE)
+    ids_equilibrium = imas_obj.get_slice("equilibrium", ts, imas.ids_defs.CLOSEST_INTERP, autoconvert=False)
     print(f"Processing time {ts}. Actual time stored in time_slice[:].time: {ids_equilibrium.time_slice[0].time}")
     # ids_equilibrium.getSlice(ts, imas.imasdef.CLOSEST_SAMPLE)
 
     slice = ids_equilibrium.time_slice[0]
-    time = slice.time
+    time = slice.time.value
 
     HEADER_COMMENT=f"IDS shot={shot} run={run} t={time:.3f}s"
     eqObj = l2g.equil.createEqdskFromSlice(slice,

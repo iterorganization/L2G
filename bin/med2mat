@@ -79,7 +79,8 @@ out["barycenter"] = barycenter
 out["barycenter_cyln"] = barycenter_cyln
 
 if "normals" in fieldNames:
-    field = mc.ReadField(med_file, "normals", (0, -1))
+    mesh.setIndex(0)
+    field = mesh.getField("normals")
     array = field.getArray()
     out["normals"] = array.toNumPyArray()
 

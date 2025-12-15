@@ -4,9 +4,8 @@ description = """Make a movie of the halo fluxes region out of an IMAS
 Disruption IDS.
 """
 
-
 def get_contour_paths(marching_obj: "Marching", polygon_obj: "Polygon",
-        fluxes: list)->list:
+        fluxes: list[float])->list:
     out_paths = []
 
     for flux in fluxes:
@@ -68,7 +67,7 @@ def obtain_connection_length(equilibrium: "l2g.equil.Equilibrium",
 
 ###############################################################################
 
-parser = argparse.ArgumentParser(description='Create EQDSK from IDS time slice')
+parser = argparse.ArgumentParser(description='Creates a contour movie of the disruption.profiles_1d.')
 
 parser.add_argument('-s', '--shot', metavar='SHOT', type=int,
                     help='Shot number',
@@ -79,6 +78,9 @@ parser.add_argument('-u', '--user', metavar='USER', type=str, default="public",
                     help='Username')
 parser.add_argument('-d', '--device',
                     metavar="DEVICE", type=str, default="ITER_DISRUPTIONS", help='Device')
+parser.add_argument('-b', '--backend',
+                    metavar="BACKEND", type=str, default="mdsplus", help="IMAS backend")
+parser.add_argument('-v', '--version', type=int, default=3, help="IMAS AL version")
 parser.add_argument('-ts', '--time_start', metavar='#time_start', type=float,
                     default=0.0, help='Starting time')
 parser.add_argument('-te', '--time_end', type=float, default=999999)
@@ -94,15 +96,13 @@ parser.add_argument("-ns", '--number_of_samples', type=int,
 args = parser.parse_args()
 
 import imas
+import imas.ids_defs
 import numpy as np
+uri = f"imas:{args.backend}?shot={args.shot};run={args.run};database={args.device};version={args.version};user={args.user}"
+ids = imas.DBEntry(uri, 'r')
 
-ids = imas.DBEntry(backend_id=imas.imasdef.MDSPLUS_BACKEND,
-    user_name=args.user, db_name=args.device, shot=args.shot, run=args.run,
-    data_version='3')
-
-ids.open()
-wall_ids = ids.get("wall")
-summary_ids = ids.get("summary")
+wall_ids = ids.get("wall", autoconvert=False)
+summary_ids = ids.get("summary", autoconvert=False)
 
 times = summary_ids.time
 
@@ -137,8 +137,10 @@ for time in times:
     print(f"Processing time {time}")
     TIMES.append(f"t={time:12.4f}s")
     equilibrium_ids = ids.get_slice("equilibrium", time,
-                                    imas.imasdef.CLOSEST_SAMPLE)
-    disruption = ids.get_slice("disruption", time, imas.imasdef.CLOSEST_SAMPLE)
+                                    imas.ids_defs.CLOSEST_INTERP,
+                                    autoconvert=False)
+    disruption = ids.get_slice("disruption", time,
+                               imas.ids_defs.CLOSEST_INTERP, autoconvert=False)
 
     # Obtain the equilibrium. First get it without the helicity correction, so
     # that we get the sign of the flux gradient.
@@ -213,8 +215,6 @@ def update(i, paths, lines, labels):
     # if len(sr[i]):
     #     for j in range(len(sr[i])):
     #         lines += ax.plot(sr[i][j], sz[i][j], '-', c='g')
-    # ax.set_ylim(Z_LIMITS)
-    # ax.set_xlim(R_LIMITS)
 
     lines.append(ax.text(0.7, 0.9, labels[i], transform = ax.transAxes))
 
@@ -230,6 +230,12 @@ ax.set_xlabel('R [m]')
 ax.set_ylabel('Z [m]')
 # Plot limiter
 ax.plot(equilibrium.wall_contour_r, equilibrium.wall_contour_z, 'r-')
+xlim, ylim = ax.get_xlim(), ax.get_ylim()
+ax.set_xlim(xlim)
+ax.set_ylim(ylim)
+ax.set_autoscale_on(False)
+# Store current x and y limits in order to avoid jittering of gif.
+X_LIMITS = ax.get_xlim()
 ax.set_title(f"S={args.shot} R={args.run} U={args.user} D={args.device}")
 
 anim = FuncAnimation(figure, frame_update, frames=len(ALL_CONTOUR_PATHS), interval=250)

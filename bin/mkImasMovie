@@ -15,6 +15,10 @@ parser.add_argument('-u', '--user', metavar='USER', type=str, default="public",
                     help='Username')
 parser.add_argument('-d', '--device',
                     metavar="DEVICE", type=str, default="ITER", help='Device')
+parser.add_argument('-b', '--backend',
+                    metavar="BACKEND", type=str, default="mdsplus", help='IMAS backend')
+parser.add_argument('-v', '--version',
+                    metavar="VERSION", type=str, default="3", help='IMAS data version')
 parser.add_argument('-ts', '--time_start', metavar='#time_start', type=float,
                     default=0.0, help='Starting time')
 parser.add_argument('-te', '--time_end', type=float, default=999999)
@@ -38,21 +42,25 @@ parser.add_argument("-ns", '--number_of_samples', type=int,
 args = parser.parse_args()
 
 import imas
-
+import imas.ids_defs
+shot = args.shot
+run = args.run
+user = args.user
+version = args.version
+backend = args.backend
+database = args.device
 #ids = imas.ids(args.shot, args.run)
 #ids.open_env(args.user, args.device, '3')
-ids = imas.DBEntry(backend_id=imas.imasdef.MDSPLUS_BACKEND,
-    user_name=args.user, db_name=args.device, shot=args.shot, run=args.run,
-    data_version='3')
-ids.open()
+uri = f"imas:{backend}?shot={shot};run={run};user={user};version={version};database={database}"
+ids = imas.DBEntry(uri, 'r')
 # Old API
 #wall_ids = ids.wall
 #wall_ids.get()
-wall_ids = ids.get("wall")
+wall_ids = ids.get("wall", autoconvert=False)
 
 #summary_ids = ids.summary
 #summary_ids.get()
-summary_ids = ids.get("summary")
+summary_ids = ids.get("summary", autoconvert=False)
 
 #equilibrium = ids.equilibrium
 
@@ -74,7 +82,7 @@ try:
     wall_contour_z = wall_ids.description_2d[0].limiter.unit[0].outline.z
 except:
     import l2g.equil
-    wall_backup = l2g.equil.getBackUpIMASWallIds()
+    wall_backup = l2g.equil.getBackupIMASWallIds()
 
     wall_contour_r = np.concatenate([wall_backup.description_2d[0].limiter.unit[0].outline.r,
                              wall_backup.description_2d[0].limiter.unit[1].outline.r[::-1]])
@@ -131,7 +139,7 @@ for time in time_slices:
     times.append(f"t={time:12.4f}s")
     # equilibrium.getSlice(time, 1)
     equilibrium = ids.get_slice("equilibrium", time,
-        imas.imasdef.CLOSEST_INTERP)
+        imas.ids_defs.CLOSEST_INTERP, autoconvert=False)
 
     slice = equilibrium.time_slice[0]
     threshold = 0.5

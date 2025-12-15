@@ -8,6 +8,8 @@ in the YAML files where geometries, equilibriums and plasma heat loads are
 described to be run.
 """
 
+from typing import Any
+
 class bcolors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
@@ -18,7 +20,6 @@ class bcolors:
     ENDC = '\033[0m'
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
-
 
 def pprint(string, *args, **kwargs):
     print(string, *args, **kwargs, flush=True)
@@ -60,7 +61,7 @@ SUB_DICT_KEYS = {
 from typing import Iterator
 
 IGNORE_KEYS={'__line__'}
-def check_var(data: dict, entry: str, expected, required: bool=True):
+def check_var(data: dict[str, Any], entry: str, expected: Any, required: bool=True):
     """Checks if a key in a dictionary is of expected type.
 
     The expected argument can be either:
@@ -85,7 +86,7 @@ def check_var(data: dict, entry: str, expected, required: bool=True):
 
     val = data[entry]
 
-    def match_type(value: object, expected_type: type) -> bool:
+    def match_type(value: Any, expected_type: Any) -> bool:
         """Matches a value with the expected type.
 
         The expected type is either a single type object, a tuple of type
@@ -98,6 +99,9 @@ def check_var(data: dict, entry: str, expected, required: bool=True):
             value (object): A value
             expected_type (type): Expected type of the value.
         """
+        if isinstance(expected_type, tuple):
+            return any(match_type(value, sub_type) for sub_type in expected_type)
+
         if isinstance(expected_type, list):
             if not isinstance(value, list):
                 return False
@@ -109,11 +113,7 @@ def check_var(data: dict, entry: str, expected, required: bool=True):
             return OK
         return isinstance(value, expected_type)
 
-    # Handle unions of types
-    if isinstance(expected, tuple):
-        OK = any(match_type(val, excted_type) for excted_type in expected)
-    else:
-        OK = match_type(val, expected)
+    OK = match_type(val, expected)
     if not OK:
         if isinstance(val, list):
             epprint(f"ERROR: An element or elements of '{entry}' have a wrong type!")
@@ -191,9 +191,9 @@ def check_yaml_content(data: Iterator):
     import sys
 
 
-    equilibriums = []
-    geometries = []
-    hlms = []
+    equilibriums: list[dict[str, Any]] = []
+    geometries: list[dict[str, Any]] = []
+    hlms: list[dict[str, Any]] = []
 
     # Check if the data contains at least name and type
     ipprint("Loading YAML data")
@@ -401,12 +401,12 @@ def check_yaml_content(data: Iterator):
     opprint("Check complete")
     return
 
-def load_yaml(path_to_yaml: str)->tuple[dict, ...]:
+def load_yaml(path_to_yaml: str)->tuple[dict[str, Any], ...]:
     import yaml
     import sys
-    geometries = {}
-    hlms = {}
-    equilibriums = {}
+    geometries: dict[str, Any] = {}
+    hlms: dict[str, Any] = {}
+    equilibriums: dict[str, Any] = {}
 
     try:
         with open(path_to_yaml, "r") as f:
@@ -483,8 +483,8 @@ def check_if_in_slurm_job(*flt_objs):
             except:
                 pprint("INFO: Failed to obtain a number from SLURM_CPUS_PER_TASK")
 
-def get_hlm(d: dict, index: int) -> dict:
-    out = {}
+def get_hlm(d: dict[str, Any], index: int) -> dict[str, Any]:
+    out: dict[str, Any] = {}
     for key in d:
         if isinstance(d[key], list):
             out[key] = d[key][min(index, len(d[key]))]
@@ -492,7 +492,16 @@ def get_hlm(d: dict, index: int) -> dict:
             out[key] = d[key]
     return out
 
-def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
+def indent_print(d: dict[str, Any], indent:int = 0) -> None:
+    for key in d:
+        obj = d[key]
+        if isinstance(obj, dict):
+            print(f"{'\t'*indent}{key}:")
+            indent_print(obj, indent + 1)
+        else:
+            print(f"{'\t'*indent}{key}: {obj}")
+
+def run_case(geod: dict[str, Any], eqid: dict[str, Any], hlmd: dict[str, Any] | None, **kwargs: dict[str, Any]):
     """Runs the FLT study.
 
     Arguments:
@@ -525,11 +534,13 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
 
     pprint("INFO: Running FLT")
 
-    pprint(f"INFO: Dumping geometry dictionary: {geod}")
-    pprint(f"INFO: Dumping equilibrium dictionary: {eqid}")
+    pprint(f"INFO: Dumping geometry dictionary:")
+    indent_print(geod, 1)
+    pprint(f"INFO: Dumping equilibrium dictionary:")
+    indent_print(eqid, 1)
     if hlmd:
-        pprint(f"INFO: Dumping hlm dictionary: {hlmd}")
-
+        pprint(f"INFO: Dumping hlm dictionary:")
+        indent_print(hlmd, 1)
     ### Main objects
     flt_obj = l2g.comp.FieldLineTracer()
     check_if_in_slurm_job(flt_obj)
@@ -537,8 +548,7 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
 
     ##
     # Additional flags
-    if not (align_lcfs:=geod.get("align_lcfs")):
-        align_lcfs = False
+    align_lcfs = geod.get('align_lcfs', False)
 
     if hlmd is None:
         apply_heat_loads = False
@@ -546,30 +556,25 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
     else:
         apply_heat_loads = True
 
-
     if (longwave_misalignment_flag:=kwargs.get("longwave_misalignment")):
-        pprint("INFO: Longwave misalginment = True")
+        pprint("INFO: Longwave misalignment = True")
         longwave_vector = kwargs["longwave_vector"] * kwargs["longwave_length"]
     else:
         longwave_misalignment_flag = False
         longwave_vector = np.zeros(3)
 
-    if not (output_directory:=kwargs.get("output_directory")):
-        output_directory = "results"
+    output_directory: str = kwargs.get("output_directory", "results")
 
     # Creating output_directory if necessary
     if not os.path.isdir(output_directory):
         os.makedirs(output_directory, exist_ok=True)
 
-    if not (case_name:=kwargs.get("case_name")):
-        case_name = f'{geod["name"]}_{eqid["name"]}'
+    case_name = kwargs.get("case_name", f'{geod["name"]}_{eqid["name"]}')
 
     ################################################################################
     ################################################################################
-    ## Loading eqd
-    # Load the eqds
 
-    equil_obj.correctHelicity(getVal(eqid, "correct_helicity", True))
+    equil_obj.correctHelicity(eqid.get("correct_helicity", True))
     pprint(f"INFO: Correcting helicity? {equil_obj._correct_helicity}")
 
     pprint("INFO: Loading equilibriums...")
@@ -604,24 +609,24 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
         CUSTOM_WALL_LIMITER_Z = []
 
     # See if there is a plasma shift applied
-    plasma_r_displ = getVal(eqid, "plasma_r_displ", 0.0)
-    plasma_z_displ = getVal(eqid, "plasma_z_displ", 0.0)
+    plasma_r_displ = eqid.get("plasma_r_displ", 0.0)
+    plasma_z_displ = eqid.get("plasma_z_displ", 0.0)
     if plasma_r_displ != 0.0 or plasma_z_displ != 0.0:
         pprint(f"plasma_r_displ: {plasma_r_displ}")
         pprint(f"plasma_z_displ: {plasma_z_displ}")
         equil_obj.applyPlasmaShift(plasma_r_displ, plasma_z_displ)
-    wall_silh_r_shift = getVal(eqid, "wall_silh_r_shift", 0.0)
-    wall_silh_z_shift = getVal(eqid, "wall_silh_z_shift", 0.0)
+    wall_silh_r_shift = eqid.get("wall_silh_r_shift", 0.0)
+    wall_silh_z_shift = eqid.get("wall_silh_z_shift", 0.0)
     if wall_silh_r_shift != 0.0 and wall_silh_z_shift != 0.0:
         pprint(f"wall_silh_r_shift: {wall_silh_r_shift}")
         pprint(f"wall_silh_z_shift: {wall_silh_z_shift}")
         equil_obj.applyWallSilhouetteShift(wall_silh_r_shift, wall_silh_z_shift)
 
-    bt_multiplier = getVal(eqid, "bt_multiplier", 1.0)
+    bt_multiplier = eqid.get("bt_multiplier", 1.0)
     if bt_multiplier != 1.0:
         equil_obj.applyBtMultiplier(bt_multiplier)
 
-    psi_multiplier = getVal(eqid, "psi_multiplier", 1.0)
+    psi_multiplier = eqid.get("psi_multiplier", 1.0)
     if psi_multiplier != 1.0:
         equil_obj.applyPsiMultiplier(psi_multiplier)
 
@@ -656,8 +661,10 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
         get_fls = False
         fl_ids = []
 
-    pprint(f"INFO: Dumping loaded parameters: {flt_obj.parameters.dump()}")
-    pprint(f"INFO: Dumping loaded options: {flt_obj.options.dump()}")
+    pprint(f"INFO: Dumping loaded parameters:")
+    indent_print(flt_obj.parameters.dump(), 1)
+    pprint(f"INFO: Dumping loaded options:")
+    indent_print(flt_obj.options.dump(), 1)
 
     ## See if we need to run FLT!
 
@@ -688,7 +695,6 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
                         continue
                     run_flt = True
                     break
-
 
     pprint(f"INFO: Need to obtain FLT data?: {run_flt}")
     pprint(f"INFO: Name set for the case: {case_name}")
@@ -809,7 +815,23 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
             flt_obj.evaluateEq()
 
             flt_obj.applyParameters()
-            pprint(f"INFO: Eq type: {flt_obj.eq.getType()}. Boundary {flt_obj.eq.getBoundaryFluxValue()}")
+            pprint(f"INFO: Equilibrium type: {flt_obj.eq.getType()}.")
+            if flt_obj.eq.getType() == 'div':
+                x1st_psi = flt_obj.eq.getBoundaryFluxValue()
+                pprint(f"INFO: 1st sep [Webb/rad]={x1st_psi:.4f}")
+                x1st_loc = flt_obj.eq.getLowerXPoint()
+                pprint(f"INFO: Lower X-Point [R, Z] [m, m]=[{x1st_loc[1]:.3f}, {x1st_loc[1]:.3f}]")
+                x2nd_psi = flt_obj.eq.getSecondaryXFluxValue()
+                if x2nd_psi:
+                    pprint(f"INFO: 2nd sep [Webb/rad]={x2nd_psi:.4f}")
+                    x2nd_loc = flt_obj.eq.getUpperXPoint()
+                    pprint(f"INFO: Upper X-Point [R, Z] [m, m]=[{x2nd_loc[1]:.3f}, {x2nd_loc[1]:.3f}]")
+                    distance_x1_x2 = flt_obj.eq.distanceBetweenPsiOnMidplane(x1st_psi, x2nd_psi)
+                    pprint(f"INFO: Distance between separatrixes [mm]={distance_x1_x2:.3f}")
+            else:
+                pprint(f"INFO: LCFS [Webb/rad]={flt_obj.eq.getBoundaryFluxValue():.3f}")
+                cont_loc = flt_obj.eq.getContactPoint()
+                pprint(f"INFO: Contact point [R, Z] [m, m]=[{cont_loc[0]:.3f}, {cont_loc[1]:.3f}]")
             # Process the data on the data
             flt_obj.processMagneticData()
 
@@ -817,7 +839,9 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
             if flt_obj.eq.getType() == "lim" and align_lcfs and (run_flt or get_fls):
                 pprint("INFO: Aligning limiter plasma with target geometry!")
                 flt_obj.alignGeometryWithLCFS()
-
+                pprint("INFO: Plasma LCFS aligned to geometry with following plasma shift:")
+                pprint(f"INFO: plasma_r_shit [m]: {flt_obj.parameters.plasma_r_displ:.5f}")
+                pprint(f"INFO: plasma_z_shit [m]: {flt_obj.parameters.plasma_z_displ:.5f}")
 
         if run_flt:
             ipprint("INFO: Running FLT!")
@@ -907,8 +931,7 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
                 obj = l2g.hlm.elm_plm.ELM_PLM(_drsep, _conlen_down)
 
                 # Calculate the loss profiles
-                if not (d := hlmd.get("loss_parameters")):
-                    d = {}
+                d = hlmd.get("loss_parameters", {})
                 if d:
                     pprint(f"INFO: PLM loss parameters: {d}")
                 pprint("INFO: Obtaining PLM loss profiles")
@@ -920,8 +943,7 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
                 hlm_params.additional_profiles.append(obj.Ti)
 
                 # Now calculate the heat load profile
-                if not (d := hlmd.get("elm_parameters")):
-                    d = {}
+                d = hlmd.get('elm_parameters', {})
                 if d:
                     pprint(f"INFO: ELM HLM parameters: {d}")
                 pprint("INFO: Obtaining ELM heat load profiles")
@@ -1092,7 +1114,7 @@ def run_case(geod: dict, eqid: dict, hlmd: dict | None, **kwargs):
             opprint("INFO:Writing done!")
 
 
-def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
+def create_graphics(eqid: dict[str, Any], hlmd: dict[str, Any] | None, **kwargs: dict[str, Any]) -> None:
     import os
 
     import matplotlib.pyplot as plt
@@ -1106,7 +1128,7 @@ def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
     import numpy as np
 
     equil_obj = l2g.equil.EquilibriumIterator()
-    equil_obj.correctHelicity(getVal(eqid, "correct_helicity", True))
+    equil_obj.correctHelicity(eqid.get("correct_helicity", True))
 
     match eqid["equilibrium_type"]:
         case "eqdsk_files":
@@ -1118,15 +1140,15 @@ def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
             sys.exit(2)
 
     # See if there is a plasma shift applied
-    plasma_r_displ = getVal(eqid, "plasma_r_displ", 0.0)
-    plasma_z_displ = getVal(eqid, "plasma_z_displ", 0.0)
+    plasma_r_displ = eqid.get("plasma_r_displ", 0.0)
+    plasma_z_displ = eqid.get("plasma_z_displ", 0.0)
     ok = equil_obj.applyPlasmaShift(plasma_r_displ, plasma_z_displ)
     if not ok:
         epprint("ERROR: Could not apply plasma shift!")
         sys.exit(2)
 
-    wall_silh_r_shift = getVal(eqid, "wall_silh_r_shift", 0.0)
-    wall_silh_z_shift = getVal(eqid, "wall_silh_z_shift", 0.0)
+    wall_silh_r_shift = eqid.get("wall_silh_r_shift", 0.0)
+    wall_silh_z_shift = eqid.get("wall_silh_z_shift", 0.0)
     equil_obj.applyWallSilhouetteShift(wall_silh_r_shift, wall_silh_z_shift)
 
     # Additional arrays if they are needed
@@ -1160,8 +1182,7 @@ def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
                 kwargs.pop('label')
         return None
 
-    if not (base_name:=kwargs.get("file_base_name")):
-        base_name = f"{eqid['name']}"
+    base_name = kwargs.get("file_base_name", f"{eqid['name']}")
 
     if (out_dir:=kwargs.get("output_directory")):
         if not os.path.isdir(out_dir):
@@ -1170,7 +1191,7 @@ def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
 
     xlim = kwargs.get("xlim")
     ylim = kwargs.get("ylim")
-    side = getVal(kwargs, 'side', 'owl')
+    side = kwargs.get('side', 'owl')
 
     for index, associated_time, equilibrium in equil_obj:
 
@@ -1369,13 +1390,11 @@ def create_graphics(eqid: dict, hlmd: dict | None, **kwargs) -> None:
 
                     # Calculate the loss profiles
                     obj = l2g.hlm.elm_plm.ELM_PLM(_drsep, _conlen_down)
-                    if not (d := hlmd.get("loss_hlm_params")):
-                        d = {}
+                    d = hlmd.get("loss_hlm_params", {})
                     d["r_max"] = _drsep[-1] - _drsep[0]
                     obj.calculate_loss_profiles(**d)
                     # Now calculate the heat load profile
-                    if not (d := hlmd.get("elm_hlm_params")):
-                        d = {}
+                    d = hlmd.get("elm_hlm_params", {})
                     obj.calculate_heat_load_profile(**d)
 
                     # Save to file
@@ -1480,7 +1499,7 @@ run_subparser.add_argument('geometry', help='Name of input data of geometries to
 run_subparser.add_argument('equilibrium', help='Name of the equilibrium data to be used in the FLT case')
 run_subparser.add_argument('hlm', nargs='?', help='Name of the HLM to apply on the FLT data. Optional')
 run_subparser.add_argument("--out-file", help="Specify output MED file name. Default None", type=str, default="")
-run_subparser.add_argument('--out-dir', help='Specify output directory. Default CWD.', type=str)
+run_subparser.add_argument('--out-dir', help='Specify output directory. Default %CWD%/result.', type=str)
 run_subparser.add_argument('--rotational-misalignment',
     help='Activate rotational misalignment. By that it checks if it has the ' +
          'necessary information in the geometry to run a FLT case with ' +
@@ -1529,14 +1548,13 @@ if __name__ == "__main__":
         sys.exit(1)
     import os
     if not os.access(args.yaml_file, os.F_OK | os.R_OK):
-        pprint(f"ERROR: Can't open or read {args.yaml_file}")
+        pprint(f"ERROR: Can't open or read input YAML file {args.yaml_file}")
         sys.exit(1)
 
-    import l2g
 
-    l2g.addStreamHandler()
-    l2g.enableLogging()
     if args.debug:
+        import l2g
+        l2g.addStreamHandler()
         l2g.enableDebugging()
 
     if command == "check":
@@ -1564,8 +1582,7 @@ if __name__ == "__main__":
 
     EQUILI_D = equilibriums[equilibrium]
 
-    if not (HLM_D:=hlms.get(hlm)):
-        HLM_D = None
+    HLM_D = hlms.get(hlm, None)
 
     if HLM_D is None and not hlm is None:
         epprint(f"Missing HLM {hlm} section in YAML file.")
@@ -1599,7 +1616,9 @@ if __name__ == "__main__":
         kwargs_of_cases: list[dict] = []
 
         base_kwargs = {}
-        base_kwargs["output_directory"] = output_directory
+        if output_directory:
+            base_kwargs["output_directory"] = output_directory
+
         if args.out_file:
             # Check if it's med file.
 

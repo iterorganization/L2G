@@ -1,5 +1,94 @@
 #!/usr/bin/env python3
+import matplotlib.pyplot as plt
+import matplotlib.colors as colors
+import numpy as np
+
+import os
+import sys
+
+import numpy as np
+import l2g.external.equilibrium_analysis
+
+import l2g.equil
+import l2g.external.equilibrium_analysis
+from l2g.plot._marching_squares import Marching, plot_paths
+
+def plot_psi(ax, equilibrium: l2g.equil.Equilibrium) ->  None:
+    """Plot the poloidal magnetic flux of an equilibrium to a matplotlib axes.
+    """
+
+    eq = l2g.external.equilibrium_analysis.EQA(equilibrium)
+    eq.evaluate()
+
+    m = Marching()
+    m.setData(equilibrium.grid_r, equilibrium.grid_z, equilibrium.psi)
+
+    psi_axis = equilibrium.psi_axis
+    psi_boundary = eq.getBoundaryFluxValue()
+
+    base_colormap = plt.get_cmap('jet_r')
+    def truncate_colormap(cmap, minval=0.0, maxval=1.0, n=100):
+        new_cmap = colors.LinearSegmentedColormap.from_list(
+            f'trunc({cmap.name},{minval:.2f},{maxval:.2f})',
+            cmap(np.linspace(minval, maxval, n)))
+        return new_cmap
+    colormap_vaccum = truncate_colormap(base_colormap, minval=0.8, maxval=1.0,
+                                        n=10)
+    colormap_drsep = truncate_colormap(base_colormap, minval=0.5, maxval=0.8,
+                                       n=10)
+    colormap_core = truncate_colormap(base_colormap, minval=0, maxval=0.3,
+                                      n=25)
+
+    eq_type = eq.getType()
+
+    psi_outside = eq.getPsi(equilibrium.grid_r[-1],
+                            eq.equilibrium.mag_axis_z)[0]
+
+    R = equilibrium.grid_r
+    Z = equilibrium.grid_z
+    PSI = equilibrium.psi
+    def contour_plot(cmap, psi1, psi2, N, a1, a2):
+        band = np.linspace(psi1, psi2, N)
+        ax.contour(R, Z, PSI, levels=band, cmap=cmap, alpha=a1)
+        ax.contourf(R, Z, PSI, levels=band, cmap=cmap, alpha=a2)
+
+
+    # Create intervals
+    if eq_type == "div":
+        # VACUUM
+        psi_2nd_boundary = eq.getSecondaryXFluxValue()
+        contour_plot(colormap_drsep, psi_boundary, psi_2nd_boundary, 10, 0.5, 0.2)
+        contour_plot(colormap_vaccum, psi_2nd_boundary, psi_outside, 10, 0.3, 0.2)
+    else:
+        contour_plot(colormap_vaccum, psi_boundary, psi_outside, 10, 0.3, 0.2)
+
+    contour_plot(colormap_core, psi_axis, psi_boundary, 25, 1, 0.2)
+
+    # Plot first separatrix or LCFS
+
+    boundary_path = m.getContourPath(psi_boundary)
+    if eq_type == 'div':
+        plot_paths(ax, boundary_path, label=r"$1^{st}$", color='g',
+                   linewidth=1.5)
+        secondary = m.getContourPath(psi_2nd_boundary)
+        plot_paths(ax, secondary, label=r"$2^{nd}$", color='b', linewidth=1.5)
+        # 4cm contour.
+        Rbdry, Zcen, _, _ = eq.getMidplaneInfo()
+
+        psi_dist4cm = eq.getPsi(Rbdry + 0.04, Zcen)[0]
+        path_dist4cm = m.getContourPath(psi_dist4cm)
+        plot_paths(ax, path_dist4cm, label=r"40 mm flux surface",
+                   color='tab:orange', linewidth=1.5)
+    else:
+        plot_paths(ax, boundary_path, label=r"LCFS", color='g', linewidth=1.5)
+
+    # Plot limiter silhouette
+    ax.plot(eq.equilibrium.wall_contour_r, eq.equilibrium.wall_contour_z, 'r-', linewidth=2.5)
+    ax.legend()
+
 import argparse
+
+from l2g import equil
 description = """Plot magnetic poloidal flux from either an EQDSK-G file or
 a time slice of the IMAS Equilibrium IDS.
 """
@@ -34,137 +123,32 @@ eqdsk_subparser.add_argument("-i", "--interactive", dest="interactive", action="
 
 args = parser.parse_args()
 
+eqIter = l2g.equil.EquilibriumIterator()
+
 if args.input_type == "imas":
-    import numpy as np
-    import imas
-    ids = imas.DBEntry(backend_id=imas.imasdef.MDSPLUS_BACKEND,
-        user_name=args.user, db_name=args.device, shot=args.shot, run=args.run,
-        data_version="3")
-    ids.open()
-
-
-    # Get wall silhouette
-    try:
-        wall_ids = ids.get("wall")
-        WALL_R = wall_ids.description_2d[0].limiter.unit[0].outline.r
-        WALL_Z = wall_ids.description_2d[0].limiter.unit[0].outline.z
-    except:
-        import l2g.equil
-        wall_ids = l2g.equil.getBackUpIMASWallIds()
-        wall_r = np.concatenate([wall_ids.description_2d[0].limiter.unit[0].outline.r,
-                                 wall_ids.description_2d[0].limiter.unit[1].outline.r[::-1]])
-        wall_z = np.concatenate([wall_ids.description_2d[0].limiter.unit[0].outline.z,
-                                 wall_ids.description_2d[0].limiter.unit[1].outline.z[::-1]])
-        WALL_R = wall_r
-        WALL_Z = wall_z
-    # Get LCFSs
-
-    equilibrium = ids.get_slice("equilibrium", args.time_slice,
-                                imas.imasdef.CLOSEST_INTERP)
-    slice = equilibrium.time_slice[0]
-    vacuum_toroidal_field_ids = equilibrium.vacuum_toroidal_field
-    threshold = 0.5
-
-    lcfs_collection_r = []
-    lcfs_collection_z = []
-    if len(slice.boundary_separatrix.outline.r):
-        r = slice.boundary_separatrix.outline.r
-        z = slice.boundary_separatrix.outline.z
-
-        diff_r = np.abs(np.diff(r))
-        diff_z = np.abs(np.diff(z))
-        indexes = np.where(np.logical_or(diff_r > threshold, diff_z > threshold))
-
-        if len(indexes[0]) == 0:
-            lcfs_collection_r.append(r)
-            lcfs_collection_z.append(z)
-        else:
-            prev_index = 0
-            for index in indexes[0]:
-                lcfs_collection_r.append(r[prev_index:index+1])
-                lcfs_collection_z.append(z[prev_index:index+1])
-                prev_index = index+1
-            lcfs_collection_r.append(r[prev_index:])
-            lcfs_collection_z.append(z[prev_index:])
-
-    secondary_collection_r = []
-    secondary_collection_z = []
-    if len(slice.boundary_secondary_separatrix.outline.r):
-        r = slice.boundary_secondary_separatrix.outline.r
-        z = slice.boundary_secondary_separatrix.outline.z
-
-        diff_r = np.abs(np.diff(r))
-        diff_z = np.abs(np.diff(z))
-        indexes = np.where(np.logical_or(diff_r > threshold, diff_z > threshold))
-
-        if len(indexes[0]) == 0:
-            secondary_collection_r.append(r)
-            secondary_collection_z.append(z)
-        else:
-            prev_index = 0
-            for index in indexes[0]:
-                secondary_collection_r.append(r[prev_index:index+1])
-                secondary_collection_z.append(z[prev_index:index+1])
-                prev_index = index+1
-            secondary_collection_r.append(r[prev_index:])
-            secondary_collection_z.append(z[prev_index:])
-    import l2g.equil
-    equilibrium = l2g.equil.getEquilibriumFromIMAS(slice, vacuum_toroidal_field_ids, wall_ids)
+    d = {
+        'user': args.user,
+        'shot': args.shot,
+        'run': args.run,
+        'device': args.device,
+        'times': [args.time_slice]}
+    eqIter.loadIMASEquilibriums(d)
     title = f"S={args.shot} R={args.run} U={args.user} D={args.device} t={args.time_slice} s"
 elif args.input_type == "eqdsk":
     import os
-
     if args.eqdsk_file is None or not os.access(args.eqdsk_file, os.R_OK | os.F_OK):
         print(f"Cannot access EQDSK file: {args.eqdsk_file}!")
         import sys
         sys.exit(1)
-    import l2g.equil
-    eqdsk = l2g.equil.EQDSKIO(args.eqdsk_file)
-    # Get the LCFS
-    lcfs_collection_r = [eqdsk.getRBBBS()]
-    lcfs_collection_z = [eqdsk.getZBBBS()]
-    # Get the wall
-    WALL_R = eqdsk.getRLIM()
-    WALL_Z = eqdsk.getZLIM()
-    import l2g.equil
-    equilibrium = l2g.equil.getEquilibriumFromEQDSKG(eqdsk)
-    secondary_collection_r = []
-    secondary_collection_z = []
+    eqIter.loadEqdskEquilibriums([args.eqdsk_file])
     title = os.path.basename(args.eqdsk_file)
 else:
     print("Wrong input type specified")
     import sys
     sys.exit(1)
-import numpy as np
-import matplotlib.pyplot as plt
-figure = plt.figure(figsize=(600/100, 800/100), dpi=100)
-ax = figure.add_subplot(111)
 
-ax.grid(True)
-ax.axis("equal")
-ax.set_xlabel('R [m]')
-ax.set_ylabel('Z [m]')
+equilibrium = eqIter._equilibriums[0]
 
-# Plot wall
-ax.plot(WALL_R, WALL_Z, 'r-')
-
-for i in range(len(lcfs_collection_r)):
-    ax.plot(lcfs_collection_r[i], lcfs_collection_z[i], '-', c='b')
-for i in range(len(secondary_collection_r)):
-    ax.plot(secondary_collection_r[i], secondary_collection_z[i], '-', c='g')
-ax.set_title(title)
-
-ax.set_ylim((np.min(WALL_Z) -1), np.max(WALL_Z) + 1)
-ax.set_xlim((np.min(WALL_R) -1), np.max(WALL_R) + 1)
-# plt.show()
-
-if not args.interactive:
-    figure.savefig(f"{args.output_name}_lcfs.pdf")
-    figure.savefig(f"{args.output_name}_lcfs.png")
-
-#
-
-# Now the PSI
 figure = plt.figure(figsize=(600/100, 800/100), dpi=100)
 ax = figure.add_subplot(111)
 ax.grid(True)
@@ -172,16 +156,13 @@ ax.axis("equal")
 ax.set_xlabel('R [m]')
 ax.set_ylabel('Z [m]')
 # Plot wall
-ax.plot(WALL_R, WALL_Z, 'r-')
+ax.plot(equilibrium.wall_contour_r, equilibrium.wall_contour_z, 'r-')
 ax.set_title(title)
 
-eq = l2g.equil.EQ(equilibrium)
-eq.evaluate()
+plot_psi(ax, equilibrium)
 
-import l2g.plot
-l2g.plot.plot_psi_to_mpl_ax(ax, eq)
-ax.set_ylim((np.min(WALL_Z) -1), np.max(WALL_Z) + 1)
-ax.set_xlim((np.min(WALL_R) -1), np.max(WALL_R) + 1)
+ax.set_ylim((np.min(equilibrium.wall_contour_z) -1), np.max(equilibrium.wall_contour_z) + 1)
+ax.set_xlim((np.min(equilibrium.wall_contour_r) -1), np.max(equilibrium.wall_contour_r) + 1)
 
 if args.interactive:
     plt.show()

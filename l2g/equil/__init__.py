@@ -185,8 +185,8 @@ def createEqdskFromSlice(slice: Any, header: str="") -> EQDSKIO:
     profile2d = slice.profiles_2d[0]
 
     # Rectangular grid
-    R = profile2d.grid.dim1
-    Z = profile2d.grid.dim2
+    R = profile2d.grid.dim1.value
+    Z = profile2d.grid.dim2.value
 
     Nw = R.shape[0]
     Nh = Z.shape[0]
@@ -231,15 +231,15 @@ def createEqdskFromSlice(slice: Any, header: str="") -> EQDSKIO:
     globQuant = slice.global_quantities
 
 
-    eqObj.RMAXIS = globQuant.magnetic_axis.r
-    eqObj.ZMAXIS = globQuant.magnetic_axis.z
+    eqObj.RMAXIS = globQuant.magnetic_axis.r.value
+    eqObj.ZMAXIS = globQuant.magnetic_axis.z.value
     eqObj.SIBRY = globQuant.psi_boundary / (2 * np.pi)
     eqObj.SIMAG = globQuant.psi_axis / (2 * np.pi)
-    eqObj.CURRENT = globQuant.ip
-    eqObj.RCENTR = globQuant.magnetic_axis.r
-    BCENTR = profile1d.f[0] / globQuant.magnetic_axis.r
+    eqObj.CURRENT = globQuant.ip.value
+    eqObj.RCENTR = globQuant.magnetic_axis.r.value
+    BCENTR = profile1d.f[0] / globQuant.magnetic_axis.r.value
     # print(f"B_t at centre: {BCENTR} T")
-    current = np.abs(globQuant.ip)
+    current = np.abs(globQuant.ip.value)
     current = current / 1e6
     current = round(current)
     # print(f"Drsep: {slice.boundary_separatrix.gap[-1].value}")
@@ -269,9 +269,9 @@ def addWallDescriptionToEqdsk(eqObj: EQDSKIO, idsWall: Any) -> None:
         eqObj.LIMITR = 1
     else:
         description2d = idsWall.description_2d[0]
-        eqObj.RLIM = description2d.limiter.unit[0].outline.r
-        eqObj.ZLIM = description2d.limiter.unit[0].outline.z
-        eqObj.LIMITR = len(description2d.limiter.unit[0].outline.r)
+        eqObj.RLIM = description2d.limiter.unit[0].outline.r.value
+        eqObj.ZLIM = description2d.limiter.unit[0].outline.z.value
+        eqObj.LIMITR = len(description2d.limiter.unit[0].outline.r.value)
 
 from ._iter import EquilibriumIterator
 
