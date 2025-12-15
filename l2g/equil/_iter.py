@@ -14,25 +14,20 @@ def truncate(number: float, digits: int) -> float:
     stepper = 10.0 ** digits
     return math.trunc(number * stepper) / stepper
 
-def getBackUpIMASWallIds(shot=116000, run=4, db_name="ITER_MD",
-        user_name="public"):
+def getBackupIMASWallIds(shot=116000, run=4, db_name="ITER_MD",
+                         user_name="public", backend="mdsplus",
+                         version='3') -> Any:
     """Gets the default Wall IDS machine description from the ITER ITER_MD
     machine description database. 116000/4
     """
 
     import imas
-    import imas.imasdef
-
-    db_entry = imas.DBEntry(shot=shot, run=run, db_name=db_name,
-            user_name=user_name, backend_id=imas.imasdef.MDSPLUS_BACKEND)
-    db_entry.open()
-
-    return db_entry.get("wall")
+    uri = f"imas:{backend}?user={user_name};{shot=};{run=};database={db_name};version={version}"
+    db_entry = imas.DBEntry(uri, 'r')
+    return db_entry.get("wall", autoconvert=False)
 
 class EquilibriumIterator(object):
     """Iterator object that has equilibriums and acts as a iterator over them.
-
-
     An example of loading equilibrium data to the object and using it:
 
 
@@ -53,33 +48,29 @@ class EquilibriumIterator(object):
     """
 
     def __init__(self) -> None:
-        self.type = None
 
         #: List for storing :py:class:`l2g.equil.Equilibrium` objects.
-        self._equilibriums: list['Equilibrium'] = []
+        self._equilibriums: list[Equilibrium] = []
 
         #: List of associated times.
-        self._times = []
+        self._times: list[float | int] = []
+
+        #: IMAS URI
+        self._imas_uri: str = ""
 
         #: IMAS IDS reference
-        self._ids = None
-
-        #: Wall IDS reference
-        self._wall_ids = None
-
-        #: Equilibrium IDS reference
-        self._wall_equilibrium = None
+        self._ids: Any = None
 
         #: Flag for correcting helicity of equilibriums.
-        self._correct_helicity = True
+        self._correct_helicity: bool = True
 
         #: Number of digits of time to write into identifiers
-        self.truncate_digits = 6
+        self.truncate_digits: int = 6
 
-    def correctHelicity(self, val):
+    def correctHelicity(self, val: bool) -> None:
         self._correct_helicity = val
 
-    def loadEqdskEquilibriums(self, l: list =[]) -> None:
+    def loadEqdskEquilibriums(self, l: list[str]) -> None:
         """Creates Equilibrium objects from  EQDSK G files and stores them.
 
         Arguments:
@@ -90,7 +81,7 @@ class EquilibriumIterator(object):
         if isinstance(l, str):
             l = [l]
 
-        eqdsk_files = []
+        eqdsk_files: list[str] = []
         for file in l:
             if "*" in file:
                 eqdsk_files += glob.glob(file)
@@ -168,70 +159,53 @@ class EquilibriumIterator(object):
         shot = d['shot']
         run = d['run']
 
-        if 'user' not in d:
-            user = 'public'
-        else:
-            user = d['user']
-
-        if 'device' not in d:
-            device = 'iter'
-        else:
-            device = d['device']
-
-        if 'version' not in d:
-            version = '3'
-        else:
-            version = d['version']
+        user: str = d.get('user', 'public')
+        database: str = d.get('device', 'iter')
+        version: int = d.get('version', 3)
+        backend: str = d.get('backend', 'mdsplus')
 
         # Ignore times, time_step and focus on time_start and time_end
-        time_start = None
-        if "time_start" in d:
-            time_start = d["time_start"]
-
-        time_end = None
-        if "time_end" in d:
-            time_end = d["time_end"]
-
+        time_start: float = d.get('time_start')
+        time_end: float = d.get('time_end')
+        times: list[float | int] | None = d.get('times')
         times = None
-        if "times" in d:
-            times = d["times"]
+        if 'times' in d:
+            times = d['times']
             if isinstance(times, np.ndarray):
                 pass
-            elif not isinstance(d["times"], list):
+            else:
                 times = list(times)
 
-        time_samples = None
-        if "time_samples" in d:
-            time_samples = d["time_samples"]
-
+        time_samples: int | None = d.get('time_samples')
         import imas
-        interpolation = imas.imasdef.CLOSEST_INTERP
+        interpolation: int = d.get('interpolation', imas.ids_defs.CLOSEST_INTERP)
 
+        # Construct the URI. Currently more or less only for mdsplus and for
+        # AL <= 5.0.0
+        uri = f"imas:{backend}?user={user};shot={shot};run={run};database={database};version={version}"
+        self._imas_uri = uri
         # New API
-        self._ids = imas.DBEntry(backend_id=imas.imasdef.MDSPLUS_BACKEND,
-            db_name=device, shot=shot, run=run, user_name=user,
-            data_version=version)
-        self._ids.open()
+        log.info(f"Opening IMAS database {uri=}")
+        self._ids = imas.DBEntry(uri, 'r')
 
         try:
-            self._ids_wall = self._ids.get("wall")
+            wall = self._ids.get("wall", autoconvert=False)
         except:
             # Get backup wall IDS
-            self._ids_wall = getBackUpIMASWallIds()
+            wall = getBackupIMASWallIds()
 
+        log.info(f"Opening and reading data from SHOT={shot}, RUN={run}, database={database}, username={user}")
 
-        log.info(f"Opening and reading data from SHOT={shot}, RUN={run}, device={device}, username={user}")
-
-        self._ids_summary = self._ids.get("summary")
+        summary = self._ids.get("summary", autoconvert=False)
 
         # Get times. If times were not specifically defined, use the time_start
         # and time_end limits to extract the times.
         if times is None:
 
             times_indexes = np.where(np.logical_and(
-                time_start <= self._ids_summary.time,
-                self._ids_summary.time <= time_end))[0]
-            times = self._ids_summary.time[times_indexes]
+                time_start <= summary.time,
+                summary.time <= time_end))[0]
+            times = summary.time[times_indexes]
 
         # Extract only time_samples number of time steps. If it is defined.
         if time_samples and time_samples < len(times):
@@ -244,24 +218,18 @@ class EquilibriumIterator(object):
 
         for t in times:
             log.info(f"Loading time slice {t}")
-            self._ids_equilibrium = self._ids.get_slice("equilibrium", t,
-                interpolation)
-            self._ids_summary = self._ids.get_slice("summary", t,
-                interpolation)
-            time_slice = self._ids_equilibrium.time_slice[0]
-            vacuum_toroidal_field = self._ids_equilibrium.vacuum_toroidal_field
+            equilibrium_ids = self._ids.get_slice("equilibrium", t,
+                interpolation, autoconvert=False)
+            summary = self._ids.get_slice("summary", t,
+                interpolation, autoconvert=False)
+            time_slice = equilibrium_ids.time_slice[0]
+            vacuum_toroidal_field = equilibrium_ids.vacuum_toroidal_field
 
             equilibrium = getEquilibriumFromIMAS(time_slice,
-                vacuum_toroidal_field, self._ids_wall,
-                self._ids_summary, correct_helicty=self._correct_helicity)
-
-            # if interpolation == 1:
-            #     # Closest interpolation
-            #     t = time_slice.time
+                vacuum_toroidal_field, wall,
+                summary, correct_helicty=self._correct_helicity)
 
             self._equilibriums.append(equilibrium)
-
-            # Get the actual time of the slice
 
             # In case in equilibrium the time_slice is written as -9e+40 or
             # 9e+40

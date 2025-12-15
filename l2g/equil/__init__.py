@@ -1,12 +1,12 @@
 from ._equilibrium import Equilibrium, correct_equilibrium_helicity
 from ._eqdskg import EQDSKIO
-from ._eq import EQ
+from l2g.external.equilibrium_analysis import EQA as EQ
 from ._owl_connection_graph import getOwlConlensGraph
 
-# import logging
-# log = logging.getLogger(__name__)
+from typing import Any
 
-def getEquilibriumFromEQFile(eqdsk_file: str, correct_helicity: bool = True) -> Equilibrium:
+def getEquilibriumFromEQFile(eqdsk_file: str,
+                             correct_helicity: bool=True) -> Equilibrium:
     """Gather the data required from an EQDSKIO object and populate the
     Equilibrium class.
     """
@@ -14,7 +14,8 @@ def getEquilibriumFromEQFile(eqdsk_file: str, correct_helicity: bool = True) -> 
     eqdsk = EQDSKIO(eqdsk_file)
     return getEquilibriumFromEQDSKG(eqdsk, correct_helicity)
 
-def getEquilibriumFromEQDSKG(eqdsk_obj: EQDSKIO, correct_helicity=True) -> Equilibrium:
+def getEquilibriumFromEQDSKG(eqdsk_obj: EQDSKIO,
+                             correct_helicity: bool=True) -> Equilibrium:
     """Gather the data required from an EQDSKIO object and populate the
     Equilibrium class.
     """
@@ -66,45 +67,43 @@ def getEquilibriumFromEQDSKG(eqdsk_obj: EQDSKIO, correct_helicity=True) -> Equil
 
     return obj
 
-def getBackUpIMASWallIds(shot=116000, run=4, db_name="ITER_MD",
-        user_name="public"):
+def getBackupIMASWallIds(shot=116000, run=4, database="ITER_MD",
+                         user_name="public", backend="mdsplus",
+                         version='3') -> Any:
     """Gets the default Wall IDS machine description from the ITER ITER_MD
     machine description database. 116000/4
     """
 
     import imas
-    import imas_core.imasdef
-
-    db_entry = imas.DBEntry(shot=shot, run=run, db_name=db_name,
-            user_name=user_name, backend_id=imas_core.imasdef.MDSPLUS_BACKEND)
-    db_entry.open()
-
-    return db_entry.get("wall")
+    uri = f"imas:{backend}?user={user_name};{shot=};{run=};database={db_name};version={version}"
+    db_entry = imas.DBEntry(uri, 'r')
+    return db_entry.get("wall", autoconvert=False)
 
 def getEquilibriumFromIMASSlice(shot: int, run: int, user: str = "public",
-        machine: str = "iter", time: float = 0.0, data_version: str = "3",
-        correct_helicity: bool = True) -> Equilibrium:
+        machine: str = "iter", time: float = 0.0, version: str = "3",
+        backend: str = "mdsplus", correct_helicity: bool = True) -> Equilibrium:
 
     import imas
-    import imas.imasdef
-    db_entry = imas.DBEntry(shot=shot, run=run, user_name=user,
-        db_name=machine, backend_id=imas.imasdef.MDSPLUS_BACKEND,
-        data_version=data_version)
-    db_entry.open()
-    summary_ids = db_entry.get("summary")
-    wall_ids = db_entry.get("wall")
+    import imas.ids_defs
+
+    uri = f"backend:{backend}?user={user};{shot=};{run=};database={machine};version={version}"
+    db_entry = imas.DBEntry(uri, 'r')
+    summary_ids = db_entry.get("summary", autoconvert=False)
+    wall_ids = db_entry.get("wall", autoconvert=False)
 
     equilibrium_ids = db_entry.get_slice("equilibrium", time,
-                                         imas.imasdef.CLOSEST_INTERP)
+                                         imas.ids_defs.CLOSEST_INTERP,
+                                         autoconvert=False)
 
     equilibrium =  getEquilibriumFromIMAS(equilibrium_ids.time_slice[0],
         equilibrium_ids.vacuum_toroidal_field,
         wall_ids, summary_ids, correct_helicty=correct_helicity)
     return equilibrium
 
-def getEquilibriumFromIMAS(equilibrium_ids_time_slice,
-                           vacuum_toroidal_field_ids, wall_ids,
-                           summary_ids=None, correct_helicty=True) -> Equilibrium:
+def getEquilibriumFromIMAS(equilibrium_ids_time_slice: Any,
+                           vacuum_toroidal_field_ids: Any, wall_ids: Any,
+                           summary_ids: Any=None,
+                           correct_helicty: bool=True) -> Equilibrium:
     """Populate the Equilibrium class with relevant data.
 
     It's best to work on time slices of data, that means that
@@ -116,14 +115,13 @@ def getEquilibriumFromIMAS(equilibrium_ids_time_slice,
     """
     import numpy as np
     obj = Equilibrium()
-
     try:
         # Write the wall limiter
         obj.wall_contour_r = list(wall_ids.description_2d[0].limiter.unit[0].outline.r)
         obj.wall_contour_z = list(wall_ids.description_2d[0].limiter.unit[0].outline.z)
     except:
         # Soooooo let's try the backup wall...
-        wall_backup = getBackUpIMASWallIds()
+        wall_backup = getBackupIMASWallIds()
 
         wall_r = np.concatenate([wall_backup.description_2d[0].limiter.unit[0].outline.r,
                                  wall_backup.description_2d[0].limiter.unit[1].outline.r[::-1]])
@@ -133,13 +131,13 @@ def getEquilibriumFromIMAS(equilibrium_ids_time_slice,
         obj.wall_contour_z = list(wall_z)
 
     # Write the magnetic axis position
-    obj.mag_axis_r = equilibrium_ids_time_slice.global_quantities.magnetic_axis.r
-    obj.mag_axis_z = equilibrium_ids_time_slice.global_quantities.magnetic_axis.z
+    obj.mag_axis_r = equilibrium_ids_time_slice.global_quantities.magnetic_axis.r.value
+    obj.mag_axis_z = equilibrium_ids_time_slice.global_quantities.magnetic_axis.z.value
 
     # Write the R-Z grid
-    obj.grid_r = equilibrium_ids_time_slice.profiles_2d[0].grid.dim1
+    obj.grid_r = equilibrium_ids_time_slice.profiles_2d[0].grid.dim1.value
     obj.grid_dim_r = len(obj.grid_r)
-    obj.grid_z = equilibrium_ids_time_slice.profiles_2d[0].grid.dim2
+    obj.grid_z = equilibrium_ids_time_slice.profiles_2d[0].grid.dim2.value
     obj.grid_dim_z = len(obj.grid_z)
 
     # Poloidal magnetic flux
@@ -149,36 +147,36 @@ def getEquilibriumFromIMAS(equilibrium_ids_time_slice,
     obj.psi_sign = np.sign(obj.psi_boundary - obj.psi_axis)
 
     # Write the plasma current
-    obj.Ip = np.abs(equilibrium_ids_time_slice.global_quantities.ip)
+    obj.Ip = np.abs(equilibrium_ids_time_slice.global_quantities.ip).item()
 
     # Instead of taking the equilibirum.time_slice[:].profiles_1d.f[-1]
     # Use the vacuum_toroidal_field.r0, b0
 
-    obj.fpol_vacuum = vacuum_toroidal_field_ids.b0[0] * vacuum_toroidal_field_ids.r0
+    obj.fpol_vacuum = (vacuum_toroidal_field_ids.b0[0] * vacuum_toroidal_field_ids.r0).item()
     # Write the FPOL
     if not equilibrium_ids_time_slice.profiles_1d.f.size:
         obj.fpol = np.asarray([obj.fpol_vacuum])
         obj.fpol_flux = np.asarray([equilibrium_ids_time_slice.global_quantities.psi_axis])
     else:
-        obj.fpol = equilibrium_ids_time_slice.profiles_1d.f
-        obj.fpol_flux = equilibrium_ids_time_slice.profiles_1d.psi
+        obj.fpol = equilibrium_ids_time_slice.profiles_1d.f.value
+        obj.fpol_flux = equilibrium_ids_time_slice.profiles_1d.psi.value
 
     # Equilibrium type
     obj.type = 'div' if equilibrium_ids_time_slice.boundary.type else 'lim'
 
     # Additional data to obtain
-    obj.a = equilibrium_ids_time_slice.boundary.minor_radius
-    obj.Area = equilibrium_ids_time_slice.global_quantities.area
+    obj.a = equilibrium_ids_time_slice.boundary.minor_radius.value
+    obj.Area = equilibrium_ids_time_slice.global_quantities.area.value
     if summary_ids is not None:
         if summary_ids.global_quantities.power_loss.value.size:
-            obj.Psol = np.abs(summary_ids.global_quantities.power_loss.value[0])
+            obj.Psol = np.abs(summary_ids.global_quantities.power_loss.value[0]).item()
 
     if correct_helicty:
         correct_equilibrium_helicity(obj)
 
     return obj
 
-def createEqdskFromSlice(slice, HEADER="") -> EQDSKIO:
+def createEqdskFromSlice(slice: Any, header: str="") -> EQDSKIO:
     """From a slice of the equilibrium IDS, create an EQDSKIO object.
     """
     import numpy as np
@@ -206,7 +204,7 @@ def createEqdskFromSlice(slice, HEADER="") -> EQDSKIO:
 
     profile1d = slice.profiles_1d
 
-    def densify(f, N):
+    def densify(f: np.ndarray, N: int) -> np.ndarray:
         """Extends the array to N if shape is different.
         """
         from scipy.interpolate import interp1d
@@ -224,12 +222,11 @@ def createEqdskFromSlice(slice, HEADER="") -> EQDSKIO:
 
     # print(profile1d.f.shape, profile1d.pressure.shape,
     #       profile1d.dpressure_dpsi.shape)
-    FPOL = densify(profile1d.f,Nw)
 
-    eqObj.FPOL = FPOL
-    eqObj.PRES = densify(profile1d.dpressure_dpsi, Nw) / (2 * np.pi)
-    eqObj.FFPRIM = densify(profile1d.f_df_dpsi, Nw) / (2 * np.pi)
-    eqObj.QPSI = densify(profile1d.q, Nw)
+    eqObj.FPOL = list(densify(profile1d.f,Nw))
+    eqObj.PRES = list(densify(profile1d.dpressure_dpsi, Nw) / (2 * np.pi))
+    eqObj.FFPRIM = list(densify(profile1d.f_df_dpsi, Nw) / (2 * np.pi))
+    eqObj.QPSI = list(densify(profile1d.q, Nw))
 
     globQuant = slice.global_quantities
 
@@ -248,10 +245,10 @@ def createEqdskFromSlice(slice, HEADER="") -> EQDSKIO:
     # print(f"Drsep: {slice.boundary_separatrix.gap[-1].value}")
     if len(slice.boundary_separatrix.gap):
         drsep = slice.boundary_separatrix.gap[-1].value
-        HEADER = f"{current}MA {HEADER} dsep={100 * drsep:.02f}cm - 3 {Nw} {Nh}"
+        header = f"{current}MA {header} dsep={100 * drsep:.02f}cm - 3 {Nw} {Nh}"
     else:
-        HEADER = f"{current}MA {HEADER} - 3 {Nw} {Nh}"
-    eqObj.HEADER = HEADER
+        header = f"{current}MA {header} - 3 {Nw} {Nh}"
+    eqObj.HEADER = header
     eqObj.BCENTR = BCENTR
 
     boundary = slice.boundary
@@ -262,7 +259,7 @@ def createEqdskFromSlice(slice, HEADER="") -> EQDSKIO:
 
     return eqObj
 
-def addWallDescriptionToEqdsk(eqObj, idsWall):
+def addWallDescriptionToEqdsk(eqObj: EQDSKIO, idsWall: Any) -> None:
     """From the wall IDS take the wall silhouette points and save it to the
     EQDSKIO object.
     """
@@ -289,5 +286,6 @@ __all__ =[
     "getEquilibriumFromIMASSlice",
     "getEquilibriumFromEQFile",
     "createEqdskFromSlice",
-    "addWallDescriptionToEqdsk"
+    "addWallDescriptionToEqdsk",
+    "getOwlConlensGraph"
 ]
