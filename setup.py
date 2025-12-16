@@ -130,7 +130,7 @@ def get_extra_link_args() -> list[str]:
     """
     out: list[str] = []
 
-    if sys.platofrm == "win32":
+    if sys.platform == "win32":
         pass
 
     else:
