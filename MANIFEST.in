@@ -1,0 +1,9 @@
+include cpp/bicubic.cpp
+include cpp/bicubic.hpp
+include cpp/flt.cpp
+include cpp/flt.hpp
+include cpp/rkf45.cpp
+include cpp/rkf45.hpp
+include cpp/tiny_bvh.h
+include cpp/tlas.cpp
+include cpp/tlas.hpp

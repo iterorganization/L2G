@@ -22,12 +22,8 @@ USE_OPENMP = True
 USE_AVX2 = True
 USE_FMA = True
 
-CPP_SOURCE_FILES = [
-    "cpp/bicubic.cpp",
-    "cpp/flt.cpp",
-    "cpp/rkf45.cpp",
-    "cpp/tlas.cpp",
-]
+ROOT = Path(__file__).parent.resolve()
+CPP_DIR = ROOT / "cpp"
 
 def get_source_files(pyx_file: str) -> list[str]:
     """Apparently the easiest way of putting a commong cpp library is just
@@ -38,28 +34,31 @@ def get_source_files(pyx_file: str) -> list[str]:
     """
     out: list[str] = [pyx_file]
     if sys.platform == "win32":
-        return out + ['cpp/rkf45.cpp', 'cpp/bicubic.cpp', 'cpp/tlas.cpp', 'cpp/flt.cpp']
+        return out + [os.path.join(CPP_DIR, 'rkf45.cpp'),
+                      os.path.join(CPP_DIR, 'bicubic.cpp'),
+                      os.path.join(CPP_DIR, 'tlas.cpp'),
+                      os.path.join(CPP_DIR, 'flt.cpp')]
 
     base_name = os.path.basename(pyx_file)
     match base_name:
         case '_field_line_tracer.pyx':
             pass
         case 'rkf45.pyx':
-            out.append('cpp/rkf45.cpp')
-            out.append('cpp/bicubic.cpp')
+            out.append(os.path.join(CPP_DIR, 'rkf45.cpp'))
+            out.append(os.path.join(CPP_DIR, 'bicubic.cpp'))
         case 'bicubic.pyx':
-            out.append('cpp/bicubic.cpp')
+            out.append(os.path.join(CPP_DIR, 'bicubic.cpp'))
         case 'equilibrium_analysis.pyx':
-            out.append('cpp/rkf45.cpp')
-            out.append('cpp/bicubic.cpp')
+            out.append(os.path.join(CPP_DIR, 'rkf45.cpp'))
+            out.append(os.path.join(CPP_DIR, 'bicubic.cpp'))
         case 'tlas.pyx':
-            out.append('cpp/tlas.cpp')
+            out.append(os.path.join(CPP_DIR, 'tlas.cpp'))
         case 'bfgs_2d.pyx':
-            out.append('cpp/bicubic.cpp')
+            out.append(os.path.join(CPP_DIR, 'bicubic.cpp'))
         case 'flt.pyx':
-            out.append('cpp/bicubic.cpp')
-            out.append('cpp/tlas.cpp')
-            out.append('cpp/flt.cpp')
+            out.append(os.path.join(CPP_DIR, 'bicubic.cpp'))
+            out.append(os.path.join(CPP_DIR, 'tlas.cpp'))
+            out.append(os.path.join(CPP_DIR, 'flt.cpp'))
         case _:
             raise Exception(f'Pyx file {base_name} not processed in case')
     return out
@@ -73,7 +72,7 @@ def get_include_directories() -> list[str]:
     out: list[str] = []
 
     out.append(np.get_include())
-    out.append("cpp")
+    out.append(os.path.join(CPP_DIR, 'cpp'))
     return out
 
 def get_libraries() -> list[str]:
@@ -216,6 +215,7 @@ setup(
                 "l2g.settings", "l2g.mesh", "l2g.external", "l2g.mesh.medio"],
     data_files = [('', getDataFiles())],
     package_data={"": ["*.pyi"]},
+    include_package_data=True,
     scripts = ['bin/flat', 'bin/submitFLAT', 'bin/FLAT.sbatch',
                'bin/imas2eqdsk', 'bin/mkEqdskMovie', 'bin/mkImasMovie',
                'bin/mkImasMovieFromPsi',
