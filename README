@@ -24,15 +24,16 @@ The following projects are embedded and stored in the cpp directory:
 Installing from source requires installed compilers on Windows or Linux
 systems.
 
-To build the module run the following command in a linux system:
+Run the following commands from a terminal or cmd.
 
 ```shell
-python -m pip install . --no-deps
+python -m pip install .
 ```
-or if the  YAFLT is an EasyBuild module simply load the modules and call
+
+Or
 
 ```shell
-python -m pip install . --no-deps
+pip install git+https://github.com/iterorganization/L2G.git
 ```
 
 # Building documentation
@@ -40,3 +41,6 @@ python -m pip install . --no-deps
 Sphinx is used for building the documentation. Too see which Sphinx extensions
 are used check the conf.py file. Otherwise in the doc directory simply run the
 make command for either the html or latexpdf format.
+
+> [!NOTE]
+> The documentation is not completed to a satisfactory state.
