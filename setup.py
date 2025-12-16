@@ -72,7 +72,7 @@ def get_include_directories() -> list[str]:
     out: list[str] = []
 
     out.append(np.get_include())
-    out.append(os.path.join(CPP_DIR, 'cpp'))
+    out.append(os.path.join(CPP_DIR))
     return out
 
 def get_libraries() -> list[str]:
