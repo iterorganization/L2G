@@ -1,3 +1,4 @@
+from typing import Any
 from setuptools import setup
 from setuptools.extension import Extension
 import sys
@@ -17,40 +18,74 @@ except ImportError:
     sys.exit("Numpy not found. Numpy is needed to build the extension " +
              "modules.")
 
-# Find L2G_CPP_ROOTDIR
-L2G_CPP_ROOTDIR: str
+USE_OPENMP = True
+USE_AVX2 = True
+USE_FMA = True
 
-# YAFLT cpp root dir
-L2G_CPP_ROOTDIR: str | None = os.environ.get('L2G_CPP_ROOT_DIR') or os.environ.get('EBROOTL2G_CPP')
+CPP_SOURCE_FILES = [
+    "cpp/bicubic.cpp",
+    "cpp/flt.cpp",
+    "cpp/rkf45.cpp",
+    "cpp/tlas.cpp",
+]
 
-if L2G_CPP_ROOTDIR is None:
-    sys.exit("L2G_CPP_ROOT_DIR or EBROOTL2G_CPP are not set! L2G_cpp is required!")
+def get_source_files(pyx_file: str) -> list[str]:
+    """Apparently the easiest way of putting a commong cpp library is just
+    shoving the cpp files into the source list for the Extensions. However this
+    annoyingly extends the installation of the package.
 
-useOpenMP = True
+    Having a reduced set of files at least lowers it a bit.
+    """
+    out: list[str] = [pyx_file]
+    if sys.platform == "win32":
+        return out + ['cpp/rkf45.cpp', 'cpp/bicubic.cpp', 'cpp/tlas.cpp', 'cpp/flt.cpp']
+
+    base_name = os.path.basename(pyx_file)
+    match base_name:
+        case '_field_line_tracer.pyx':
+            pass
+        case 'rkf45.pyx':
+            out.append('cpp/rkf45.cpp')
+            out.append('cpp/bicubic.cpp')
+        case 'bicubic.pyx':
+            out.append('cpp/bicubic.cpp')
+        case 'equilibrium_analysis.pyx':
+            out.append('cpp/rkf45.cpp')
+            out.append('cpp/bicubic.cpp')
+        case 'tlas.pyx':
+            out.append('cpp/tlas.cpp')
+        case 'bfgs_2d.pyx':
+            out.append('cpp/bicubic.cpp')
+        case 'flt.pyx':
+            out.append('cpp/bicubic.cpp')
+            out.append('cpp/tlas.cpp')
+            out.append('cpp/flt.cpp')
+        case _:
+            raise Exception(f'Pyx file {base_name} not processed in case')
+    return out
+
+def get_extra_macros() -> list[tuple[str, Any]]:
+    return [('flt_EXPORTS', None)]
 
 def get_include_directories() -> list[str]:
     """Get the include directories.
     """
     out: list[str] = []
 
-    out.append(os.path.join(L2G_CPP_ROOTDIR, 'include'))
     out.append(np.get_include())
-
+    out.append("cpp")
     return out
 
 def get_libraries() -> list[str]:
     """Get libraries required for linking against flt.so
     """
     out: list[str] = []
-    out.append("flt")
     return out
 
 def get_library_dirs() -> list[str]:
     """Get paths to library dirs.
     """
     out: list[str] = []
-
-    out.append(os.path.join(L2G_CPP_ROOTDIR, 'lib'))
     return out
 
 def get_extra_compile_args() -> list[str]:
@@ -61,18 +96,31 @@ def get_extra_compile_args() -> list[str]:
     out: list[str] = []
 
     if sys.platform == "win32":
+        out.append("/std:c++17")
+        out.append("/EHsc")
         out.append("/O2")
-        if useOpenMP:
+        if USE_OPENMP:
             out.append("/openmp")
+        out.append("/bigobj")
         # Conversion warning
+        out.append("/wd4305")
         out.append("/wd4244")
         # dll-interface warning
+        out.append("/wd4267")
         out.append("/wd4251")
+        if USE_AVX2:
+            out.append("/arch:AVX2")
     else:
         out.append("-O3")
         out.append("-march=native")
         out.append("-Wall")
-        if useOpenMP:
+        out.append("-std=gnu++17")
+        out.append("-ftree-vectorize")
+        if USE_AVX2:
+            out.append("-mavx2")
+        if USE_FMA:
+            out.append("-mfma")
+        if USE_OPENMP:
             out.append("-fopenmp")
     return out
 
@@ -82,12 +130,14 @@ def get_extra_link_args() -> list[str]:
     """
     out: list[str] = []
 
-    if useOpenMP:
-        if sys.platform == "win32":
-           # out.append("/openmp")
-           pass
-        else:
+    if sys.platofrm == "win32":
+        pass
+
+    else:
+        if USE_OPENMP:
             out.append("-fopenmp")
+        # Reduce size
+        out.append("-Wl,--strip-all")
     return out
 
 def getDataFiles() -> list[str]:
@@ -97,11 +147,6 @@ def getDataFiles() -> list[str]:
 
     """
     out: list[str] = []
-
-    # if sys.platform == "win32":
-    #     # Gather the required DLLs
-    #     out.append(os.path.join(L2G_CPP_ROOTDIR, 'bin', 'flt.dll'))
-
     return out
 
 def getLongDescription() -> str:
@@ -142,13 +187,14 @@ def prepare_cython_extensions(pyx_files: list[Path], root_path: Path) -> list[Ex
         # Create extensions
         ext = Extension(
             module_name,
-            sources=[source_file_path],
+            sources=get_source_files(source_file_path),
             include_dirs=get_include_directories(),
             libraries=get_libraries(),
             library_dirs=get_library_dirs(),
             extra_compile_args=get_extra_compile_args(),
             extra_link_args=get_extra_link_args(),
             language="c++",
+            define_macros=get_extra_macros()
         )
 
         # Cythonize returns a list.
@@ -179,5 +225,4 @@ setup(
                "bin/get_disruption_profile_from_imas",
                "bin/mkDisruptionMovie", "bin/plotEquilibriums",
                "bin/plot_summary_plasma_type"]
-
 )

@@ -11,18 +11,23 @@ tinybvh RT kernel to test if FL intersect any loaded shadowing geometry. It is
 equipped with other commonly used functions and classes for inspecting
 equilibrium data.
 
-## Third party C++ Dependencies
+## Embedded projects
 
-Third party C++ (non python) build and run-time dependencies are:
-
- - YAFLT C++ kernel (https://github.com/iterorganization/YAFLT)
+The following projects are embedded and stored in the cpp directory:
+ - YAFLT C++ FLT kernel (https://github.com/iterorganization/YAFLT)
+    Version: 1.0.0
+ - TinyBVH (https://github.com/jbikker/tinybvh)
+    Version: 1.6.7
 
 ## Installation
+
+Installing from source requires installed compilers on Windows or Linux
+systems.
 
 To build the module run the following command in a linux system:
 
 ```shell
-L2G_CPP_ROOT_DIR=/path/to/yaflt python -m pip install . --no-deps
+python -m pip install . --no-deps
 ```
 or if the  YAFLT is an EasyBuild module simply load the modules and call
 
