@@ -22,9 +22,6 @@ USE_OPENMP = True
 USE_AVX2 = True
 USE_FMA = True
 
-ROOT = Path(__file__).parent.resolve()
-CPP_DIR = ROOT / "cpp"
-
 def get_source_files(pyx_file: str) -> list[str]:
     """Apparently the easiest way of putting a commong cpp library is just
     shoving the cpp files into the source list for the Extensions. However this
@@ -34,31 +31,33 @@ def get_source_files(pyx_file: str) -> list[str]:
     """
     out: list[str] = [pyx_file]
     if sys.platform == "win32":
-        return out + [os.path.join(CPP_DIR, 'rkf45.cpp'),
-                      os.path.join(CPP_DIR, 'bicubic.cpp'),
-                      os.path.join(CPP_DIR, 'tlas.cpp'),
-                      os.path.join(CPP_DIR, 'flt.cpp')]
+        return out + ['cpp/rkf45.cpp',
+                      'cpp/bicubic.cpp',
+                      'cpp/tlas.cpp',
+                      'cpp/flt.cpp']
 
     base_name = os.path.basename(pyx_file)
     match base_name:
         case '_field_line_tracer.pyx':
-            pass
+            out.append('cpp/bicubic.cpp')
+            out.append('cpp/tlas.cpp')
+            out.append('cpp/flt.cpp')
         case 'rkf45.pyx':
-            out.append(os.path.join(CPP_DIR, 'rkf45.cpp'))
-            out.append(os.path.join(CPP_DIR, 'bicubic.cpp'))
+            out.append('cpp/rkf45.cpp')
+            out.append('cpp/bicubic.cpp')
         case 'bicubic.pyx':
-            out.append(os.path.join(CPP_DIR, 'bicubic.cpp'))
+            out.append('cpp/bicubic.cpp')
         case 'equilibrium_analysis.pyx':
-            out.append(os.path.join(CPP_DIR, 'rkf45.cpp'))
-            out.append(os.path.join(CPP_DIR, 'bicubic.cpp'))
+            out.append('cpp/rkf45.cpp')
+            out.append('cpp/bicubic.cpp')
         case 'tlas.pyx':
-            out.append(os.path.join(CPP_DIR, 'tlas.cpp'))
+            out.append('cpp/tlas.cpp')
         case 'bfgs_2d.pyx':
-            out.append(os.path.join(CPP_DIR, 'bicubic.cpp'))
+            out.append('cpp/bicubic.cpp')
         case 'flt.pyx':
-            out.append(os.path.join(CPP_DIR, 'bicubic.cpp'))
-            out.append(os.path.join(CPP_DIR, 'tlas.cpp'))
-            out.append(os.path.join(CPP_DIR, 'flt.cpp'))
+            out.append('cpp/bicubic.cpp')
+            out.append('cpp/tlas.cpp')
+            out.append('cpp/flt.cpp')
         case _:
             raise Exception(f'Pyx file {base_name} not processed in case')
     return out
@@ -72,7 +71,7 @@ def get_include_directories() -> list[str]:
     out: list[str] = []
 
     out.append(np.get_include())
-    out.append(os.path.join(CPP_DIR))
+    out.append('cpp')
     return out
 
 def get_libraries() -> list[str]:
