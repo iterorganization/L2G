@@ -493,13 +493,14 @@ def get_hlm(d: dict[str, Any], index: int) -> dict[str, Any]:
     return out
 
 def indent_print(d: dict[str, Any], indent:int = 0) -> None:
+    tab_char = '\t'
     for key in d:
         obj = d[key]
         if isinstance(obj, dict):
-            print(f"{'\t'*indent}{key}:")
+            print(f"{tab_char*indent}{key}:")
             indent_print(obj, indent + 1)
         else:
-            print(f"{'\t'*indent}{key}: {obj}")
+            print(f"{tab_char*indent}{key}: {obj}")
 
 def run_case(geod: dict[str, Any], eqid: dict[str, Any], hlmd: dict[str, Any] | None, **kwargs: dict[str, Any]):
     """Runs the FLT study.
