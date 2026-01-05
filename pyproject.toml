@@ -15,15 +15,19 @@ classifiers = [
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "Topic :: Software Development",
+    "Topic :: Software Development :: Python Modules",
     "Topic :: Scientific/Engineering :: Physics",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Cython"
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Cython",
+    "Programming Language :: C++"
 ]
 requires-python = ">=3.10"
-
-[project.optional-dependencies]
-tmp = [
+dependencies = [
     "imas-python",
     "h5py",
     "vtk",
