@@ -697,7 +697,6 @@ def run_case(geod: dict[str, Any], eqid: dict[str, Any], hlmd: dict[str, Any] | 
                     run_flt = True
                     break
 
-    pprint(f"INFO: Need to obtain FLT data?: {run_flt}")
     pprint(f"INFO: Name set for the case: {case_name}")
     pprint(f"INFO: Output directory set: {output_directory}")
     pprint(f"INFO: Name of result FLT MED file: {result_file_path}")
@@ -782,9 +781,11 @@ def run_case(geod: dict[str, Any], eqid: dict[str, Any], hlmd: dict[str, Any] | 
         # to load the results from the result_file.
 
     # First let's see if there is actually nothing to do...
-    pprint(f"INFO: Do we need to get FLT data? {run_flt}")
-    pprint(f"INFO: Do we have an HLM to apply? {apply_heat_loads}")
-    pprint(f"INFO: Do we have to get FLs? {get_fls}")
+    green_true = f"{bcolors.OKGREEN}True{bcolors.ENDC}"
+    red_false = f"{bcolors.FAIL}False{bcolors.ENDC}"
+    pprint(f"{bcolors.OKBLUE}INFO: Do we need to get FLT data?{bcolors.ENDC} {green_true if run_flt else red_false}")
+    pprint(f"{bcolors.OKBLUE}INFO: Do we have an HLM to apply?{bcolors.ENDC} {green_true if apply_heat_loads else red_false}")
+    pprint(f"{bcolors.OKBLUE}INFO: Do we have to get FLs?{bcolors.ENDC} {green_true if get_fls else red_false}")
     if not (run_flt or apply_heat_loads or get_fls):
         pprint("INFO: Actually... there is nothing to do?")
         pprint("INFO: Stopping...")
@@ -835,8 +836,8 @@ def run_case(geod: dict[str, Any], eqid: dict[str, Any], hlmd: dict[str, Any] | 
                 pprint("INFO: Aligning limiter plasma with target geometry!")
                 flt_obj.alignGeometryWithLCFS()
                 pprint("INFO: Plasma LCFS aligned to geometry with following plasma shift:")
-                pprint(f"INFO: plasma_r_shit [m]: {flt_obj.parameters.plasma_r_displ:.5f}")
-                pprint(f"INFO: plasma_z_shit [m]: {flt_obj.parameters.plasma_z_displ:.5f}")
+                pprint(f"INFO: plasma_r_shift [m]: {flt_obj.parameters.plasma_r_displ:.5f}")
+                pprint(f"INFO: plasma_z_shift [m]: {flt_obj.parameters.plasma_z_displ:.5f}")
 
         if run_flt:
             ipprint("INFO: Running FLT!")
