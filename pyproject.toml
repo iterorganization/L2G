@@ -2,7 +2,7 @@
 name = "l2g"
 description = "A FLT (Field Line Tracing) suite"
 readme = "README"
-version = "1.0.1"
+version = "1.0.2.dev0"
 authors = [
     {name="Gregor Simič", email="gregor.simic@iter.org"}
 ]

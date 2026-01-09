@@ -1135,13 +1135,12 @@ def create_graphics(eqid: dict[str, Any], hlmd: dict[str, Any] | None, **kwargs:
             epprint("ERROR: Wrong eq_type.")
             sys.exit(2)
 
-    # See if there is a plasma shift applied
     plasma_r_displ = eqid.get("plasma_r_displ", 0.0)
     plasma_z_displ = eqid.get("plasma_z_displ", 0.0)
-    ok = equil_obj.applyPlasmaShift(plasma_r_displ, plasma_z_displ)
-    if not ok:
-        epprint("ERROR: Could not apply plasma shift!")
-        sys.exit(2)
+    if plasma_r_displ != 0.0 or plasma_z_displ != 0.0:
+        pprint(f"plasma_r_displ: {plasma_r_displ}")
+        pprint(f"plasma_z_displ: {plasma_z_displ}")
+        equil_obj.applyPlasmaShift(plasma_r_displ, plasma_z_displ)
 
     wall_silh_r_shift = eqid.get("wall_silh_r_shift", 0.0)
     wall_silh_z_shift = eqid.get("wall_silh_z_shift", 0.0)
