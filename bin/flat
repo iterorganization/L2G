@@ -419,6 +419,8 @@ def load_yaml(path_to_yaml: str)->tuple[dict[str, Any], ...]:
 
     try:
         for block in data:
+            if ".ignore" in block:
+                continue
             block_type = block["type"]
             block_name = block["name"]
             match block_type:
@@ -1494,7 +1496,7 @@ run_subparser.add_argument('geometry', help='Name of input data of geometries to
 run_subparser.add_argument('equilibrium', help='Name of the equilibrium data to be used in the FLT case')
 run_subparser.add_argument('hlm', nargs='?', help='Name of the HLM to apply on the FLT data. Optional')
 run_subparser.add_argument("--out-file", help="Specify output MED file name. Default None", type=str, default="")
-run_subparser.add_argument('--out-dir', help='Specify output directory. Default %CWD%/result.', type=str)
+run_subparser.add_argument('--out-dir', help='Specify output directory. Defaults to ./result.', type=str)
 run_subparser.add_argument('--rotational-misalignment',
     help='Activate rotational misalignment. By that it checks if it has the ' +
          'necessary information in the geometry to run a FLT case with ' +
