@@ -749,6 +749,8 @@ void FLT::getFL(const double r, const double z, const double phi,
         ray.D.y = dy;
         ray.D.z = dz;
         ray.hit.t = norm;
+        ray.hit.inst = UINT_MAX;
+        ray.hit.prim = UINT_MAX;
 
         m_tlas->castRay(&ray);
         if (ray.hit.inst != UINT_MAX) {
