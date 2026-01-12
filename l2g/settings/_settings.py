@@ -143,9 +143,9 @@ class HLM(BaseClassOptions):
     # Ramp - Down
     __slots__ = ["hlm_type", "p_sol", "lambda_q", "lambda_q_main",
                  "lambda_q_near", "ratio", "r_break", "ip_transition",
-                 "Rb", "Z", "Btotal", "points", "profile", "additional_points",
+                 "points", "profile", "additional_points",
                  "additional_profiles", "extrapolate", "outside_value",
-                 "longwave_misaligment_applied", "longwave_l", 'q_par0']
+                 "q_par0"]
 
     # Lists for each scenario
     flat_top: list[str] = ["r_break", "p_sol", "lambda_q_main",
@@ -155,8 +155,7 @@ class HLM(BaseClassOptions):
     double_exp: list[str] = ["p_sol", "lambda_q_main", "lambda_q_near",
                              "ratio"]
     custom: list[str] = ["points", "profile", "additional_points",
-                         "additional_profiles", "extrapolate", "outside_value",
-                         "longwave_misaligment_applied", "longwave_l"]
+                         "additional_profiles", "extrapolate", "outside_value"]
 
     acceptable_types: list[str] = ["flat_top", "ramp_down", "single_exp",
                                    "double_exp", "custom"]
@@ -181,13 +180,6 @@ class HLM(BaseClassOptions):
         self.additional_profiles: list[float] = []
         self.extrapolate: bool = True
         self.outside_value: float = 0.0
-        self.longwave_misaligment_applied: bool = False
-        self.longwave_l: float = 0.0
-        # Not user set
-        self.Rb: float = 0
-        self.Z: float = 0 #
-        self.Btotal: float = 0.0
-
 
 if __name__ == "__main__":
 

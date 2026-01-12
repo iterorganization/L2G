@@ -276,8 +276,8 @@ def check_yaml_content(data: Iterator):
             OK &= check_var(d, 'longwave_misalignment', dict)
             if OK:
                 _d = d['longwave_misalignment']
-                OK &= check_var(_d, "vector", (float, int, [(float, int)]), False)
-                OK &= check_var(_d, "length", (float, int, [(float, int)]), False)
+                OK &= check_var(_d, "vector", ([(float, int)]), False)
+                OK &= check_var(_d, "length", ([(float, int)]), False)
 
         if not OK:
             epprint(f"Problem with geometry data at line {d['__line__']}")
@@ -559,11 +559,13 @@ def run_case(geod: dict[str, Any], eqid: dict[str, Any], hlmd: dict[str, Any] | 
     else:
         apply_heat_loads = True
 
-    if (longwave_misalignment_flag:=kwargs.get("longwave_misalignment")):
+    longwave_misalignment_flag = kwargs.get("longwave_misalignment", False)
+    if longwave_misalignment_flag:
         pprint("INFO: Longwave misalignment = True")
-        longwave_vector = kwargs["longwave_vector"] * kwargs["longwave_length"]
+        longwave_length = kwargs["longwave_length"]
+        longwave_vector = np.array(kwargs["longwave_vector"]) * longwave_length # In meters
     else:
-        longwave_misalignment_flag = False
+        longwave_length = 0
         longwave_vector = np.zeros(3)
 
     output_directory: str = kwargs.get("output_directory", "results")
@@ -709,7 +711,7 @@ def run_case(geod: dict[str, Any], eqid: dict[str, Any], hlmd: dict[str, Any] | 
         pprint(f"INFO: Reading target mesh data from: {geod['target_mesh']}")
         target_mesh.readMeshData()
         if longwave_misalignment_flag:
-            target_mesh.translateMesh(longwave_vector)
+            target_mesh.translateMesh(longwave_vector / flt_obj.parameters.target_to_m)
         flt_obj.setTargetData(
             target_mesh.vertices,
             target_mesh.triangles)
@@ -741,7 +743,7 @@ def run_case(geod: dict[str, Any], eqid: dict[str, Any], hlmd: dict[str, Any] | 
             m = l2g.mesh.Mesh(file)
             m.readMeshData()
             if longwave_misalignment_flag:
-                m.translateMesh(longwave_vector)
+                m.translateMesh(longwave_vector / flt_obj.parameters.shadow_to_m)
 
             v, t = m.getMeshData()
             geom_id = flt_obj.tlas_obj.commitMesh(v * flt_obj.parameters.shadow_to_m,
@@ -754,7 +756,7 @@ def run_case(geod: dict[str, Any], eqid: dict[str, Any], hlmd: dict[str, Any] | 
                 m = l2g.mesh.Mesh(file)
                 m.readMeshData()
                 if longwave_misalignment_flag:
-                    m.translateMesh(longwave_vector)
+                    m.translateMesh(longwave_vector / flt_obj.parameters.shadow_to_m)
                 v, t = m.getMeshData()
                 geom_id = flt_obj.tlas_obj.commitMesh(v * flt_obj.parameters.shadow_to_m, t)
                 flt_obj.parameters.artificial_fl_catcher_geom_id.add(geom_id)
@@ -990,13 +992,13 @@ def run_case(geod: dict[str, Any], eqid: dict[str, Any], hlmd: dict[str, Any] | 
                             Bt=Btotal, Bpm=Bpm, Rb=Rb, P_sol=hlm_params.p_sol,
                             F=0.5, lambda_q=hlm_params.lambda_q)
                 case "double":
-                    if hlm_params.longwave_misaligment_applied:
+                    if longwave_misalignment_flag:
                         q_par = l2g.hlm.general.double_exponential_psol_longwave(
                             drsep=drsep, Bt=Btotal, Bpm=Bpm, Rb=Rb,
                             lambda_q_main=hlm_params.lambda_q_main,
                             lambda_q_near=hlm_params.lambda_q_near,
                             Rq=hlm_params.ratio, P_sol=hlm_params.p_sol,
-                            F=0.5, delta_mis=hlm_params.longwave_l)
+                            F=0.5, delta_mis=longwave_length)
                     else:
                         q_par = l2g.hlm.general.double_exponential_psol(drsep=drsep,
                             Bt=Btotal, Bpm=Bpm, Rb=Rb,
@@ -1636,10 +1638,14 @@ if __name__ == "__main__":
                     sys.exit(1)
 
                 for i in range(len(lw_vectors)):
-                    case_name = f'{TARGET_D["name"]}_{EQUILI_D["name"]}_lw_{i}_length_{lw_lengths[i]}'
+                    if 'case_name' in base_kwargs:
+                        case_name = f'{base_kwargs["case_name"]}_lw_{i}_length_{lw_lengths[i]}'
+                    else:
+                        case_name = f'{TARGET_D["name"]}_{EQUILI_D["name"]}_lw_{i}_length_{lw_lengths[i]}'
                     kwargs = base_kwargs.copy()
                     kwargs["longwave_vector"] = lw_vectors[i]
                     kwargs["longwave_length"] = lw_lengths[i]
+                    kwargs["case_name"] = case_name
                     kwargs["longwave_misalignment"] = True
                     kwargs_of_cases.append(kwargs)
                     # run_case(TARGET_D, EQUILI_D, HLM_D, **kwargs)
