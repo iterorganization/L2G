@@ -15,7 +15,7 @@ equilibrium data.
 
 The following projects are embedded and stored in the cpp directory:
  - YAFLT C++ FLT kernel (https://github.com/iterorganization/YAFLT)
-    Version: 1.0.0
+    Version: 1.0.1
  - TinyBVH (https://github.com/jbikker/tinybvh)
     Version: 1.6.7
 
