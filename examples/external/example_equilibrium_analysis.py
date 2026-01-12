@@ -19,23 +19,11 @@ f1 = eq.getBoundaryFluxValue()
 f2 = eq.getSecondaryXFluxValue()
 drsep1=eq.distanceBetweenPsiOnMidplane(f1, f2)
 Rb1, Z1, Btotal1, Bpm1 = eq.getMidplaneInfo()
-eq = l2g.equil.EQ(equilibrium)
-eq.evaluate()
-
-f3:float = eq.psiLCFS
-f4:float = eq.psiLCFS2
-t2 = eq.type_
-lx2 = eq.lowXPoint
-ux2 = eq.uppXPoint
-Rb2, Z2, Btotal2, Bpm2 = eq.get_midplane_info()
-drsep2 = eq.calculate_drsep(f3, f4)
-print("Comparison between classes")
-print("Type:", t1, t2)
-print("Sep flux:", f1, f3)
-print("2nd Sep flux:", f2, f4)
-print("Drsep: ", drsep1, drsep2)
-print("Lower point", lx1, lx2)
-print("Upper point", ux1, ux2)
+print("Type:", t1)
+print("Sep flux:", f1)
+print("2nd Sep flux:", f2)
+print("Drsep: ", drsep1)
+print("Lower point", lx1)
+print("Upper point", ux1)
 print("Rb, Z, Btotal, Bpm")
 print(Rb1, Z1, Btotal1, Bpm1)
-print(Rb2, Z2, Btotal2, Bpm2)

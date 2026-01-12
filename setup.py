@@ -138,20 +138,6 @@ def get_extra_link_args() -> list[str]:
         out.append("-Wl,--strip-all")
     return out
 
-def getDataFiles() -> list[str]:
-    """Get a list of data files to package inside the wheel. This is important
-    on Microsoft sstems where the dll files should be bundled next to the 
-    cythonized dll files.
-
-    """
-    out: list[str] = []
-    return out
-
-def getLongDescription() -> str:
-    if os.path.exists("README"):
-        return open("README", "r").read()
-    return ""
-
 def get_pyx_files(path: Path) -> list[str]:
     """Collect all the pyx files
     """
@@ -212,9 +198,8 @@ setup(
     ext_modules=extensions,
     packages = ["l2g", "l2g.comp", "l2g.equil", "l2g.hlm", "l2g.plot",
                 "l2g.settings", "l2g.mesh", "l2g.external", "l2g.mesh.medio"],
-    data_files = [('', getDataFiles())],
     package_data={"": ["*.pyi"]},
-    include_package_data=True,
+    exclude_package_data={"": ["*.cpp"]},
     scripts = ['bin/flat', 'bin/submitFLAT', 'bin/FLAT.sbatch',
                'bin/imas2eqdsk', 'bin/mkEqdskMovie', 'bin/mkImasMovie',
                'bin/mkImasMovieFromPsi',
