@@ -296,7 +296,7 @@ def check_yaml_content(data: Iterator):
         match eq_type:
             case "eqdsk_files":
                 OK &= check_var(d, "eqdsk_files", [str])
-                OK &= check_var(d, "time_step_labels", ([float], [int]), False)
+                OK &= check_var(d, "time_step_labels", ([(float, int)]), False)
 
             case "imas":
                 OK &= check_var(d, "imas", dict)
