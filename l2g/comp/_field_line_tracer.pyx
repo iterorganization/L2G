@@ -610,7 +610,7 @@ cdef class FieldLineTracer:
         points.append(<object> fl_buffer)
         fl_buffer.clear()
 
-        self.c_FLT.getFL(R, z, phi, -1, fl_buffer, self.options.switch_getFL_with_FLT)
+        self.c_FLT.getFL(r, z, phi, -1, fl_buffer, self.options.switch_getFL_with_FLT)
         points.append(<object> fl_buffer)
         fl_buffer.clear()
         # Now let's order them.
