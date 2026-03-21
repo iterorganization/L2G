@@ -40,7 +40,8 @@ SUB_DICT_KEYS = {
                  'longwave_misalignment'},
     'equilibrium': {'name', 'type', 'eqdsk_files', 'plasma_r_displ',
                     'plasma_z_displ', 'imas', 'equilibrium_type',
-                    'time_step_labels', 'bt_multiplier', 'psi_multiplier'},
+                    'time_step_labels', 'bt_multiplier', 'psi_multiplier',
+                    'correct_helicity'},
     'hlm': {'name', 'type', 'elm_parameters', 'loss_parameters', 'p_sol',
             'lambda_q', 'lambda_q_main', 'lambda_q_near', 'ip_transition',
             'hlm_type', 'extrapolate', 'outside_value', 'profile_files',
@@ -242,13 +243,14 @@ def check_yaml_content(data: Iterator):
         OK = True
         paths = []
         OK &= check_var(d, "target_mesh", str)
-        paths.append(d["target_mesh"])
+        if OK:
+            paths.append(d["target_mesh"])
         OK &= check_var(d, "shadow_meshes", [str])
-        paths += d["shadow_meshes"]
+        if OK:
+            paths += d["shadow_meshes"]
         OK &= check_var(d, "afl_catcher_meshes", [str], False)
-        if "afl_catcher_meshes" in d:
+        if OK and "afl_catcher_meshes" in d:
             paths += d["afl_catcher_meshes"]
-
         for path in paths:
             if not os.access(path, os.R_OK | os.F_OK):
                 epprint(f"File {path} either does not exist or is not readable!")
@@ -378,10 +380,11 @@ def check_yaml_content(data: Iterator):
         match hlm_type:
             case "custom":
                 OK &= check_var(d, "profile_files", [str])
-                for path in d["profile_files"]:
-                    if not os.access(path, os.R_OK | os.F_OK):
-                        epprint(f"File {path} does not exist or is not readable!")
-                        OK = False
+                if OK:
+                    for path in d["profile_files"]:
+                        if not os.access(path, os.R_OK | os.F_OK):
+                            epprint(f"File {path} does not exist or is not readable!")
+                            OK = False
                 OK &= check_var(d, "extrapolate", bool, False)
                 OK &= check_var(d, "outside_value", (float, int), False)
             case "elm" | "L-mode":
