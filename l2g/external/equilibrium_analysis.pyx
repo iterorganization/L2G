@@ -34,8 +34,8 @@ cdef bool check_if_on_edge(const float px1, const float py1, const float px2,
         c (bool): True if it lies on the edge, else False
     """
     cdef:
-        bool c=False
         float dx1, dy1, dx2, dy2
+        float cross, dot, len_sq
 
     dx1 = tx - px1
     dy1 = ty - py1
@@ -43,7 +43,24 @@ cdef bool check_if_on_edge(const float px1, const float py1, const float px2,
     dx2 = px2 - px1
     dy2 = py2 - py1
 
-    return abs(dx1 * dy2 - dx2 * dy1) < 1e-4
+    # Cross product check
+    cross = dx1 * dy2 - dx2 * dy1
+    if abs(cross) > 1e-4:
+        return False
+
+    # Dot product check. Essentially if point is behind the line, when
+    # projecting on infinite line
+    dot = dx1 * dx2 + dy1 * dy2
+    if dot < 0:
+        return False
+
+    # Length check. Similar as dot product check but if it is ahead of
+    # line. Use squares
+    len_sq = dx2 * dx2 + dy2 * dy2
+    if dot > len_sq:
+        return False
+
+    return True
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
@@ -357,7 +374,7 @@ cdef class EQA:
         log.debug("check_if_limiter()")
 
         cdef:
-            # From equilibrium data memoeryview
+            # From equilibrium data memoryview
             double [:] RLIM, ZLIM
             int N_RLIM
 
@@ -419,7 +436,7 @@ cdef class EQA:
 
             is_closed[0] = check_if_point_in_poly(RLIM, ZLIM, N_RLIM, y[0], y[1])
             if not is_closed[0]:
-                log.debug("Magnetic surface not closed!")
+                log.debug("Magnetic surface not closed inside the wall silhouette!")
                 break
 
             # Get the distance from start
@@ -877,7 +894,6 @@ cdef class EQA:
         self.c_bicubic.getValues(&self.c_BI_DATA)
 
         return self.c_BI_DATA.val, self.c_BI_DATA.valdx, self.c_BI_DATA.valdy
-
 
     def getPsiDxDy(self):
         return self.psi_dxdy
