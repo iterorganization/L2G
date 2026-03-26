@@ -1,0 +1,246 @@
+def main():
+    import argparse
+    description = """Create a GIF movie of the boundaries (either separatrixes or
+    LCFS) from an IMAS Equilibrium IDS.
+    """
+    
+    parser = argparse.ArgumentParser(description=description)
+    
+    parser.add_argument('-s', '--shot', metavar='SHOT', type=int,
+                        help='Shot number',
+                        required=True)
+    parser.add_argument('-r', '--run', metavar='RUN', type=int,
+                        help='Run number', required=True)
+    parser.add_argument('-u', '--user', metavar='USER', type=str, default="public",
+                        help='Username')
+    parser.add_argument('-d', '--device',
+                        metavar="DEVICE", type=str, default="ITER", help='Device')
+    parser.add_argument('-b', '--backend',
+                        metavar="BACKEND", type=str, default="mdsplus", help='IMAS backend')
+    parser.add_argument('-v', '--version',
+                        metavar="VERSION", type=str, default="3", help='IMAS data version')
+    parser.add_argument('-ts', '--time_start', metavar='#time_start', type=float,
+                        default=0.0, help='Starting time')
+    parser.add_argument('-te', '--time_end', type=float, default=999999)
+    parser.add_argument('-o', '--output_name', type=str, default="out.gif",
+                        help="Name of gif.", metavar="OUTNAME")
+    
+    # Additional cosmetic arguments
+    parser.add_argument('-minx', '--min_x', type=float, help="Abscissa lower limit",
+                        metavar="MIN X")
+    parser.add_argument('-maxx', '--max_x', type=float, help="Abscissa upper limit",
+                        metavar="MAX X")
+    parser.add_argument('-miny', '--min_y', type=float, help="Ordinate lower limit",
+                        metavar="MIN Y")
+    parser.add_argument('-maxy', '--max_y', type=float, help="Ordinate upper limit",
+                        metavar="MAX Y")
+    parser.add_argument("-ns", '--number_of_samples', type=int,
+                        metavar="#number_of_samples", default=100,
+                        help="Number of samples to take. If the " +
+                        "number of time slices in the IMAS IDS is lower than this" +
+                        " then it is ignored.")
+    args = parser.parse_args()
+    
+    import imas
+    import imas.ids_defs
+    shot = args.shot
+    run = args.run
+    user = args.user
+    version = args.version
+    backend = args.backend
+    database = args.device
+    #ids = imas.ids(args.shot, args.run)
+    #ids.open_env(args.user, args.device, '3')
+    uri = f"imas:{backend}?shot={shot};run={run};user={user};version={version};database={database}"
+    ids = imas.DBEntry(uri, 'r')
+    # Old API
+    #wall_ids = ids.wall
+    #wall_ids.get()
+    wall_ids = ids.get("wall", autoconvert=False)
+    
+    #summary_ids = ids.summary
+    #summary_ids.get()
+    summary_ids = ids.get("summary", autoconvert=False)
+    
+    #equilibrium = ids.equilibrium
+    
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from matplotlib.animation import FuncAnimation, PillowWriter
+    from functools import partial
+    
+    figure = plt.figure()
+    figure.set_tight_layout(True)
+    ax = figure.add_subplot()
+    ax.grid(True)
+    ax.axis('equal')
+    ax.set_xlabel('R [m]')
+    ax.set_ylabel('Z [m]')
+    
+    try:
+        wall_contour_r = wall_ids.description_2d[0].limiter.unit[0].outline.r
+        wall_contour_z = wall_ids.description_2d[0].limiter.unit[0].outline.z
+    except:
+        import l2g.equil
+        wall_backup = l2g.equil.getBackupIMASWallIds()
+    
+        wall_contour_r = np.concatenate([wall_backup.description_2d[0].limiter.unit[0].outline.r,
+                                 wall_backup.description_2d[0].limiter.unit[1].outline.r[::-1]])
+        wall_contour_z = np.concatenate([wall_backup.description_2d[0].limiter.unit[0].outline.z,
+                                 wall_backup.description_2d[0].limiter.unit[1].outline.z[::-1]])
+    Z_LIMITS = [np.min(wall_contour_z) - 1, np.max(wall_contour_z) + 1]
+    R_LIMITS = [np.min(wall_contour_r) - 1, np.max(wall_contour_r) + 1]
+    if not args.min_x is None:
+        R_LIMITS[0] = args.min_x
+    
+    if not args.max_x is None:
+        R_LIMITS[1] = args.max_x
+    
+    if not args.min_y is None:
+        Z_LIMITS[0] = args.min_y
+    
+    if not args.max_y is None:
+        Z_LIMITS[1] = args.max_y
+    
+    # Plot limiter
+    ax.plot(wall_contour_r, wall_contour_z, 'r-')
+    ax.set_title(f"S={args.shot} R={args.run} U={args.user} D={args.device}")
+    lines = [] # Holds plotting objects
+    
+    N = len(summary_ids.time)
+    i = 0
+    
+    # First separatrix or LCFS
+    lcfs_contour_r = []
+    lcfs_contour_z = []
+    
+    # Optional secondary contour or LCFS
+    secondary_contour_r = []
+    secondary_contour_z = []
+    
+    # Labels
+    times = []
+    
+    mask = np.logical_and(summary_ids.time >= args.time_start,
+                          summary_ids.time <= args.time_end)
+    time_slices = summary_ids.time[mask]
+    
+    if time_slices.size > args.number_of_samples:
+        idx = np.round(np.linspace(0, time_slices.size - 1, args.number_of_samples)).astype(int)
+        time_slices = time_slices[idx]
+    
+    for time in time_slices:
+    
+        if time < args.time_start:
+            continue
+        if time > args.time_end:
+            continue
+    
+        times.append(f"t={time:12.4f}s")
+        # equilibrium.getSlice(time, 1)
+        equilibrium = ids.get_slice("equilibrium", time,
+            imas.ids_defs.CLOSEST_INTERP, autoconvert=False)
+    
+        slice = equilibrium.time_slice[0]
+        threshold = 0.5
+        if len(slice.boundary_separatrix.outline.r):
+    
+            # Figure out the parts of the plot.
+            # When the contour is stored in this place, it is saved as one array.
+            # Therefore the following way tries to find indexes where the different
+            # parts of the contour start and end. Indexes are obtained by checking
+            # for significant jump in radial *and* vertical direction. Sometimes
+            # the contour makes a vertical jump but practically no radial move and
+            # vice versa.
+    
+    
+            collection_r = []
+            collection_z = []
+            r = slice.boundary_separatrix.outline.r
+            z = slice.boundary_separatrix.outline.z
+    
+            diff_r = np.abs(np.diff(r))
+            diff_z = np.abs(np.diff(z))
+            indexes = np.where(np.logical_or(diff_r > threshold, diff_z > threshold))
+    
+            if len(indexes[0]) == 0:
+                collection_r.append(r)
+                collection_z.append(z)
+            else:
+                prev_index = 0
+                for index in indexes[0]:
+                    collection_r.append(r[prev_index:index+1])
+                    collection_z.append(z[prev_index:index+1])
+                    prev_index = index+1
+                collection_r.append(r[prev_index:])
+                collection_z.append(z[prev_index:])
+    
+    
+            lcfs_contour_r.append(collection_r)
+            lcfs_contour_z.append(collection_z)
+        else:
+            lcfs_contour_r.append([])
+            lcfs_contour_z.append([])
+    
+        if len(slice.boundary_secondary_separatrix.outline.r):
+    
+            collection_r = []
+            collection_z = []
+            r = slice.boundary_secondary_separatrix.outline.r
+            z = slice.boundary_secondary_separatrix.outline.z
+    
+            diff_r = np.abs(np.diff(r))
+            diff_z = np.abs(np.diff(z))
+            indexes = np.where(np.logical_or(diff_r > threshold, diff_z > threshold))
+    
+            if len(indexes[0]) == 0:
+                collection_r.append(r)
+                collection_z.append(z)
+            else:
+                prev_index = 0
+                for index in indexes[0]:
+                    collection_r.append(r[prev_index:index+1])
+                    collection_z.append(z[prev_index:index+1])
+                    prev_index = index+1
+                collection_r.append(r[prev_index:])
+                collection_z.append(z[prev_index:])
+            secondary_contour_r.append(collection_r)
+            secondary_contour_z.append(collection_z)
+    
+        else:
+            secondary_contour_r.append([])
+            secondary_contour_z.append([])
+    N = len(times)
+    # Now make the animation
+    
+    def update(i, lr, lz, sr, sz, lines, labels):
+        while lines:
+            el = lines.pop(0)
+            el.remove()
+    
+        if len(lr[i]):
+            for j in range(len(lr[i])):
+                lines += ax.plot(lr[i][j], lz[i][j], '-', c='b')
+    
+        if len(sr[i]):
+            for j in range(len(sr[i])):
+                lines += ax.plot(sr[i][j], sz[i][j], '-', c='g')
+        ax.set_ylim(Z_LIMITS)
+        ax.set_xlim(R_LIMITS)
+    
+        lines.append(ax.text(0.7, 0.9, labels[i], transform = ax.transAxes))
+    
+    frame_update = partial(update, lr=lcfs_contour_r, lz=lcfs_contour_z,
+                                  sr=secondary_contour_r, sz=secondary_contour_z,
+                                  lines=lines, labels=times)
+    
+    anim = FuncAnimation(figure, frame_update, frames=N, interval=250)
+    anim.save(args.output_name, writer=PillowWriter())
+    
+    
+    
+    
+
+
+if __name__ == '__main__':
+    main()

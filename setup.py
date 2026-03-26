@@ -194,24 +194,34 @@ package_path = setup_path / "l2g"
 pyx_files = get_pyx_files(package_path)
 extensions = prepare_cython_extensions(pyx_files, setup_path)
 
-scripts = ['bin/flat', 'bin/submitFLAT', 'bin/FLAT.sbatch', 'bin/imas2eqdsk',
-           'bin/mkEqdskMovie', 'bin/mkImasMovie', 'bin/mkImasMovieFromPsi',
-           'bin/med2mat', 'bin/mat2med', 'bin/plotMFlux', 'bin/plotIP',
-           'bin/get_disruption_profile_from_imas', 'bin/torbeam_mapper',
-           'bin/torbeam_plotter', 'bin/get_disruption_profile_from_imas',
-           'bin/mkDisruptionMovie', 'bin/plotEquilibriums',
-           'bin/plot_summary_plasma_type']
 
-# Additional cmd scripts if on windows.
-if sys.platform == "win32":
-    scripts.append('bin/flat.cmd')
-    scripts.append('bin/plotMFlux.cmd')
+scripts = ['bin/submitFLAT', 'bin/FLAT.sbatch']
+
+console_scripts = [
+    'flat=l2g.scripts.flat:main',
+    'plotIP=l2g.scripts.plotIP:main',
+    'mkImasMovie=l2g.scripts.mkImasMovie:main',
+    'mkEqdskMovie=l2g.scripts.mkEqdskMovie:main',
+    'mkImasMovieFromPsi=l2g.scripts.mkImasMovieFromPsi:main',
+    'mkDisruptionMovie=l2g.scripts.mkDisruptionMovie:main',
+    'plotMFlux=l2g.scripts.plotMFlux:main',
+    'plotEquilibriums=l2g.scripts.plotEquilibriums:main',
+    'plot_summary_plasma_type=l2g.scripts.plot_summary_plasma_type:main',
+    'imas2eqdsk=l2g.scripts.imas2eqdsk:main',
+    'mat2med=l2g.scripts.mat2med:main',
+    'med2mat=l2g.scripts.med2mat:main',
+    'torbeam_mapper=l2g.scripts.torbeam_mapper:main',
+    'torbeam_plotter=l2g.scripts.torbeam_plotter:main',
+    'get_disruption_profile_from_imas=l2g.scripts.get_disruption_profile_from_imas:main',
+]
 
 setup(
     ext_modules=extensions,
-    packages = ["l2g", "l2g.comp", "l2g.equil", "l2g.hlm", "l2g.plot",
-                "l2g.settings", "l2g.mesh", "l2g.external", "l2g.mesh.medio"],
+    packages=["l2g", "l2g.comp", "l2g.equil", "l2g.hlm", "l2g.plot",
+              "l2g.settings", "l2g.mesh", "l2g.external", "l2g.mesh.medio",
+              "l2g.scripts"],
     package_data={"": ["*.pyi"]},
     exclude_package_data={"": ["*.cpp"]},
-    scripts = scripts
+    scripts=scripts,
+    entry_points={'console_scripts': console_scripts},
 )

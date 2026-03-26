@@ -1,0 +1,342 @@
+def main():
+    
+    description = """Script for obtaining the disruption profiles from the
+    Disruption IDS in the IMAS IMAS_DISRUPTIONS database.
+    
+    The Disruption IDS has the profile of the power stored in
+    
+    disruption.profiles_1d[:].power_density_conductive_losses
+    
+    The only problem is that the units are W/m^3, therefore we only take the
+    silhouette of the function (normalize it) and scale it with the total power:
+    
+    total_conductive_power = (disruption.global_quantities.power_ohm - \
+        disruption.global_quantities.power_radiated_electrons_impurities)[0]
+    
+    Additionally, time slices that have no defined profile (no power points on
+    magnetic surfaces outside the boundary), are ignored.
+    """
+    import l2g.equil
+    
+    
+    def obtain_connection_length(equilibrium: l2g.equil.Equilibrium,
+            polygon: "Polygon", rz_points: list[list[float]]):
+        bicubic = PyBicubic(equilibrium.grid_r, equilibrium.grid_z, equilibrium.psi)
+        rkf45_obj = PyRKF45FLT()
+        rkf45_obj.setInterpolator(bicubic)
+        rkf45_obj.set_vacuum_fpol(equilibrium.fpol_vacuum)
+    
+        def get_fl_length(r: float, z: float, th: float, step: float) -> float:
+            length = 0.0
+            while True:
+                nr, nz, nth = rkf45_obj.run_step(r, z, th, step)
+                if not polygon.checkIfIn(nr, nz, False): # Do not check if on edge
+                    break
+    
+                curr_l = sqrt(nr*nr + r*r - 2*nr*r*np.cos(nth-th) + (nz - z)*(nz - z))
+                length += curr_l
+                r = nr
+                z = nz
+                th = nth
+            return length
+    
+        out = np.zeros(len(rz_points))
+        for i in range(len(rz_points)):
+            length = 0.0
+            for p in rz_points[i]:
+                # Get FL length
+                length += get_fl_length(p[0], p[1], 0.0, 0.01)
+                length += get_fl_length(p[0], p[1], 0.0, -0.01)
+            out[i] = length
+        return out
+    
+    ###############################################################################
+    
+    import argparse
+    
+    parser = argparse.ArgumentParser(description=description)
+    
+    parser.add_argument('-s', '--shot', metavar='SHOT', type=int,
+                        help='Shot number', required=True)
+    parser.add_argument('-r', '--run', metavar='RUN', type=int,
+                        help='Run number', required=True)
+    parser.add_argument('-u', '--user', metavar='USER', type=str, default="public",
+                        help='Username')
+    parser.add_argument('-d', '--device', metavar="DEVICE", type=str,
+                        default="ITER_DISRUPTIONS", help='Device')
+    parser.add_argument('-o', '--output-directory', help="Output directory",
+                        metavar="OUTPUT_DIRECTORY", default=".", )
+    parser.add_argument('-ts', '--time-start', help="Start of the time interval",
+                        metavar="TIME_START", default=0, type=float)
+    parser.add_argument('-te', '--time-end', help="End of the time interval",
+                        metavar="TIME_END", default=float("inf"), type=float)
+    parser.add_argument('-n', '--number-of-samples', help="Number of samples",
+                        metavar="N_SAMPLES", default=-1, type=int)
+    parser.add_argument('-v', '--version',
+                        metavar="VERSION", type=str, default="3", help="DD version")
+    parser.add_argument('-b', '--backend',
+                        metavar="BACKEND", type=str, default="mdsplus", help="UAL backend. 'mdsplus', or 'hdf'")
+    args = parser.parse_args()
+    
+    import os
+    import sys
+    import imas
+    import imas.ids_defs
+    
+    SHOT=args.shot
+    RUN=args.run
+    USER=args.user
+    DEVICE=args.device
+    OUTPUT_DIRECTORY=os.path.abspath(os.path.expanduser(args.output_directory))
+    TIME_START = args.time_start
+    TIME_END = args.time_end
+    VERSION = args.version
+    BACKEND = args.backend
+    
+    
+    import numpy as np
+    uri = f"imas:{BACKEND}?shot={SHOT};run={RUN};user={USER};database={DEVICE};version={VERSION}"
+    entry = imas.DBEntry(uri, 'r')
+    
+    # Get the times
+    try:
+        wall = entry.get("wall", autoconvert=False)
+    except:
+        print("Falling back in getting wall")
+        wall = l2g.getBackupIMASWallIds()
+    
+    summary = entry.get("summary", autoconvert=False)
+    
+    mask = np.logical_and(summary.time >= TIME_START, summary.time <= TIME_END)
+    tsteps = summary.time[mask]
+    if args.number_of_samples != -1:
+        idx = np.round(np.linspace(0, len(tsteps)-1, args.number_of_samples)).astype(int)
+        tsteps = tsteps[idx]
+    import l2g
+    
+    if not os.path.exists(OUTPUT_DIRECTORY):
+        print(f"Output directory {OUTPUT_DIRECTORY} does not exist. Creating it")
+        os.makedirs(OUTPUT_DIRECTORY)
+    
+    import l2g.equil
+    from l2g.external.bicubic import PyBicubic
+    from l2g.external.rkf45 import PyRKF45FLT
+    from l2g.plot import (Marching, Polygon)
+    from math import sqrt, cos
+    base_string = f"shot_{SHOT}_run_{RUN}"
+    
+    DRSEPS = []
+    HEAT_LOADS = []
+    TIMES = []
+    CONLENS = []
+    # import l2g
+    # l2g.addStreamHandler()
+    # l2g.enableDebugging()
+    
+    import matplotlib.pyplot as plt
+    import l2g.external.equilibrium_analysis
+    eq = l2g.external.equilibrium_analysis.EQA()
+    for index, time in enumerate(tsteps):
+        print(f"Processing {index}. Time {time}.")
+        equilibrium_ids = entry.get_slice("equilibrium", time, imas.ids_defs.CLOSEST_INTERP, autoconvert=False)
+    
+        # Obtain the equilibrium. First get it without the helicity correction, so
+        # that we get the sign of the flux gradient.
+        equilibrium = l2g.equil.getEquilibriumFromIMAS(equilibrium_ids.time_slice[0],
+            equilibrium_ids.vacuum_toroidal_field, wall, summary, False)
+        flux_flip_sign = equilibrium.psi_sign
+    
+        equilibrium = l2g.equil.getEquilibriumFromIMAS(equilibrium_ids.time_slice[0],
+            equilibrium_ids.vacuum_toroidal_field, wall, summary, True)
+    
+        eq.setEquilibrium(equilibrium)
+        eq.evaluate()
+    
+        if not eq.evaluated:
+            print("Failed to evaluate equilibrium! Skipping!")
+    
+    
+        disruption = entry.get_slice("disruption", time, imas.ids_defs.CLOSEST_INTERP, autoconvert=False)
+    
+        total_conductive_power = (disruption.global_quantities.power_ohm - \
+            disruption.global_quantities.power_radiated_electrons_impurities)[0]
+        print(f"total_conductive_power={total_conductive_power}")
+        if total_conductive_power < 10:
+            print("Skipping because total_conductive_power is less than 10W.")
+            continue
+    
+        fluxes = flux_flip_sign * disruption.profiles_1d[0].grid.psi[:] / (2*np.pi)
+        psi_boundary = eq.getBoundaryFluxValue()
+        mask = fluxes >= psi_boundary
+        fluxes = fluxes[mask]
+        if len(fluxes) < 2:
+            print("Skipping because less than two points of functions...")
+            continue
+        # Get contours and see which starting point can be used for following
+        # the fieldlines
+    
+        marching_obj = Marching()
+        marching_obj.setData(equilibrium.grid_r, equilibrium.grid_z, equilibrium.psi)
+        polygon = Polygon(equilibrium.wall_contour_r, equilibrium.wall_contour_z)
+    
+        Rb, Zc, Btotal, Bpm = eq.getMidplaneInfo(which="owl")
+        if Rb == -1:
+            print("Something is wrong with this equilibrium slice. Skipping!")
+            continue
+        drsep = (fluxes - psi_boundary) / (Rb * Bpm)
+        ppar = disruption.profiles_1d[0].power_density_conductive_losses[mask]
+    
+        # Reverse the array?
+        reverse_array = False
+        if np.diff(drsep)[0] < 0:
+            reverse_array = True
+    
+            fluxes = fluxes[::-1]
+            drsep = drsep[::-1]
+            ppar = ppar[::-1]
+    
+        if len(drsep) < 2:
+            print("Skipping due to number of functions less than 2.")
+            continue
+    
+        # Get the starting points of the magnetic surface inside the polygon
+        rz_points = []
+        for flux in fluxes:
+            paths, types = marching_obj.getContourPath(flux)
+            found = False
+    
+            possible_points = []
+            for path in paths:
+                # A Contour can be split into segments by the wall.
+                inside = False
+                first_inside = False
+                _c = 0
+                segment_points = []
+                for i in range(len(path[0])):
+                    if polygon.checkIfIn(path[0][i], path[1][i], False):
+                        if i == 0:
+                            first_inside = True
+                        if not inside:
+                            segment_points.append((path[0][i], path[1][i]))
+                            inside = True
+                            _c += 1
+                    else:
+                        # If not inside and we were inside.
+                        if inside:
+                            # We just went out
+                            inside = False
+                # If we end with inside and we began with inside, remove the last
+                # segment point as we will otherwise have duplication of segments
+                if first_inside and inside and _c>1:
+                    segment_points = segment_points[:-1]
+                if segment_points:
+                    possible_points.append(segment_points)
+            # A flux contour can actually have more contours, usually situated on
+            # the opposite side of the machine. Therefore we take the point of a
+            # contour that is closest to the mag axis.
+            _distances_to_axis = []
+            for setp in possible_points:
+                _tmp = []
+                for p in setp:
+                    dist_r = equilibrium.mag_axis_r - p[0]
+                    dist_z = equilibrium.mag_axis_r - p[1]
+                    _tmp.append(dist_z**2 + dist_r**2)
+                _distances_to_axis.append(min(_tmp))
+            rz_points.append(possible_points[np.argmin(_distances_to_axis)])
+        # Get fluxes from the disruption ids
+        parallel_conlen = obtain_connection_length(equilibrium, polygon, rz_points)
+        qpar = ppar * parallel_conlen * 0.5
+    
+        # Ppar and Qpar are parallel components. So in order to put it to
+        # use for SFLT, apply inverse of pitch
+    
+        qpar *= Bpm/Btotal
+    
+    
+        # Well now it doesn't matter, because WE WILL USE the actual power from
+        # the imas database... so time to normalize... again
+        rr = drsep + Rb
+        I = 4*np.pi*np.sum(0.5 *(qpar[1:] + qpar[:-1]) * 0.5 * (rr[1:] + rr[:-1]) * np.diff(drsep))
+        print(f"power_density_conductive_losses Integral = {I}")
+        qpar /= I
+    
+        # Now multiply it with the power from IMAS
+        print(f"Area = {(np.pi * ((Rb + drsep[-1])**2 - (Rb)**2))}")
+        qpar *= total_conductive_power #/ (np.pi * ((Rb + drsep[-1])**2 - (Rb)**2))
+    
+        I = 4*np.pi* np.sum(0.5 *(qpar[1:] + qpar[:-1]) * 0.5 * (rr[1:] + rr[:-1]) * np.diff(drsep))
+        print(f"I={I}")
+    
+        # Cleaning values
+        idx = np.where(qpar==0.0)[0]
+        if idx.size:
+            qpar = qpar[:idx[0]+1]
+            parallel_conlen = parallel_conlen[:idx[0]+1]
+            ppar = ppar[:idx[0]+1]
+            drsep = drsep[:idx[0]+1]
+    
+        data = np.zeros((2, qpar.shape[0]))
+        data[0, :] = drsep
+        data[1, :] = qpar
+        np.savetxt(f"{base_string}_{time:.5f}s_qpar.txt", data)
+        data[1, :] = parallel_conlen
+        np.savetxt(f"{base_string}_{time:.5f}s_conlen.txt", data)
+        data[1, :] = ppar
+        np.savetxt(f"{base_string}_{time:.5f}s_ppar.txt", data)
+    
+        TIMES.append(time)
+        DRSEPS.append(drsep)
+        HEAT_LOADS.append(qpar)
+        CONLENS.append(parallel_conlen)
+    
+    import matplotlib
+    def get_jet_cycler(n: int) -> "matplotlib.colors.LinearSegmentedColormap":
+        return plt.cycler("color", matplotlib.cm.jet(np.linspace(0, 1, n)))
+    
+    import matplotlib.pyplot as plt
+    f, ax = plt.subplots()
+    ax.set_prop_cycle(get_jet_cycler(len(HEAT_LOADS)))
+    
+    for i in range(len(HEAT_LOADS)):
+        ax.plot(DRSEPS[i], HEAT_LOADS[i])
+    
+    ax.set_ylabel(r"$q_{\parallel}$ $[\frac{W}{m^2}]$")
+    ax.set_xlabel(r"$\Delta_{sep}$ - radial distance along the midplane [m]")
+    ax.grid()
+    ax.set_yscale("log")
+    ax.set_xlim((0, 2.0))
+    ax.set_ylim((1e5, 1e9))
+    
+    norm = matplotlib.colors.Normalize(vmin=TIMES[0], vmax=TIMES[-1])
+    plt.colorbar(matplotlib.cm.ScalarMappable(norm=norm, cmap="jet"), ax=ax,
+                 label="Time [s]")
+    
+    fname = f"{base_string}_disruption_profile.png"
+    f.savefig(fname)
+    
+    import matplotlib
+    def get_jet_cycler(n: int) -> "matplotlib.colors.LinearSegmentedColormap":
+        return plt.cycler("color", matplotlib.cm.jet(np.linspace(0, 1, n)))
+    
+    import matplotlib.pyplot as plt
+    f, ax = plt.subplots()
+    ax.set_prop_cycle(get_jet_cycler(len(HEAT_LOADS)))
+    
+    for i in range(len(HEAT_LOADS)):
+        ax.plot(DRSEPS[i], CONLENS[i])
+    
+    ax.set_ylabel(r"Connection length [m]")
+    ax.set_xlabel(r"$\Delta_{sep}$ - radial distance along the midplane [m]")
+    ax.grid()
+    ax.set_xlim((0, 2.0))
+    
+    norm = matplotlib.colors.Normalize(vmin=TIMES[0], vmax=TIMES[-1])
+    plt.colorbar(matplotlib.cm.ScalarMappable(norm=norm, cmap="jet"), ax=ax,
+                 label="Time [s]")
+    
+    fname = f"{base_string}_conlens.png"
+    f.savefig(fname)
+
+
+if __name__ == '__main__':
+    main()

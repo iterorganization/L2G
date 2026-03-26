@@ -57,8 +57,22 @@ class Polygon(object):
         dx2 = px2 - px1
         dy2 = py2 - py1
 
-        if isclose(dx1 * dy2 - dx2 * dy1, 0):
-            c = True
+        # Cross product check
+        cross = dx1 * dy2 - dx2 * dy1
+        if abs(cross) > 1e-4:
+            return False
+
+        # Dot product check. Essentially if point is behind the line, when
+        # projecting on infinite line
+        dot = dx1 * dx2 + dy1 * dy2
+        if dot < 0:
+            return False
+
+        # Length check. Similar as dot product check but if it is ahead of
+        # line. Use squares
+        len_sq = dx2 * dx2 + dy2 * dy2
+        if dot > len_sq:
+            return False
 
         return c
 

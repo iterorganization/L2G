@@ -1,0 +1,93 @@
+def main():
+    # Converts fields of a MED file to MATLAB format.
+    
+    import l2g.mesh
+    import numpy as np
+    import os
+    from scipy.io import savemat
+    
+    import sys
+    med_file = ''
+    if len(sys.argv) > 1:
+        med_file = sys.argv[1]
+    
+    if med_file == '':
+        print("No MED file specified!")
+        sys.exit(1)
+    
+    if not os.path.exists(med_file):
+        print(f"File {med_file} does not exist!")
+        sys.exit(1)
+    
+    file_name = os.path.basename(med_file)
+    if file_name.lower().endswith(".med"):
+        file_name = file_name[:-4]
+    
+    # Get all fields
+    mesh = l2g.mesh.Mesh(med_file)
+    fieldNames = set(mesh.getAllFieldNames())
+    fields_to_ignore = ["vtkGhostType", "normals"]
+    for f in fields_to_ignore:
+        if f in fieldNames:
+            fieldNames.remove(f)
+    
+    if not fieldNames:
+        print(f"No fields in MED file {med_file}")
+    
+    else:
+        # Expect that each field has data at the same indexes
+        indexes = [(_[0], _[1]) for _ in mesh.getAllFieldIterations(next(iter(fieldNames)))]
+    
+        for i in range(len(indexes)):
+            mat_file = f"{file_name}_{i}_matlab.mat"
+            out = {}
+    
+            for fieldName in fieldNames:
+                field = mesh.getField(fieldName, indexes[i][0])
+                out[fieldName] = field
+    
+            # Save to matlab file
+            savemat(mat_file, out)
+    
+    # Save the mesh data
+    coords, triangles = mesh.getMeshData()
+    n_triangles = triangles.shape[0]
+    
+    # Calculate the bary center
+    barycenter = np.empty((n_triangles , 3), np.float64)
+    barycenter_cyln = np.empty((n_triangles , 3), np.float64)
+    
+    for i in range(n_triangles):
+        p1 = coords[triangles[i][0]]
+        p2 = coords[triangles[i][1]]
+        p3 = coords[triangles[i][2]]
+        barycenter[i, :] = (p1 + p2 + p3) / 3.0
+    
+        # Convert to cyln
+        r = np.sqrt(barycenter[i, 0] ** 2 + barycenter[i, 1] ** 2)
+        theta = np.arctan2(barycenter[i, 1], barycenter[i, 0])
+        z = barycenter[i, 2]
+    
+        barycenter_cyln[i][0] = r
+        barycenter_cyln[i][1] = z
+        barycenter_cyln[i][2] = theta
+    
+    out = {}
+    out["coords"] = coords
+    out["triangles"] = triangles
+    out["barycenter"] = barycenter
+    out["barycenter_cyln"] = barycenter_cyln
+    
+    if "normals" in fieldNames:
+        mesh.setIndex(0)
+        field = mesh.getField("normals")
+        array = field.getArray()
+        out["normals"] = array.toNumPyArray()
+    
+    
+    savemat(f"{file_name}_mesh_data.mat", out)
+    
+
+
+if __name__ == '__main__':
+    main()

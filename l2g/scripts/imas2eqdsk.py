@@ -1,0 +1,111 @@
+def main():
+    
+    import imas
+    import imas.ids_defs
+    import l2g.equil
+    import numpy as np
+    
+    import argparse
+    
+    description="""Create an EQDSK G file from an ids.equilibrium.time_slice.
+    
+    The name of the generated file:
+    
+    shot_$_run_$_t_$s.eqdsk
+    
+    The file is outputted wherever the command is run.
+    
+    """
+    
+    parser = argparse.ArgumentParser(description='Create EQDSK from IDS time slice')
+    
+    parser.add_argument('-u', '--user',
+                        metavar='user',
+                        type=str,
+                        help='argument for user. Default public',
+                        default='public')
+    parser.add_argument('-d', '--device',
+                        metavar='device',
+                        type=str,
+                        help='argument for device. Default ITER',
+                        default="iter")
+    parser.add_argument('-v', '--version',
+                        metavar='version',
+                        type=str,
+                        default='3',
+                        help='argument for version. Default 3')
+    parser.add_argument('-b', '--backend',
+                        metavar='backend',
+                        type=str,
+                        default='mdsplus',
+                        help='argument for backend. Default mdsplus')
+    parser.add_argument('-s', '--shot',
+                        type=int,
+                        metavar='shot',
+                        help='argument for shot. Required',
+                        required=True)
+    parser.add_argument('-r', '--run',
+                        type=int,
+                        metavar='run',
+                        help='argument for run. Required',
+                            required=True)
+    parser.add_argument('-ts', '--time_start',
+                        type=float, metavar='time start', default=0.0,
+                        help='Start of time interval.')
+    parser.add_argument('-te', '--time_end',
+                        type=float, metavar='time end', default=float('inf'),
+                        help='End of time interval.')
+    parser.add_argument("-t", "--times",  metavar="times",
+                        nargs="*", default=[], type=float)
+    
+    args = parser.parse_args()
+    
+    user = args.user
+    device = args.device
+    shot = args.shot
+    run = args.run
+    version = args.version
+    times = args.times
+    backend = args.backend
+    # t_s = 399.927598 # time slice
+    DINA_SCENARIO_NAME="DT-DINA2020-04"
+    
+    uri = f"imas:{backend}?shot={shot};run={run};user={user};database={device};version={version}"
+    imas_obj = imas.DBEntry(uri, 'r')
+    
+    ids_wall = imas_obj.get("wall", autoconvert=False)
+    ids_summary = imas_obj.get("summary", autoconvert=False)
+    
+    if len(times) == 0:
+        # Extract the times using time_start time_end
+        times = ids_summary.time[np.logical_and(
+            ids_summary.time >= args.time_start,
+            ids_summary.time <= args.time_end)]
+    
+    # print(ids_times, )
+    print(f"Generating EQDSK files from {shot}/{run}")
+    for ts in times:
+        ids_equilibrium = imas_obj.get_slice("equilibrium", ts, imas.ids_defs.CLOSEST_INTERP, autoconvert=False)
+        print(f"Processing time {ts}. Actual time stored in time_slice[:].time: {ids_equilibrium.time_slice[0].time}")
+        # ids_equilibrium.getSlice(ts, imas.imasdef.CLOSEST_SAMPLE)
+    
+        slice = ids_equilibrium.time_slice[0]
+        time = slice.time.value
+    
+        HEADER_COMMENT=f"IDS shot={shot} run={run} t={time:.3f}s"
+        eqObj = l2g.equil.createEqdskFromSlice(slice,
+                                               HEADER_COMMENT)
+        l2g.equil.addWallDescriptionToEqdsk(eqObj, ids_wall)
+    
+        # SuccessfullRead is needed to set to 1 as we manually populate the data
+        # and not read from an existing EQDSK G file. Without this, the
+        # generateText function would not return anything.
+        eqObj.successfullRead = True
+        text = eqObj.generateText()
+        f = open(f'shot_{shot}_run_{run}_t_{time:.3f}s.eqdsk', 'w')
+        f.write(text)
+        f.close()
+
+
+if __name__ == '__main__':
+    main()
