@@ -41,8 +41,6 @@ class Polygon(object):
         Returns:
             c (bool): True if it lies on the edge, else False
         """
-        c = False
-
         # It's easier to remove points that are insanely close to each other prior
         # to calling this function
         # In the case the p1 and p2 is the same, ignore it.
@@ -74,7 +72,7 @@ class Polygon(object):
         if dot > len_sq:
             return False
 
-        return c
+        return True
 
     def checkIfIn(self, tx: float, ty: float, check_if_on_edge: bool = True) -> bool:
         """Checks if point (tx, ty) lies within or on the edges of polygon,
