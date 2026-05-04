@@ -1355,15 +1355,6 @@ def create_graphics(eqid: dict[str, Any], hlmd: dict[str, Any] | None, **kwargs:
             hlm_params = HLM()
             t = get_hlm(hlmd, index)
             hlm_params.load(t)
-            _file = hlmd["profile_files"][index]
-            print(f"INFO: Loading custom profile: {_file}")
-            _data = np.loadtxt(_file)
-            if _data.shape[0] == 2:
-                hlm_params.points = _data[0]
-                hlm_params.profile = _data[1]
-            else:
-                hlm_params.points = _data[:, 0]
-                hlm_params.profile = _data[:, 1]
             drsep = np.linspace(0, 0.3, 100)
             import l2g.hlm.general
             import l2g.hlm.steady_state
@@ -1389,6 +1380,15 @@ def create_graphics(eqid: dict[str, Any], hlmd: dict[str, Any] | None, **kwargs:
                         lambda_q_near=hlm_params.lambda_q_near,
                         P_sol=hlm_params.p_sol)
                 case "custom":
+                    _file = hlmd["profile_files"][index]
+                    print(f"INFO: Loading custom profile: {_file}")
+                    _data = np.loadtxt(_file)
+                    if _data.shape[0] == 2:
+                        hlm_params.points = _data[0]
+                        hlm_params.profile = _data[1]
+                    else:
+                        hlm_params.points = _data[:, 0]
+                        hlm_params.profile = _data[:, 1]
                     title += " Custom profile"
                     qpar = l2g.hlm.general.custom(drsep=drsep,
                         points=hlm_params.points,
