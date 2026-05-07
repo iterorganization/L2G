@@ -1367,18 +1367,19 @@ def create_graphics(eqid: dict[str, Any], hlmd: dict[str, Any] | None, **kwargs:
             title = f"{hlmd['name']}"
             match hlm_params.hlm_type:
                 case "single":
-                    title += " Single exponential"
-                    qpar = l2g.hlm.general.single_exponential_psol(
-                        drsep, Bt=Btotal, Bpm=Bpm, Rb=Rb,
-                        lambda_q=hlm_params.lambda_q, P_sol=hlm_params.p_sol)
+                    if 'q_par0' in t:
+                        qpar = l2g.hlm.general.single_exponential_qpar(drsep,
+                            hlm_params.lambda_q, hlm_params.q_par0)
+                    else:
+                        qpar = l2g.hlm.general.single_exponential_psol(drsep=drsep,
+                            Bt=Btotal, Bpm=Bpm, Rb=Rb, P_sol=hlm_params.p_sol,
+                            F=0.5, lambda_q=hlm_params.lambda_q)
                 case "double":
-                    title += " Double exponential"
-                    qpar = l2g.hlm.general.double_exponential_psol(
-                        drsep, Bt=Btotal, Bpm=Bpm, Rb=Rb,
-                        Rq=hlm_params.ratio,
+                    qpar = l2g.hlm.general.double_exponential_psol(drsep=drsep,
+                        Bt=Btotal, Bpm=Bpm, Rb=Rb,
                         lambda_q_main=hlm_params.lambda_q_main,
                         lambda_q_near=hlm_params.lambda_q_near,
-                        P_sol=hlm_params.p_sol)
+                        Rq=hlm_params.ratio, P_sol=hlm_params.p_sol, F=0.5)
                 case "custom":
                     _file = hlmd["profile_files"][index]
                     print(f"INFO: Loading custom profile: {_file}")
@@ -1471,6 +1472,8 @@ def create_graphics(eqid: dict[str, Any], hlmd: dict[str, Any] | None, **kwargs:
             title += f" {side} midplane"
             ax.set_title(title)
             #          mm         W/m^2
+            if 'r_offset' in t:
+                drsep += t['r_offset']
             ax.plot(drsep * 1e3, qpar)
 
             ax.grid(which='major', alpha=0.7)
